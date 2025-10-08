@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import List, Optional
 from sqlalchemy import (
     Column, Integer, String, TIMESTAMP, ForeignKey, 
-    DECIMAL, UniqueConstraint, Index, func
+    DECIMAL, UniqueConstraint, Index, func, Boolean, Text
 )
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from pydantic import BaseModel, ConfigDict
@@ -87,12 +87,31 @@ class Product(Base):
     lang = mapped_column(String(10), default="en")
     created_at = mapped_column(TIMESTAMP, default=func.now())
     
+    # Newly added denormalized fields for analysis/querying
+    nutriscore_grade = mapped_column(String(10), nullable=True)
+    nutriscore_score = mapped_column(Integer, nullable=True)
+    quantity_raw = mapped_column(String(100), nullable=True)
+    quantity_amount = mapped_column(DECIMAL(10, 3), nullable=True)
+    quantity_unit = mapped_column(String(20), nullable=True)
+    categories_text = mapped_column(Text, nullable=True)
+    
+    # Completeness flags
+    has_allergens = mapped_column(Boolean, default=False, nullable=False)
+    has_traces = mapped_column(Boolean, default=False, nullable=False)
+    has_ingredients = mapped_column(Boolean, default=False, nullable=False)
+    has_nutrition = mapped_column(Boolean, default=False, nullable=False)
+    is_complete = mapped_column(Boolean, default=False, nullable=False)
+    allergen_data_incomplete = mapped_column(Boolean, default=False, nullable=False)
+    
     # Relationships
     ingredients: Mapped[List["ProductIngredient"]] = relationship(
         "ProductIngredient", back_populates="product", cascade="all, delete-orphan"
     )
     allergens: Mapped[List["ProductAllergen"]] = relationship(
         "ProductAllergen", back_populates="product", cascade="all, delete-orphan"
+    )
+    nutrition: Mapped[Optional["ProductNutrition"]] = relationship(
+        "ProductNutrition", back_populates="product", uselist=False, cascade="all, delete-orphan"
     )
 
 
@@ -133,6 +152,23 @@ class ProductAllergen(Base):
         UniqueConstraint("product_id", "allergen_id", "relation_type", name="uq_product_allergen_relation"),
     )
 
+
+# New table: product nutritional values per 100g/ml
+class ProductNutrition(Base):
+    __tablename__ = "product_nutrition"
+    
+    id = mapped_column(Integer, primary_key=True, autoincrement=True)
+    product_id = mapped_column(Integer, ForeignKey("product.id"), unique=True, nullable=False)
+    
+    fat_100g = mapped_column(DECIMAL(10, 3), nullable=True)
+    saturated_fat_100g = mapped_column(DECIMAL(10, 3), nullable=True)
+    carbohydrates_100g = mapped_column(DECIMAL(10, 3), nullable=True)
+    sugars_100g = mapped_column(DECIMAL(10, 3), nullable=True)
+    fiber_100g = mapped_column(DECIMAL(10, 3), nullable=True)
+    proteins_100g = mapped_column(DECIMAL(10, 3), nullable=True)
+    salt_100g = mapped_column(DECIMAL(10, 3), nullable=True)
+    
+    product: Mapped["Product"] = relationship("Product", back_populates="nutrition")
 
 # ============================================================================
 # Pydantic Response Models

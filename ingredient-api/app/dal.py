@@ -3,12 +3,13 @@ Data Access Layer (DAL) for ingredient and allergen queries.
 All functions use SQLAlchemy async sessions and return Pydantic models.
 """
 
-from typing import Optional
+from typing import Optional, Optional as _Optional, Dict
 from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from .models import (
     Ingredient, Allergen, IngredientAllergen, Product, ProductIngredient, ProductAllergen,
+    ProductNutrition,
     IngredientWithAllergens, IngredientResponse, AllergenResponse,
     ProductWithDetails, ProductResponse, ProductIngredientResponse, ProductAllergenResponse
 )
@@ -263,7 +264,20 @@ async def insert_product(
     barcode: str,
     name: str,
     brand: Optional[str] = None,
-    lang: str = "en"
+    lang: str = "en",
+    # New optional props
+    nutriscore_grade: _Optional[str] = None,
+    nutriscore_score: _Optional[int] = None,
+    quantity_raw: _Optional[str] = None,
+    quantity_amount: _Optional[float] = None,
+    quantity_unit: _Optional[str] = None,
+    categories_text: _Optional[str] = None,
+    has_allergens: bool = False,
+    has_traces: bool = False,
+    has_ingredients: bool = False,
+    has_nutrition: bool = False,
+    is_complete: bool = False,
+    allergen_data_incomplete: bool = False,
 ) -> int:
     """
     Insert or update product (UPSERT on barcode).
@@ -289,13 +303,75 @@ async def insert_product(
         product.name = name
         product.brand = brand
         product.lang = lang
+        product.nutriscore_grade = nutriscore_grade
+        product.nutriscore_score = nutriscore_score
+        product.quantity_raw = quantity_raw
+        product.quantity_amount = quantity_amount
+        product.quantity_unit = quantity_unit
+        product.categories_text = categories_text
+        product.has_allergens = has_allergens
+        product.has_traces = has_traces
+        product.has_ingredients = has_ingredients
+        product.has_nutrition = has_nutrition
+        product.is_complete = is_complete
+        product.allergen_data_incomplete = allergen_data_incomplete
     else:
         # Insert new
-        product = Product(barcode=barcode, name=name, brand=brand, lang=lang)
+        product = Product(
+            barcode=barcode,
+            name=name,
+            brand=brand,
+            lang=lang,
+            nutriscore_grade=nutriscore_grade,
+            nutriscore_score=nutriscore_score,
+            quantity_raw=quantity_raw,
+            quantity_amount=quantity_amount,
+            quantity_unit=quantity_unit,
+            categories_text=categories_text,
+            has_allergens=has_allergens,
+            has_traces=has_traces,
+            has_ingredients=has_ingredients,
+            has_nutrition=has_nutrition,
+            is_complete=is_complete,
+            allergen_data_incomplete=allergen_data_incomplete,
+        )
         session.add(product)
     
     await session.flush()
     return product.id
+
+
+async def upsert_product_nutrition(
+    session: AsyncSession,
+    product_id: int,
+    nutrition: Dict[str, _Optional[float]]
+) -> None:
+    """Upsert product nutrition per 100g/ml."""
+    result = await session.execute(
+        select(ProductNutrition).where(ProductNutrition.product_id == product_id)
+    )
+    row = result.scalar_one_or_none()
+    if row:
+        row.fat_100g = nutrition.get("fat_100g")
+        row.saturated_fat_100g = nutrition.get("saturated_fat_100g")
+        row.carbohydrates_100g = nutrition.get("carbohydrates_100g")
+        row.sugars_100g = nutrition.get("sugars_100g")
+        row.fiber_100g = nutrition.get("fiber_100g")
+        row.proteins_100g = nutrition.get("proteins_100g")
+        row.salt_100g = nutrition.get("salt_100g")
+    else:
+        row = ProductNutrition(
+            product_id=product_id,
+            fat_100g=nutrition.get("fat_100g"),
+            saturated_fat_100g=nutrition.get("saturated_fat_100g"),
+            carbohydrates_100g=nutrition.get("carbohydrates_100g"),
+            sugars_100g=nutrition.get("sugars_100g"),
+            fiber_100g=nutrition.get("fiber_100g"),
+            proteins_100g=nutrition.get("proteins_100g"),
+            salt_100g=nutrition.get("salt_100g"),
+        )
+        session.add(row)
+    await session.flush()
 
 
 async def link_product_ingredient(

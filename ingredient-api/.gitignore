@@ -57,6 +57,8 @@ htmlcov/
 
 # Logs
 *.log
+logs/
+import.log
 
 # OS
 .DS_Store

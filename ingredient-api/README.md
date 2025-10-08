@@ -85,12 +85,24 @@ alembic upgrade head
 6. **Import OpenFoodFacts data:**
 
 ```bash
-# This will download ~2GB of data and import into PostgreSQL
-# Import is limited to 10,000 products by default (configurable via SAMPLE_PRODUCT_LIMIT)
-python -m data_pipeline.import_off
+# Recommended: Use the managed import script with better logging
+./scripts/run_full_import.sh
+
+# Or manually with custom limits
+SAMPLE_PRODUCT_LIMIT=10000 python -m data_pipeline.import_off  # 10k products
+SAMPLE_PRODUCT_LIMIT=0 python -m data_pipeline.import_off      # Full dataset
 ```
 
-**Expected import time:** 15-30 minutes depending on network speed and hardware.
+**Expected import time:**
+- Sample (10k products): ~5 minutes
+- Full dataset (~3.5M products): 45-80 minutes
+
+**Check import status anytime:**
+```bash
+./scripts/check_import_status.sh
+```
+
+See [scripts/README.md](scripts/README.md) for detailed import documentation.
 
 7. **Start the API server:**
 
