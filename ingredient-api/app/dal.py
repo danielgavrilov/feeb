@@ -3,6 +3,7 @@ Data Access Layer (DAL) for ingredient and allergen queries.
 All functions use SQLAlchemy async sessions and return Pydantic models.
 """
 
+from datetime import datetime
 from typing import Optional
 from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
@@ -263,7 +264,8 @@ async def insert_product(
     barcode: str,
     name: str,
     brand: Optional[str] = None,
-    lang: str = "en"
+    lang: str = "en",
+    last_modified: Optional[datetime] = None
 ) -> int:
     """
     Insert or update product (UPSERT on barcode).
@@ -274,6 +276,7 @@ async def insert_product(
         name: Product name
         brand: Optional brand name
         lang: Language code
+        last_modified: OFF last modified timestamp (UTC)
     
     Returns:
         Product ID
@@ -289,9 +292,17 @@ async def insert_product(
         product.name = name
         product.brand = brand
         product.lang = lang
+        if last_modified:
+            product.last_modified_at = last_modified
     else:
         # Insert new
-        product = Product(barcode=barcode, name=name, brand=brand, lang=lang)
+        product = Product(
+            barcode=barcode,
+            name=name,
+            brand=brand,
+            lang=lang,
+            last_modified_at=last_modified
+        )
         session.add(product)
     
     await session.flush()

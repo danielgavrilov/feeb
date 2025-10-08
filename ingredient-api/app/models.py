@@ -79,13 +79,14 @@ class IngredientAllergen(Base):
 class Product(Base):
     """Product information from OpenFoodFacts."""
     __tablename__ = "product"
-    
+
     id = mapped_column(Integer, primary_key=True, autoincrement=True)
     barcode = mapped_column(String(50), unique=True, nullable=False, index=True)
     name = mapped_column(String(500), nullable=False)
     brand = mapped_column(String(255), nullable=True)
     lang = mapped_column(String(10), default="en")
     created_at = mapped_column(TIMESTAMP, default=func.now())
+    last_modified_at = mapped_column(TIMESTAMP, nullable=True)
     
     # Relationships
     ingredients: Mapped[List["ProductIngredient"]] = relationship(
