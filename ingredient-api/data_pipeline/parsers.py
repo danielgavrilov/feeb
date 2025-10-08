@@ -4,7 +4,9 @@ Parsers for OpenFoodFacts taxonomy and product data.
 
 import json
 import gzip
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Dict, Iterator, List, Optional
 from typing import Dict, List, Iterator, Optional
 import re
 
@@ -78,7 +80,7 @@ def parse_taxonomy_file(filepath: Path) -> List[Dict]:
     return entries
 
 
-def parse_product_jsonl(filepath: Path, limit: int = 10000) -> Iterator[Dict]:
+def parse_product_jsonl(filepath: Path, limit: Optional[int] = 10000) -> Iterator[Dict]:
     """
     Stream-read OpenFoodFacts product JSONL file (compressed or uncompressed).
     
@@ -100,12 +102,24 @@ def parse_product_jsonl(filepath: Path, limit: int = 10000) -> Iterator[Dict]:
     
     try:
         for line in f:
+            if limit is not None and count >= limit:
             if count >= effective_limit:
                 break
-            
+
             try:
                 product = json.loads(line)
-                
+
+                last_modified_raw = product.get("last_modified_t")
+                last_modified = None
+
+                if last_modified_raw:
+                    try:
+                        last_modified = datetime.fromtimestamp(
+                            int(last_modified_raw), tz=timezone.utc
+                        ).replace(tzinfo=None)
+                    except (TypeError, ValueError, OSError):
+                        last_modified = None
+
                 # Extract relevant fields
                 nutriments = product.get("nutriments", {}) or {}
                 # Prefer new 2023 nutriscore if present, else legacy
@@ -121,6 +135,7 @@ def parse_product_jsonl(filepath: Path, limit: int = 10000) -> Iterator[Dict]:
                     "ingredients_tags": product.get("ingredients_tags", []),
                     "allergens_tags": product.get("allergens_tags", []),
                     "traces_tags": product.get("traces_tags", []),
+                    "last_modified": last_modified,
                     "ingredients_full": product.get("ingredients", []) or [],
                     "states_tags": product.get("states_tags", []) or [],
                     # Nutrition (per 100g/ml)
