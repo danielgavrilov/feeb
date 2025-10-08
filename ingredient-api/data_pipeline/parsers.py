@@ -1,0 +1,175 @@
+"""
+Parsers for OpenFoodFacts taxonomy and product data.
+"""
+
+import json
+import gzip
+from pathlib import Path
+from typing import Dict, List, Iterator, Optional
+
+
+def parse_taxonomy_file(filepath: Path) -> List[Dict]:
+    """
+    Parse OpenFoodFacts taxonomy file (ingredients.txt or allergens.txt).
+    
+    OFF taxonomy files use indented key-value pairs:
+    - Lines starting with "id:" begin a new entry
+    - Other fields like "name:", "parents:", "allergen:" follow
+    - Entries are grouped by consecutive lines
+    
+    Args:
+        filepath: Path to taxonomy .txt file
+    
+    Returns:
+        List of dictionaries with keys: code, name, parent_codes, allergen_code
+    """
+    entries = []
+    current_entry = {}
+    
+    with open(filepath, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.rstrip("\n")
+            
+            # Skip empty lines and comments
+            if not line or line.startswith("#"):
+                continue
+            
+            # Check if this is a key-value pair
+            if ":" in line:
+                # Split only on first colon
+                key, _, value = line.partition(":")
+                key = key.strip()
+                value = value.strip()
+                
+                # New entry starts with "id:"
+                if key == "id":
+                    # Save previous entry if exists
+                    if current_entry:
+                        entries.append(current_entry)
+                    
+                    # Start new entry
+                    current_entry = {
+                        "code": value,
+                        "name": "",
+                        "parent_codes": [],
+                        "allergen_code": None
+                    }
+                
+                # Process other fields
+                elif current_entry:
+                    if key.startswith("name"):
+                        # name:en or just name
+                        if not current_entry["name"]:  # Take first name found
+                            current_entry["name"] = value
+                    
+                    elif key == "parents":
+                        # Parents are comma-separated
+                        if value:
+                            current_entry["parent_codes"] = [p.strip() for p in value.split(",")]
+                    
+                    elif key == "allergen":
+                        current_entry["allergen_code"] = value
+        
+        # Don't forget last entry
+        if current_entry:
+            entries.append(current_entry)
+    
+    return entries
+
+
+def parse_product_jsonl(filepath: Path, limit: int = 10000) -> Iterator[Dict]:
+    """
+    Stream-read OpenFoodFacts product JSONL file (compressed or uncompressed).
+    
+    Args:
+        filepath: Path to .jsonl or .jsonl.gz file
+        limit: Maximum number of products to yield
+    
+    Yields:
+        Product dictionaries with relevant fields extracted
+    """
+    count = 0
+    
+    # Determine if file is compressed
+    if filepath.suffix == ".gz":
+        f = gzip.open(filepath, "rt", encoding="utf-8")
+    else:
+        f = open(filepath, "r", encoding="utf-8")
+    
+    try:
+        for line in f:
+            if count >= limit:
+                break
+            
+            try:
+                product = json.loads(line)
+                
+                # Extract relevant fields
+                extracted = {
+                    "barcode": product.get("code", ""),
+                    "name": product.get("product_name", ""),
+                    "brand": product.get("brands", ""),
+                    "lang": product.get("lang", "en"),
+                    "ingredients_tags": product.get("ingredients_tags", []),
+                    "allergens_tags": product.get("allergens_tags", []),
+                    "traces_tags": product.get("traces_tags", [])
+                }
+                
+                # Only yield if barcode and name exist
+                if extracted["barcode"] and extracted["name"]:
+                    yield extracted
+                    count += 1
+            
+            except json.JSONDecodeError:
+                # Skip malformed JSON lines
+                continue
+    
+    finally:
+        f.close()
+
+
+def extract_category_from_parents(parent_codes: List[str]) -> Optional[str]:
+    """
+    Extract category from parent codes.
+    
+    For allergens, parent codes often indicate category (e.g., "en:grain", "en:nuts").
+    
+    Args:
+        parent_codes: List of parent codes
+    
+    Returns:
+        Category string or None
+    """
+    if not parent_codes:
+        return None
+    
+    # Use first parent as category (simplified approach)
+    first_parent = parent_codes[0]
+    
+    # Remove language prefix if present
+    if ":" in first_parent:
+        _, category = first_parent.split(":", 1)
+        return category.replace("-", " ").title()
+    
+    return first_parent
+
+
+def normalize_ingredient_name(name: str) -> str:
+    """
+    Normalize ingredient name for consistency.
+    
+    Args:
+        name: Raw ingredient name
+    
+    Returns:
+        Normalized name
+    """
+    # Basic normalization
+    name = name.strip()
+    
+    # Capitalize first letter if all lowercase
+    if name and name[0].islower():
+        name = name[0].upper() + name[1:]
+    
+    return name
+
