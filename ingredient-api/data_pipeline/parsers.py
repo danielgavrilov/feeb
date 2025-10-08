@@ -7,6 +7,8 @@ import gzip
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional
+from typing import Dict, List, Iterator, Optional
+import re
 
 
 def parse_taxonomy_file(filepath: Path) -> List[Dict]:
@@ -90,6 +92,7 @@ def parse_product_jsonl(filepath: Path, limit: Optional[int] = 10000) -> Iterato
         Product dictionaries with relevant fields extracted
     """
     count = 0
+    effective_limit = limit if (isinstance(limit, int) and limit > 0) else float("inf")
     
     # Determine if file is compressed
     if filepath.suffix == ".gz":
@@ -100,6 +103,7 @@ def parse_product_jsonl(filepath: Path, limit: Optional[int] = 10000) -> Iterato
     try:
         for line in f:
             if limit is not None and count >= limit:
+            if count >= effective_limit:
                 break
 
             try:
@@ -117,6 +121,12 @@ def parse_product_jsonl(filepath: Path, limit: Optional[int] = 10000) -> Iterato
                         last_modified = None
 
                 # Extract relevant fields
+                nutriments = product.get("nutriments", {}) or {}
+                # Prefer new 2023 nutriscore if present, else legacy
+                nutri_grade = product.get("nutriscore_2023_grade") or product.get("nutriscore_grade")
+                nutri_score = product.get("nutriscore_2023_score") or product.get("nutriscore_score")
+                categories_hierarchy = product.get("categories_hierarchy") or product.get("categories_tags") or []
+
                 extracted = {
                     "barcode": product.get("code", ""),
                     "name": product.get("product_name", ""),
@@ -126,6 +136,25 @@ def parse_product_jsonl(filepath: Path, limit: Optional[int] = 10000) -> Iterato
                     "allergens_tags": product.get("allergens_tags", []),
                     "traces_tags": product.get("traces_tags", []),
                     "last_modified": last_modified,
+                    "ingredients_full": product.get("ingredients", []) or [],
+                    "states_tags": product.get("states_tags", []) or [],
+                    # Nutrition (per 100g/ml)
+                    "nutrition": {
+                        "fat_100g": nutriments.get("fat_100g"),
+                        "saturated_fat_100g": nutriments.get("saturated-fat_100g"),
+                        "carbohydrates_100g": nutriments.get("carbohydrates_100g"),
+                        "sugars_100g": nutriments.get("sugars_100g"),
+                        "fiber_100g": nutriments.get("fiber_100g"),
+                        "proteins_100g": nutriments.get("proteins_100g"),
+                        "salt_100g": nutriments.get("salt_100g"),
+                    },
+                    # Nutri-score
+                    "nutriscore_grade": nutri_grade,
+                    "nutriscore_score": nutri_score,
+                    # Quantity
+                    "quantity": product.get("quantity"),
+                    # Categories hierarchy
+                    "categories_hierarchy": categories_hierarchy,
                 }
                 
                 # Only yield if barcode and name exist
