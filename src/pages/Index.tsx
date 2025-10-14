@@ -1,0 +1,319 @@
+import { useState } from "react";
+import { DishNameInput } from "@/components/DishNameInput";
+import { IngredientsList, IngredientState } from "@/components/IngredientsList";
+import { PrepMethodInput } from "@/components/PrepMethodInput";
+import { ComplianceOverview } from "@/components/ComplianceOverview";
+import { RecipeBook, SavedDish } from "@/components/RecipeBook";
+import { MenuView } from "@/components/MenuView";
+import { Settings } from "@/components/Settings";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RECIPES } from "@/data/recipes";
+import { toast } from "sonner";
+import { ChefHat } from "lucide-react";
+
+type Step = "name" | "ingredients" | "prep" | "compliance";
+
+const Index = () => {
+  const [activeTab, setActiveTab] = useState("add");
+  const [step, setStep] = useState<Step>("name");
+  const [dishName, setDishName] = useState("");
+  const [menuCategory, setMenuCategory] = useState("");
+  const [description, setDescription] = useState("");
+  const [servingSize, setServingSize] = useState("1");
+  const [price, setPrice] = useState("");
+  const [ingredients, setIngredients] = useState<IngredientState[]>([]);
+  const [prepMethod, setPrepMethod] = useState("");
+  const [compliance, setCompliance] = useState<Record<string, boolean>>({});
+  const [dishImage, setDishImage] = useState("");
+  
+  const [savedDishes, setSavedDishes] = useState<SavedDish[]>([]);
+  const [restaurantName, setRestaurantName] = useState("My Restaurant");
+  const [editingDishId, setEditingDishId] = useState<string | null>(null);
+
+  const handleRecipeMatch = (recipeKey: string) => {
+    const recipe = RECIPES[recipeKey];
+    const newIngredients: IngredientState[] = recipe.ingredients.map((ing) => ({
+      ...ing,
+      confirmed: false,
+    }));
+    setIngredients(newIngredients);
+    toast.success(`Recipe loaded: ${recipe.name}`);
+  };
+
+  const handleUpdateIngredient = (index: number, quantity: string) => {
+    const updated = [...ingredients];
+    updated[index].quantity = quantity;
+    setIngredients(updated);
+  };
+
+  const handleUpdateIngredientUnit = (index: number, unit: string) => {
+    const updated = [...ingredients];
+    updated[index].unit = unit;
+    setIngredients(updated);
+  };
+
+  const handleConfirmIngredient = (index: number) => {
+    const updated = [...ingredients];
+    updated[index].confirmed = true;
+    setIngredients(updated);
+    toast.success(`${updated[index].name} confirmed`);
+  };
+
+  const handleDeleteIngredient = (index: number) => {
+    const updated = ingredients.filter((_, i) => i !== index);
+    setIngredients(updated);
+    toast.success("Ingredient removed");
+  };
+
+  const handleAddIngredient = (name: string, quantity: string, unit: string) => {
+    const newIngredient: IngredientState = {
+      name,
+      quantity,
+      unit,
+      confirmed: true,
+      allergens: [],
+      dietaryInfo: [],
+    };
+    setIngredients([...ingredients, newIngredient]);
+    toast.success(`${name} added`);
+  };
+
+  const handleNext = () => {
+    if (step === "name" && !dishName.trim()) {
+      toast.error("Please enter a dish name");
+      return;
+    }
+    if (step === "name") setStep("ingredients");
+    else if (step === "ingredients") setStep("prep");
+    else if (step === "prep") {
+      calculateCompliance();
+      setStep("compliance");
+    }
+  };
+
+  const calculateCompliance = () => {
+    const complianceResult: Record<string, boolean> = {};
+    
+    // Check each dietary category
+    ["vegan", "vegetarian", "gluten-free", "nut-free", "dairy-free", "halal", "kosher", "low-fodmap"].forEach((diet) => {
+      complianceResult[diet] = ingredients.every((ing) => 
+        ing.dietaryInfo?.includes(diet) ?? false
+      );
+    });
+
+    setCompliance(complianceResult);
+  };
+
+  const handleSaveDish = () => {
+    const newDish: SavedDish = {
+      id: editingDishId || Date.now().toString(),
+      name: dishName,
+      menuCategory,
+      description,
+      servingSize,
+      price,
+      ingredients: ingredients.map(({ name, quantity, unit }) => ({ name, quantity, unit })),
+      prepMethod,
+      compliance,
+      image: dishImage,
+    };
+
+    if (editingDishId) {
+      setSavedDishes(savedDishes.map(d => d.id === editingDishId ? newDish : d));
+      toast.success("Dish updated");
+    } else {
+      setSavedDishes([...savedDishes, newDish]);
+      toast.success("Dish saved");
+    }
+
+    handleStartNew();
+    setActiveTab("recipes");
+  };
+
+  const handleStartNew = () => {
+    setStep("name");
+    setDishName("");
+    setMenuCategory("");
+    setDescription("");
+    setServingSize("1");
+    setPrice("");
+    setIngredients([]);
+    setPrepMethod("");
+    setCompliance({});
+    setDishImage("");
+    setEditingDishId(null);
+  };
+
+  const handleDeleteDish = (id: string) => {
+    setSavedDishes(savedDishes.filter(d => d.id !== id));
+    toast.success("Dish deleted");
+  };
+
+  const handleEditDish = (id: string) => {
+    const dish = savedDishes.find(d => d.id === id);
+    if (!dish) return;
+
+    setEditingDishId(id);
+    setDishName(dish.name);
+    setMenuCategory(dish.menuCategory);
+    setDescription(dish.description);
+    setServingSize(dish.servingSize);
+    setPrice(dish.price);
+    setIngredients(dish.ingredients.map(ing => ({
+      ...ing,
+      confirmed: true,
+      allergens: [],
+      dietaryInfo: [],
+    })));
+    setPrepMethod(dish.prepMethod);
+    setCompliance(dish.compliance);
+    setDishImage(dish.image || "");
+    setStep("name");
+    setActiveTab("add");
+  };
+
+  const canProceed = () => {
+    if (step === "name") return dishName.trim().length > 0;
+    if (step === "ingredients") return ingredients.length > 0;
+    return true;
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <header className="bg-card border-b border-border sticky top-0 z-50 shadow-sm">
+        <div className="container mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <ChefHat className="w-8 h-8 text-primary" />
+              <h1 className="text-2xl font-bold text-foreground">Allergen Tracker</h1>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-muted-foreground">{restaurantName}</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-8 max-w-4xl">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-4 h-14 mb-6">
+            <TabsTrigger value="add" className="text-base font-semibold">
+              Add Dish
+            </TabsTrigger>
+            <TabsTrigger value="recipes" className="text-base font-semibold">
+              Recipe Book
+            </TabsTrigger>
+            <TabsTrigger value="menu" className="text-base font-semibold">
+              Menu
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="text-base font-semibold">
+              Settings
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="add">
+            <div className="bg-card rounded-xl shadow-lg p-8 space-y-8">
+              {step === "name" && (
+                <DishNameInput
+                  value={dishName}
+                  onChange={setDishName}
+                  onRecipeMatch={handleRecipeMatch}
+                  menuCategory={menuCategory}
+                  onMenuCategoryChange={setMenuCategory}
+                  description={description}
+                  onDescriptionChange={setDescription}
+                  servingSize={servingSize}
+                  onServingSizeChange={setServingSize}
+                  price={price}
+                  onPriceChange={setPrice}
+                />
+              )}
+
+              {step === "ingredients" && (
+                <IngredientsList
+                  ingredients={ingredients}
+                  onUpdateIngredient={handleUpdateIngredient}
+                  onUpdateIngredientUnit={handleUpdateIngredientUnit}
+                  onConfirmIngredient={handleConfirmIngredient}
+                  onDeleteIngredient={handleDeleteIngredient}
+                  onAddIngredient={handleAddIngredient}
+                />
+              )}
+
+              {step === "prep" && (
+                <PrepMethodInput value={prepMethod} onChange={setPrepMethod} />
+              )}
+
+              {step === "compliance" && (
+                <ComplianceOverview 
+                  compliance={compliance} 
+                  onStartNew={handleStartNew}
+                  onSave={handleSaveDish}
+                  image={dishImage}
+                  onImageChange={setDishImage}
+                />
+              )}
+
+              {step !== "compliance" && (
+                <div className="flex gap-4">
+                  {step !== "name" && (
+                    <Button
+                      onClick={() => {
+                        if (step === "prep") setStep("ingredients");
+                        else if (step === "ingredients") setStep("name");
+                      }}
+                      variant="outline"
+                      className="h-14 text-lg font-semibold flex-1"
+                      size="lg"
+                    >
+                      Back
+                    </Button>
+                  )}
+                  <Button
+                    onClick={handleNext}
+                    disabled={!canProceed()}
+                    className="h-14 text-lg font-semibold flex-1"
+                    size="lg"
+                  >
+                    {step === "prep" ? "View Compliance" : "Next"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="recipes">
+            <div className="bg-card rounded-xl shadow-lg p-8">
+              <RecipeBook 
+                dishes={savedDishes}
+                onDelete={handleDeleteDish}
+                onEdit={handleEditDish}
+              />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="menu">
+            <div className="bg-card rounded-xl shadow-lg p-8">
+              <MenuView 
+                dishes={savedDishes}
+                restaurantName={restaurantName}
+              />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="settings">
+            <div className="bg-card rounded-xl shadow-lg p-8">
+              <Settings 
+                restaurantName={restaurantName}
+                onRestaurantNameChange={setRestaurantName}
+              />
+            </div>
+          </TabsContent>
+        </Tabs>
+      </main>
+    </div>
+  );
+};
+
+export default Index;
