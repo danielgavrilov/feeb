@@ -1,6 +1,8 @@
 # Allergen-Aware Ingredient API
 
-A standalone Python + FastAPI microservice that provides ingredient and allergen lookup capabilities using OpenFoodFacts data. This service acts as the data layer for Feeb's allergen detection system.
+A Python + FastAPI microservice that provides ingredient and allergen lookup capabilities using OpenFoodFacts data. This service acts as the data layer for Feeb's allergen detection system.
+
+**Note:** This API is part of the Feeb monorepo. For root-level commands, see the main README in the repository root.
 
 ## Features
 
@@ -47,7 +49,7 @@ See the [schema diagram](docs/schema.png) for detailed relationships.
 1. **Clone and navigate to the directory:**
 
 ```bash
-cd ingredient-api
+cd apps/api
 ```
 
 2. **Create virtual environment:**
