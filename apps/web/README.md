@@ -59,6 +59,42 @@ This project is built with:
 - React
 - shadcn-ui
 - Tailwind CSS
+- Supabase (Authentication)
+
+## Authentication Setup
+
+This app uses Supabase for authentication. To run locally, you need to:
+
+1. Create a free account at [supabase.com](https://supabase.com)
+2. Create a new project
+3. Get your project URL and anon key from Settings > API
+4. Create a `.env` file in this directory with:
+   ```env
+   VITE_SUPABASE_URL=your-project-url.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-anon-key
+   ```
+
+### Enable Authentication Providers
+
+In your Supabase project:
+
+1. Go to Authentication > Providers
+2. Enable **Email** provider (enabled by default)
+3. (Optional) Enable **Google** provider:
+   - Get OAuth credentials from [Google Cloud Console](https://console.cloud.google.com)
+   - Add the Client ID and Secret to Supabase
+
+### Running the App
+
+```sh
+# Install dependencies (from repository root)
+pnpm install
+
+# Start the development server
+pnpm dev
+```
+
+The app will be available at `http://localhost:5173`. You'll be redirected to the login page if not authenticated.
 
 ## How can I deploy this project?
 

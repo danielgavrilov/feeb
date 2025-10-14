@@ -1,0 +1,28 @@
+{
+  "name": "feeb-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Feeb - Allergen-aware kitchen assistant monorepo",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "dev:all": "concurrently \"pnpm --filter web dev\" \"pnpm api:dev\"",
+    "build": "pnpm --filter web build",
+    "api:dev": "cd apps/api && source venv/bin/activate && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "api:setup": "cd apps/api && ./scripts/setup_db.sh",
+    "api:import": "cd apps/api && ./scripts/run_full_import.sh",
+    "api:import:sample": "cd apps/api && SAMPLE_PRODUCT_LIMIT=10000 python -m data_pipeline.import_off",
+    "api:status": "cd apps/api && ./scripts/check_import_status.sh",
+    "api:test": "cd apps/api && source venv/bin/activate && pytest tests/ -v",
+    "cli:build": "pnpm --filter create-volo-app build",
+    "cli:test": "pnpm --filter create-volo-app test"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
+
