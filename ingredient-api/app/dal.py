@@ -268,7 +268,7 @@ async def insert_product(
     name: str,
     brand: Optional[str] = None,
     lang: str = "en",
-    last_modified: Optional[datetime] = None
+    last_modified: Optional[datetime] = None,
     # New optional props
     nutriscore_grade: _Optional[str] = None,
     nutriscore_score: _Optional[int] = None,
@@ -329,7 +329,7 @@ async def insert_product(
             name=name,
             brand=brand,
             lang=lang,
-            last_modified_at=last_modified
+            last_modified_at=last_modified,
             nutriscore_grade=nutriscore_grade,
             nutriscore_score=nutriscore_score,
             quantity_raw=quantity_raw,

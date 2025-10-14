@@ -102,7 +102,6 @@ def parse_product_jsonl(filepath: Path, limit: Optional[int] = 10000) -> Iterato
     
     try:
         for line in f:
-            if limit is not None and count >= limit:
             if count >= effective_limit:
                 break
 
