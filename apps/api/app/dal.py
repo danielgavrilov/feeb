@@ -501,3 +501,450 @@ async def get_ingredient_by_code(session: AsyncSession, code: str) -> Optional[I
     )
     return result.scalar_one_or_none()
 
+
+# ============================================================================
+# Recipe System DAL Functions
+# ============================================================================
+
+async def upsert_app_user(
+    session: AsyncSession,
+    supabase_uid: str,
+    email: str,
+    name: Optional[str] = None
+) -> int:
+    """
+    Insert or update app user (UPSERT on supabase_uid).
+    
+    Args:
+        session: Database session
+        supabase_uid: Supabase user ID
+        email: User email
+        name: Optional display name
+    
+    Returns:
+        User ID
+    """
+    from .models import AppUser
+    
+    result = await session.execute(
+        select(AppUser).where(AppUser.supabase_uid == supabase_uid)
+    )
+    user = result.scalar_one_or_none()
+    
+    if user:
+        # Update existing
+        user.email = email
+        if name:
+            user.name = name
+    else:
+        # Insert new
+        user = AppUser(supabase_uid=supabase_uid, email=email, name=name)
+        session.add(user)
+    
+    await session.flush()
+    return user.id
+
+
+async def get_user_by_supabase_uid(
+    session: AsyncSession,
+    supabase_uid: str
+) -> Optional["AppUser"]:
+    """
+    Get user by Supabase UID.
+    
+    Args:
+        session: Database session
+        supabase_uid: Supabase user ID
+    
+    Returns:
+        AppUser object or None
+    """
+    from .models import AppUser
+    
+    result = await session.execute(
+        select(AppUser).where(AppUser.supabase_uid == supabase_uid)
+    )
+    return result.scalar_one_or_none()
+
+
+async def create_restaurant(
+    session: AsyncSession,
+    name: str,
+    user_id: int,
+    description: Optional[str] = None,
+    role: str = "owner"
+) -> int:
+    """
+    Create a new restaurant and link to user.
+    
+    Args:
+        session: Database session
+        name: Restaurant name
+        user_id: User ID to link as owner
+        description: Optional description
+        role: User's role in restaurant
+    
+    Returns:
+        Restaurant ID
+    """
+    from .models import Restaurant, UserRestaurant
+    
+    restaurant = Restaurant(name=name, description=description)
+    session.add(restaurant)
+    await session.flush()
+    
+    # Link user to restaurant
+    link = UserRestaurant(user_id=user_id, restaurant_id=restaurant.id, role=role)
+    session.add(link)
+    await session.flush()
+    
+    return restaurant.id
+
+
+async def get_user_restaurants(
+    session: AsyncSession,
+    user_id: int
+) -> list:
+    """
+    Get all restaurants for a user.
+    
+    Args:
+        session: Database session
+        user_id: User ID
+    
+    Returns:
+        List of Restaurant objects
+    """
+    from .models import Restaurant, UserRestaurant
+    
+    result = await session.execute(
+        select(Restaurant)
+        .join(UserRestaurant)
+        .where(UserRestaurant.user_id == user_id)
+    )
+    return result.scalars().all()
+
+
+async def create_menu(
+    session: AsyncSession,
+    restaurant_id: int,
+    name: str,
+    description: Optional[str] = None,
+    menu_active: int = 1
+) -> int:
+    """
+    Create a new menu.
+    
+    Args:
+        session: Database session
+        restaurant_id: Restaurant ID
+        name: Menu name
+        description: Optional description
+        menu_active: Active status (1 = active, 0 = inactive)
+    
+    Returns:
+        Menu ID
+    """
+    from .models import Menu
+    
+    menu = Menu(
+        restaurant_id=restaurant_id,
+        name=name,
+        description=description,
+        menu_active=menu_active
+    )
+    session.add(menu)
+    await session.flush()
+    return menu.id
+
+
+async def get_restaurant_menus(
+    session: AsyncSession,
+    restaurant_id: int
+) -> list:
+    """
+    Get all menus for a restaurant.
+    
+    Args:
+        session: Database session
+        restaurant_id: Restaurant ID
+    
+    Returns:
+        List of Menu objects
+    """
+    from .models import Menu
+    
+    result = await session.execute(
+        select(Menu).where(Menu.restaurant_id == restaurant_id)
+    )
+    return result.scalars().all()
+
+
+async def create_recipe(
+    session: AsyncSession,
+    restaurant_id: int,
+    name: str,
+    description: Optional[str] = None,
+    instructions: Optional[str] = None,
+    menu_category: Optional[str] = None,
+    serving_size: Optional[str] = None,
+    price: Optional[str] = None,
+    image: Optional[str] = None
+) -> int:
+    """
+    Create a new recipe.
+    
+    Args:
+        session: Database session
+        restaurant_id: Restaurant ID
+        name: Recipe name
+        description: Optional description
+        instructions: Optional preparation instructions
+        menu_category: Optional menu category
+        serving_size: Optional serving size
+        price: Optional price
+        image: Optional image URL
+    
+    Returns:
+        Recipe ID
+    """
+    from .models import Recipe
+    
+    recipe = Recipe(
+        restaurant_id=restaurant_id,
+        name=name,
+        description=description,
+        instructions=instructions,
+        menu_category=menu_category,
+        serving_size=serving_size,
+        price=price,
+        image=image
+    )
+    session.add(recipe)
+    await session.flush()
+    return recipe.id
+
+
+async def update_recipe(
+    session: AsyncSession,
+    recipe_id: int,
+    **kwargs
+) -> Optional["Recipe"]:
+    """
+    Update a recipe.
+    
+    Args:
+        session: Database session
+        recipe_id: Recipe ID
+        **kwargs: Fields to update
+    
+    Returns:
+        Updated Recipe object or None if not found
+    """
+    from .models import Recipe
+    
+    result = await session.execute(
+        select(Recipe).where(Recipe.id == recipe_id)
+    )
+    recipe = result.scalar_one_or_none()
+    
+    if not recipe:
+        return None
+    
+    for key, value in kwargs.items():
+        if hasattr(recipe, key) and value is not None:
+            setattr(recipe, key, value)
+    
+    await session.flush()
+    return recipe
+
+
+async def delete_recipe(
+    session: AsyncSession,
+    recipe_id: int
+) -> bool:
+    """
+    Delete a recipe.
+    
+    Args:
+        session: Database session
+        recipe_id: Recipe ID
+    
+    Returns:
+        True if deleted, False if not found
+    """
+    from .models import Recipe
+    
+    result = await session.execute(
+        select(Recipe).where(Recipe.id == recipe_id)
+    )
+    recipe = result.scalar_one_or_none()
+    
+    if not recipe:
+        return False
+    
+    await session.delete(recipe)
+    await session.flush()
+    return True
+
+
+async def get_recipe_by_id(
+    session: AsyncSession,
+    recipe_id: int
+) -> Optional["Recipe"]:
+    """
+    Get recipe by ID.
+    
+    Args:
+        session: Database session
+        recipe_id: Recipe ID
+    
+    Returns:
+        Recipe object or None
+    """
+    from .models import Recipe
+    
+    result = await session.execute(
+        select(Recipe).where(Recipe.id == recipe_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_restaurant_recipes(
+    session: AsyncSession,
+    restaurant_id: int
+) -> list:
+    """
+    Get all recipes for a restaurant.
+    
+    Args:
+        session: Database session
+        restaurant_id: Restaurant ID
+    
+    Returns:
+        List of Recipe objects
+    """
+    from .models import Recipe
+    
+    result = await session.execute(
+        select(Recipe).where(Recipe.restaurant_id == restaurant_id)
+    )
+    return result.scalars().all()
+
+
+async def add_recipe_ingredient(
+    session: AsyncSession,
+    recipe_id: int,
+    ingredient_id: int,
+    quantity: Optional[float] = None,
+    unit: Optional[str] = None,
+    notes: Optional[str] = None
+) -> None:
+    """
+    Add or update an ingredient in a recipe.
+    
+    Args:
+        session: Database session
+        recipe_id: Recipe ID
+        ingredient_id: Ingredient ID
+        quantity: Optional quantity
+        unit: Optional unit
+        notes: Optional notes
+    """
+    from .models import RecipeIngredient
+    
+    # Check if exists
+    result = await session.execute(
+        select(RecipeIngredient).where(
+            RecipeIngredient.recipe_id == recipe_id,
+            RecipeIngredient.ingredient_id == ingredient_id
+        )
+    )
+    link = result.scalar_one_or_none()
+    
+    if link:
+        # Update existing
+        link.quantity = quantity
+        link.unit = unit
+        link.notes = notes
+    else:
+        # Insert new
+        link = RecipeIngredient(
+            recipe_id=recipe_id,
+            ingredient_id=ingredient_id,
+            quantity=quantity,
+            unit=unit,
+            notes=notes
+        )
+        session.add(link)
+    
+    await session.flush()
+
+
+async def get_recipe_with_details(
+    session: AsyncSession,
+    recipe_id: int
+) -> Optional[Dict]:
+    """
+    Get recipe with full ingredient details and allergens.
+    
+    Args:
+        session: Database session
+        recipe_id: Recipe ID
+    
+    Returns:
+        Dict with recipe data and ingredients with allergens, or None
+    """
+    from .models import Recipe, RecipeIngredient, Ingredient, IngredientAllergen
+    
+    # Get recipe with eager loading
+    result = await session.execute(
+        select(Recipe)
+        .where(Recipe.id == recipe_id)
+        .options(
+            selectinload(Recipe.ingredients)
+            .selectinload(RecipeIngredient.ingredient)
+            .selectinload(Ingredient.allergens)
+            .selectinload(IngredientAllergen.allergen)
+        )
+    )
+    recipe = result.scalar_one_or_none()
+    
+    if not recipe:
+        return None
+    
+    # Build ingredient list with allergens
+    ingredients = []
+    for ri in recipe.ingredients:
+        allergens = [
+            {
+                "code": ia.allergen.code,
+                "name": ia.allergen.name,
+                "certainty": ia.certainty
+            }
+            for ia in ri.ingredient.allergens
+        ]
+        
+        ingredients.append({
+            "ingredient_id": ri.ingredient_id,
+            "ingredient_name": ri.ingredient.name,
+            "quantity": float(ri.quantity) if ri.quantity else None,
+            "unit": ri.unit,
+            "notes": ri.notes,
+            "allergens": allergens
+        })
+    
+    return {
+        "id": recipe.id,
+        "restaurant_id": recipe.restaurant_id,
+        "name": recipe.name,
+        "description": recipe.description,
+        "instructions": recipe.instructions,
+        "menu_category": recipe.menu_category,
+        "serving_size": recipe.serving_size,
+        "price": recipe.price,
+        "image": recipe.image,
+        "created_at": recipe.created_at,
+        "ingredients": ingredients
+    }
+

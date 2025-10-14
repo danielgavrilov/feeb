@@ -171,6 +171,137 @@ class ProductNutrition(Base):
     
     product: Mapped["Product"] = relationship("Product", back_populates="nutrition")
 
+
+# ============================================================================
+# Recipe System Models
+# ============================================================================
+
+class AppUser(Base):
+    """Application user synced from Supabase auth."""
+    __tablename__ = "app_user"
+    
+    id = mapped_column(Integer, primary_key=True, autoincrement=True)
+    supabase_uid = mapped_column(String(255), unique=True, nullable=False, index=True)
+    email = mapped_column(Text, unique=True, nullable=False)
+    name = mapped_column(Text, nullable=True)
+    created_at = mapped_column(TIMESTAMP, default=func.now())
+    
+    # Relationships
+    restaurants: Mapped[List["UserRestaurant"]] = relationship(
+        "UserRestaurant", back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class Restaurant(Base):
+    """Restaurant information."""
+    __tablename__ = "restaurant"
+    
+    id = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name = mapped_column(Text, nullable=False)
+    description = mapped_column(Text, nullable=True)
+    created_at = mapped_column(TIMESTAMP, default=func.now())
+    
+    # Relationships
+    users: Mapped[List["UserRestaurant"]] = relationship(
+        "UserRestaurant", back_populates="restaurant", cascade="all, delete-orphan"
+    )
+    menus: Mapped[List["Menu"]] = relationship(
+        "Menu", back_populates="restaurant", cascade="all, delete-orphan"
+    )
+    recipes: Mapped[List["Recipe"]] = relationship(
+        "Recipe", back_populates="restaurant", cascade="all, delete-orphan"
+    )
+
+
+class UserRestaurant(Base):
+    """Many-to-many link between users and restaurants."""
+    __tablename__ = "user_restaurant"
+    
+    user_id = mapped_column(Integer, ForeignKey("app_user.id"), primary_key=True)
+    restaurant_id = mapped_column(Integer, ForeignKey("restaurant.id"), primary_key=True)
+    role = mapped_column(Text, default="owner")
+    
+    # Relationships
+    user: Mapped["AppUser"] = relationship("AppUser", back_populates="restaurants")
+    restaurant: Mapped["Restaurant"] = relationship("Restaurant", back_populates="users")
+
+
+class Menu(Base):
+    """Menu information."""
+    __tablename__ = "menu"
+    
+    id = mapped_column(Integer, primary_key=True, autoincrement=True)
+    restaurant_id = mapped_column(Integer, ForeignKey("restaurant.id"), nullable=False)
+    name = mapped_column(Text, nullable=False)
+    description = mapped_column(Text, nullable=True)
+    menu_active = mapped_column(Integer, default=1)
+    created_at = mapped_column(TIMESTAMP, default=func.now())
+    
+    # Relationships
+    restaurant: Mapped["Restaurant"] = relationship("Restaurant", back_populates="menus")
+    recipes: Mapped[List["MenuRecipe"]] = relationship(
+        "MenuRecipe", back_populates="menu", cascade="all, delete-orphan"
+    )
+
+
+class Recipe(Base):
+    """Recipe information."""
+    __tablename__ = "recipe"
+    
+    id = mapped_column(Integer, primary_key=True, autoincrement=True)
+    restaurant_id = mapped_column(Integer, ForeignKey("restaurant.id"), nullable=False)
+    name = mapped_column(Text, nullable=False)
+    description = mapped_column(Text, nullable=True)
+    instructions = mapped_column(Text, nullable=True)
+    menu_category = mapped_column(Text, nullable=True)
+    serving_size = mapped_column(Text, nullable=True)
+    price = mapped_column(Text, nullable=True)
+    image = mapped_column(Text, nullable=True)
+    created_at = mapped_column(TIMESTAMP, default=func.now())
+    
+    # Relationships
+    restaurant: Mapped["Restaurant"] = relationship("Restaurant", back_populates="recipes")
+    menus: Mapped[List["MenuRecipe"]] = relationship(
+        "MenuRecipe", back_populates="recipe", cascade="all, delete-orphan"
+    )
+    ingredients: Mapped[List["RecipeIngredient"]] = relationship(
+        "RecipeIngredient", back_populates="recipe", cascade="all, delete-orphan"
+    )
+
+
+class MenuRecipe(Base):
+    """Many-to-many link between menus and recipes."""
+    __tablename__ = "menu_recipe"
+    
+    menu_id = mapped_column(Integer, ForeignKey("menu.id"), primary_key=True)
+    recipe_id = mapped_column(Integer, ForeignKey("recipe.id"), primary_key=True)
+    position = mapped_column(Integer, nullable=True)
+    
+    # Relationships
+    menu: Mapped["Menu"] = relationship("Menu", back_populates="recipes")
+    recipe: Mapped["Recipe"] = relationship("Recipe", back_populates="menus")
+
+
+class RecipeIngredient(Base):
+    """Links recipes to ingredients with quantity information."""
+    __tablename__ = "recipe_ingredient"
+    
+    id = mapped_column(Integer, primary_key=True, autoincrement=True)
+    recipe_id = mapped_column(Integer, ForeignKey("recipe.id"), nullable=False)
+    ingredient_id = mapped_column(Integer, ForeignKey("ingredient.id"), nullable=False)
+    quantity = mapped_column(DECIMAL(10, 3), nullable=True)
+    unit = mapped_column(Text, nullable=True)
+    notes = mapped_column(Text, nullable=True)
+    
+    # Relationships
+    recipe: Mapped["Recipe"] = relationship("Recipe", back_populates="ingredients")
+    ingredient: Mapped["Ingredient"] = relationship("Ingredient")
+    
+    __table_args__ = (
+        UniqueConstraint("recipe_id", "ingredient_id", name="uq_recipe_ingredient"),
+    )
+
+
 # ============================================================================
 # Pydantic Response Models
 # ============================================================================
@@ -236,4 +367,140 @@ class HealthResponse(BaseModel):
     """Health check response."""
     status: str
     db_connected: bool
+
+
+# ============================================================================
+# Recipe System Pydantic Models
+# ============================================================================
+
+class UserCreate(BaseModel):
+    """Request model for creating/syncing a user."""
+    supabase_uid: str
+    email: str
+    name: Optional[str] = None
+
+
+class UserResponse(BaseModel):
+    """User information in API responses."""
+    id: int
+    supabase_uid: str
+    email: str
+    name: Optional[str] = None
+    created_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RestaurantCreate(BaseModel):
+    """Request model for creating a restaurant."""
+    name: str
+    description: Optional[str] = None
+    user_id: int
+
+
+class RestaurantResponse(BaseModel):
+    """Restaurant information in API responses."""
+    id: int
+    name: str
+    description: Optional[str] = None
+    created_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MenuCreate(BaseModel):
+    """Request model for creating a menu."""
+    restaurant_id: int
+    name: str
+    description: Optional[str] = None
+    menu_active: Optional[int] = 1
+
+
+class MenuResponse(BaseModel):
+    """Menu information in API responses."""
+    id: int
+    restaurant_id: int
+    name: str
+    description: Optional[str] = None
+    menu_active: int
+    created_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RecipeIngredientRequest(BaseModel):
+    """Request model for adding ingredient to recipe."""
+    ingredient_id: int
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class RecipeIngredientResponse(BaseModel):
+    """Recipe ingredient with details."""
+    ingredient_id: int
+    ingredient_name: str
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    notes: Optional[str] = None
+    allergens: List[AllergenResponse] = []
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RecipeCreate(BaseModel):
+    """Request model for creating a recipe."""
+    restaurant_id: int
+    name: str
+    description: Optional[str] = None
+    instructions: Optional[str] = None
+    menu_category: Optional[str] = None
+    serving_size: Optional[str] = None
+    price: Optional[str] = None
+    image: Optional[str] = None
+    ingredients: Optional[List[RecipeIngredientRequest]] = []
+
+
+class RecipeUpdate(BaseModel):
+    """Request model for updating a recipe."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    instructions: Optional[str] = None
+    menu_category: Optional[str] = None
+    serving_size: Optional[str] = None
+    price: Optional[str] = None
+    image: Optional[str] = None
+
+
+class RecipeResponse(BaseModel):
+    """Recipe basic information."""
+    id: int
+    restaurant_id: int
+    name: str
+    description: Optional[str] = None
+    instructions: Optional[str] = None
+    menu_category: Optional[str] = None
+    serving_size: Optional[str] = None
+    price: Optional[str] = None
+    image: Optional[str] = None
+    created_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RecipeWithIngredients(BaseModel):
+    """Recipe with full ingredient details and allergens."""
+    id: int
+    restaurant_id: int
+    name: str
+    description: Optional[str] = None
+    instructions: Optional[str] = None
+    menu_category: Optional[str] = None
+    serving_size: Optional[str] = None
+    price: Optional[str] = None
+    image: Optional[str] = None
+    created_at: datetime
+    ingredients: List[RecipeIngredientResponse] = []
+    
+    model_config = ConfigDict(from_attributes=True)
 

@@ -2,11 +2,13 @@ import { createContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
+import { syncUser } from '@/lib/api';
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  backendUserId: number | null;
   signUp: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
@@ -23,13 +25,36 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [backendUserId, setBackendUserId] = useState<number | null>(null);
   const { toast } = useToast();
+
+  // Sync user with backend when they sign in
+  const syncUserWithBackend = async (user: User | null) => {
+    if (!user) {
+      setBackendUserId(null);
+      return;
+    }
+
+    try {
+      const backendUser = await syncUser(
+        user.id,
+        user.email || '',
+        user.user_metadata?.name || user.email?.split('@')[0]
+      );
+      setBackendUserId(backendUser.id);
+    } catch (error) {
+      console.error('Failed to sync user with backend:', error);
+    }
+  };
 
   useEffect(() => {
     // Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      if (session?.user) {
+        syncUserWithBackend(session.user);
+      }
       setLoading(false);
     });
 
@@ -39,6 +64,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
+      if (session?.user) {
+        syncUserWithBackend(session.user);
+      } else {
+        setBackendUserId(null);
+      }
       setLoading(false);
     });
 
@@ -131,6 +161,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     user,
     session,
     loading,
+    backendUserId,
     signUp,
     signIn,
     signOut,

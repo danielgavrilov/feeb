@@ -1,9 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RECIPES } from "@/data/recipes";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 interface DishNameInputProps {
@@ -33,25 +32,7 @@ export const DishNameInput = ({
   price,
   onPriceChange
 }: DishNameInputProps) => {
-  const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showOptional, setShowOptional] = useState(false);
-
-  useEffect(() => {
-    if (value.length > 1) {
-      const matches = Object.keys(RECIPES).filter((recipe) =>
-        recipe.toLowerCase().includes(value.toLowerCase())
-      );
-      setSuggestions(matches);
-    } else {
-      setSuggestions([]);
-    }
-  }, [value]);
-
-  const handleSuggestionClick = (suggestion: string) => {
-    onChange(RECIPES[suggestion].name);
-    onRecipeMatch(suggestion);
-    setSuggestions([]);
-  };
 
   return (
     <div className="space-y-4">
@@ -66,19 +47,6 @@ export const DishNameInput = ({
           placeholder="Enter dish name..."
           className="h-16 text-2xl font-medium border-2"
         />
-        {suggestions.length > 0 && (
-          <div className="bg-card border-2 border-border rounded-lg shadow-lg z-10 relative">
-            {suggestions.map((suggestion) => (
-              <button
-                key={suggestion}
-                onClick={() => handleSuggestionClick(suggestion)}
-                className="w-full px-6 py-4 text-left text-lg hover:bg-secondary transition-colors first:rounded-t-lg last:rounded-b-lg"
-              >
-                {RECIPES[suggestion].name}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       <button

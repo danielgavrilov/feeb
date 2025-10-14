@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DishNameInput } from "@/components/DishNameInput";
 import { IngredientsList, IngredientState } from "@/components/IngredientsList";
 import { PrepMethodInput } from "@/components/PrepMethodInput";
@@ -8,13 +8,18 @@ import { MenuView } from "@/components/MenuView";
 import { Settings } from "@/components/Settings";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RECIPES } from "@/data/recipes";
 import { toast } from "sonner";
 import { ChefHat } from "lucide-react";
+import { useRestaurant } from "@/hooks/useRestaurant";
+import { useRecipes } from "@/hooks/useRecipes";
+import { Recipe } from "@/lib/api";
 
 type Step = "name" | "ingredients" | "prep" | "compliance";
 
 const Index = () => {
+  const { restaurant, restaurants, createRestaurant: createRestaurantAPI, selectRestaurant } = useRestaurant();
+  const { recipes, createRecipe: createRecipeAPI, updateRecipe: updateRecipeAPI, deleteRecipe: deleteRecipeAPI } = useRecipes(restaurant?.id || null);
+  
   const [activeTab, setActiveTab] = useState("add");
   const [step, setStep] = useState<Step>("name");
   const [dishName, setDishName] = useState("");
@@ -26,19 +31,30 @@ const Index = () => {
   const [prepMethod, setPrepMethod] = useState("");
   const [compliance, setCompliance] = useState<Record<string, boolean>>({});
   const [dishImage, setDishImage] = useState("");
-  
-  const [savedDishes, setSavedDishes] = useState<SavedDish[]>([]);
-  const [restaurantName, setRestaurantName] = useState("My Restaurant");
-  const [editingDishId, setEditingDishId] = useState<string | null>(null);
+  const [editingDishId, setEditingDishId] = useState<number | null>(null);
+
+  // Convert API recipes to SavedDish format for existing components
+  const savedDishes: SavedDish[] = recipes.map((recipe: Recipe) => ({
+    id: recipe.id.toString(),
+    name: recipe.name,
+    menuCategory: recipe.menu_category || "",
+    description: recipe.description || "",
+    servingSize: recipe.serving_size || "1",
+    price: recipe.price || "",
+    ingredients: recipe.ingredients.map(ing => ({
+      name: ing.ingredient_name,
+      quantity: ing.quantity?.toString() || "",
+      unit: ing.unit || "",
+    })),
+    prepMethod: recipe.instructions || "",
+    compliance: {}, // We'll compute this from ingredients
+    image: recipe.image || "",
+  }));
 
   const handleRecipeMatch = (recipeKey: string) => {
-    const recipe = RECIPES[recipeKey];
-    const newIngredients: IngredientState[] = recipe.ingredients.map((ing) => ({
-      ...ing,
-      confirmed: false,
-    }));
-    setIngredients(newIngredients);
-    toast.success(`Recipe loaded: ${recipe.name}`);
+    // For now, recipe matching from hard-coded recipes is removed
+    // TODO: Implement recipe template system if needed
+    toast.info("Recipe templates coming soon!");
   };
 
   const handleUpdateIngredient = (index: number, quantity: string) => {
@@ -105,30 +121,47 @@ const Index = () => {
     setCompliance(complianceResult);
   };
 
-  const handleSaveDish = () => {
-    const newDish: SavedDish = {
-      id: editingDishId || Date.now().toString(),
-      name: dishName,
-      menuCategory,
-      description,
-      servingSize,
-      price,
-      ingredients: ingredients.map(({ name, quantity, unit }) => ({ name, quantity, unit })),
-      prepMethod,
-      compliance,
-      image: dishImage,
-    };
-
-    if (editingDishId) {
-      setSavedDishes(savedDishes.map(d => d.id === editingDishId ? newDish : d));
-      toast.success("Dish updated");
-    } else {
-      setSavedDishes([...savedDishes, newDish]);
-      toast.success("Dish saved");
+  const handleSaveDish = async () => {
+    if (!restaurant) {
+      toast.error("Please create a restaurant first");
+      return;
     }
 
-    handleStartNew();
-    setActiveTab("recipes");
+    try {
+      // For now, we're saving recipes without ingredient links
+      // TODO: Implement ingredient search and linking
+      if (editingDishId) {
+        await updateRecipeAPI(editingDishId, {
+          name: dishName,
+          description,
+          instructions: prepMethod,
+          menu_category: menuCategory,
+          serving_size: servingSize,
+          price,
+          image: dishImage,
+        });
+        toast.success("Dish updated");
+      } else {
+        await createRecipeAPI({
+          restaurant_id: restaurant.id,
+          name: dishName,
+          description,
+          instructions: prepMethod,
+          menu_category: menuCategory,
+          serving_size: servingSize,
+          price,
+          image: dishImage,
+          ingredients: [], // TODO: Map ingredients to ingredient IDs
+        });
+        toast.success("Dish saved");
+      }
+
+      handleStartNew();
+      setActiveTab("recipes");
+    } catch (error) {
+      toast.error("Failed to save dish");
+      console.error(error);
+    }
   };
 
   const handleStartNew = () => {
@@ -145,16 +178,21 @@ const Index = () => {
     setEditingDishId(null);
   };
 
-  const handleDeleteDish = (id: string) => {
-    setSavedDishes(savedDishes.filter(d => d.id !== id));
-    toast.success("Dish deleted");
+  const handleDeleteDish = async (id: string) => {
+    try {
+      await deleteRecipeAPI(parseInt(id));
+      toast.success("Dish deleted");
+    } catch (error) {
+      toast.error("Failed to delete dish");
+      console.error(error);
+    }
   };
 
   const handleEditDish = (id: string) => {
     const dish = savedDishes.find(d => d.id === id);
     if (!dish) return;
 
-    setEditingDishId(id);
+    setEditingDishId(parseInt(id));
     setDishName(dish.name);
     setMenuCategory(dish.menuCategory);
     setDescription(dish.description);
@@ -186,10 +224,10 @@ const Index = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <ChefHat className="w-8 h-8 text-primary" />
-              <h1 className="text-2xl font-bold text-foreground">Allergen Tracker</h1>
+              <h1 className="text-2xl font-bold text-foreground">Feeb</h1>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-muted-foreground">{restaurantName}</span>
+              <span className="text-sm text-muted-foreground">{restaurant?.name || "No Restaurant"}</span>
             </div>
           </div>
         </div>
@@ -297,7 +335,7 @@ const Index = () => {
             <div className="bg-card rounded-xl shadow-lg p-8">
               <MenuView 
                 dishes={savedDishes}
-                restaurantName={restaurantName}
+                restaurantName={restaurant?.name || "My Restaurant"}
               />
             </div>
           </TabsContent>
@@ -305,8 +343,10 @@ const Index = () => {
           <TabsContent value="settings">
             <div className="bg-card rounded-xl shadow-lg p-8">
               <Settings 
-                restaurantName={restaurantName}
-                onRestaurantNameChange={setRestaurantName}
+                restaurant={restaurant}
+                restaurants={restaurants}
+                onCreateRestaurant={createRestaurantAPI}
+                onSelectRestaurant={selectRestaurant}
               />
             </div>
           </TabsContent>

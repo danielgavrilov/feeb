@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SavedDish } from "./RecipeBook";
-import { RECIPES, DIETARY_CATEGORIES, Recipe, Ingredient } from "@/data/recipes";
+import { DIETARY_CATEGORIES, Ingredient } from "@/data/recipes";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 interface MenuViewProps {
@@ -20,34 +20,15 @@ export const MenuView = ({ dishes, restaurantName }: MenuViewProps) => {
   const [showAllergens, setShowAllergens] = useState(false);
   const [expandedDishes, setExpandedDishes] = useState<Set<string>>(new Set());
 
-  // Convert hardcoded recipes to display format
-  const hardcodedDishes = Object.entries(RECIPES).map(([key, recipe]) => ({
-    id: key,
-    name: recipe.name,
-    description: "A delicious traditional dish",
-    price: "12.00",
-    menuCategory: "Starter",
-    recipe,
-  }));
-
-  const allDishes = [...dishes.map(d => ({ ...d, recipe: null })), ...hardcodedDishes];
-
   // Filter dishes based on dietary requirements and excluded ingredients
-  const filteredDishes = allDishes.filter(dish => {
-    // Check dietary filters
-    if (selectedDiets.length > 0 && dish.recipe) {
-      const dishMeetsDietary = selectedDiets.every(diet => {
-        return dish.recipe!.ingredients.every(ing => 
-          ing.dietaryInfo?.includes(diet)
-        );
-      });
-      if (!dishMeetsDietary) return false;
-    }
-
+  const filteredDishes = dishes.filter(dish => {
+    // Check dietary filters - for now, we can't filter by dietary info without ingredient data
+    // TODO: Implement once ingredients are linked to the ingredient database
+    
     // Check excluded ingredients
-    if (excludedIngredients.trim() && dish.recipe) {
+    if (excludedIngredients.trim() && dish.ingredients) {
       const excluded = excludedIngredients.toLowerCase().split(',').map(s => s.trim());
-      const hasExcluded = dish.recipe.ingredients.some(ing => 
+      const hasExcluded = dish.ingredients.some(ing => 
         excluded.some(ex => ing.name.toLowerCase().includes(ex))
       );
       if (hasExcluded) return false;
@@ -164,7 +145,7 @@ export const MenuView = ({ dishes, restaurantName }: MenuViewProps) => {
             <div className="space-y-4">
               {categoryDishes.map((dish) => {
                 const isExpanded = expandedDishes.has(dish.id);
-                const hasRecipe = !!dish.recipe;
+                const hasIngredients = dish.ingredients && dish.ingredients.length > 0;
 
                 return (
                   <Card key={dish.id} className="p-6">
@@ -186,7 +167,7 @@ export const MenuView = ({ dishes, restaurantName }: MenuViewProps) => {
                         <p className="text-muted-foreground">{dish.description}</p>
                       )}
 
-                      {hasRecipe && showIngredients && (
+                      {hasIngredients && showIngredients && (
                         <div className="pt-2">
                           <button
                             onClick={() => toggleDishExpanded(dish.id)}
@@ -198,7 +179,7 @@ export const MenuView = ({ dishes, restaurantName }: MenuViewProps) => {
                           
                           {isExpanded && (
                             <div className="mt-3 space-y-2">
-                              {dish.recipe.ingredients.map((ing: Ingredient, idx: number) => (
+                              {dish.ingredients.map((ing, idx: number) => (
                                 <div key={idx} className="text-sm">
                                   <span className="font-medium">{ing.name}</span>
                                   {showAmounts && (
@@ -206,34 +187,8 @@ export const MenuView = ({ dishes, restaurantName }: MenuViewProps) => {
                                       ({ing.quantity} {ing.unit})
                                     </span>
                                   )}
-                                  {showAllergens && ing.allergens && ing.allergens.length > 0 && (
-                                    <span className="ml-2">
-                                      {ing.allergens.map(allergen => (
-                                        <Badge key={allergen} variant="destructive" className="text-xs ml-1">
-                                          {allergen}
-                                        </Badge>
-                                      ))}
-                                    </span>
-                                  )}
                                 </div>
                               ))}
-                              
-                              {showAllergens && (
-                                <div className="mt-3 pt-3 border-t">
-                                  <p className="text-sm font-medium">All Allergens:</p>
-                                  <div className="flex flex-wrap gap-1 mt-1">
-                                    {getAllergens(dish.recipe.ingredients).length > 0 ? (
-                                      getAllergens(dish.recipe.ingredients).map(allergen => (
-                                        <Badge key={allergen} variant="destructive" className="text-xs">
-                                          {allergen}
-                                        </Badge>
-                                      ))
-                                    ) : (
-                                      <span className="text-sm text-muted-foreground">None</span>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           )}
                         </div>
