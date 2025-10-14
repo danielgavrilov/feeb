@@ -90,8 +90,33 @@ Python FastAPI service providing ingredient and allergen data from OpenFoodFacts
 - 🥜 OpenFoodFacts integration
 - 📊 PostgreSQL database with async SQLAlchemy
 - 🚀 No authentication required (public API)
+- 🐳 Docker support for easy setup
 
-### Setup
+### 🐳 Docker Setup (Recommended)
+
+The easiest way to get started with the API and PostgreSQL:
+
+```bash
+cd apps/api
+
+# Start PostgreSQL + FastAPI in Docker
+docker compose up -d
+
+# Run database migrations
+./scripts/docker_migrate.sh
+
+# (Optional) Import OpenFoodFacts data
+./scripts/docker_import.sh
+```
+
+That's it! API is now running at http://localhost:8000
+
+📖 **See [DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md) for detailed instructions**
+
+### 💻 Manual Setup (Alternative)
+
+<details>
+<summary>Click to expand manual setup instructions</summary>
 
 1. **Navigate to API directory:**
    ```bash
@@ -135,6 +160,8 @@ Python FastAPI service providing ingredient and allergen data from OpenFoodFacts
    ```
    API available at `http://localhost:8000`
    Docs at `http://localhost:8000/docs`
+
+</details>
 
 ### API Scripts (from root)
 
@@ -242,8 +269,14 @@ const data = await response.json();
 
 ## 📚 Documentation
 
+### Quick Start Guides
+- [Docker Quick Start](./DOCKER_QUICKSTART.md) - Get started with Docker in 3 minutes
+
+### Component Documentation
 - [Frontend Documentation](./apps/web/README.md)
 - [API Documentation](./apps/api/README.md)
+- [Docker Setup Guide](./apps/api/DOCKER_README.md)
+- [Frontend Docker Integration](./apps/web/DOCKER_INTEGRATION.md)
 - [CLI Tool Documentation](./feeb/README.md)
 
 ## 🧪 Testing
@@ -272,11 +305,33 @@ Environment variables needed:
 
 ### API (Docker)
 
+For local development, use Docker Compose (see [DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md)):
+
+```bash
+cd apps/api
+docker compose up -d
+```
+
+For production deployment:
+
 ```bash
 cd apps/api
 docker build -t feeb-api .
 docker run -p 8000:8000 --env-file .env feeb-api
 ```
+
+### Supabase Migration
+
+The API is designed to work seamlessly with Supabase PostgreSQL. To migrate:
+
+1. Get your Supabase connection string
+2. Update `apps/api/.env`:
+   ```env
+   DATABASE_URL=postgresql+asyncpg://postgres.xxx:[password]@db.xxx.supabase.com:5432/postgres
+   ```
+3. Run migrations: `alembic upgrade head`
+
+No code changes needed!
 
 ## 🤝 Contributing
 

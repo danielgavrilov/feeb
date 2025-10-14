@@ -17,7 +17,8 @@ async def lifespan(app: FastAPI):
     Handles startup and shutdown events.
     """
     # Startup
-    await init_db()
+    # NOTE: We use Alembic migrations to create tables, not init_db()
+    # await init_db()  # Disabled: conflicts with Alembic migrations
     yield
     # Shutdown
     await close_db()

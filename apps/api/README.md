@@ -38,13 +38,39 @@ See the [schema diagram](docs/schema.png) for detailed relationships.
 
 ## Quick Start
 
-### Prerequisites
+### 🐳 Docker Setup (Recommended)
+
+The easiest way to get started is using Docker Compose, which handles both PostgreSQL and the API service:
+
+```bash
+# 1. Copy environment file
+cp .env.docker.example .env
+
+# 2. Start services (PostgreSQL + API)
+docker-compose up
+
+# 3. In another terminal, run migrations
+./scripts/docker_migrate.sh
+
+# 4. (Optional) Import OpenFoodFacts data
+./scripts/docker_import.sh
+```
+
+That's it! The API will be available at http://localhost:8000
+
+📖 **For detailed Docker documentation, see [DOCKER_README.md](DOCKER_README.md)**
+
+### 💻 Manual Setup (Alternative)
+
+If you prefer to run PostgreSQL and the API manually:
+
+#### Prerequisites
 
 - Python 3.9-3.12 (⚠️ Python 3.13 not yet supported due to asyncpg compatibility)
 - PostgreSQL 14+
 - pip or uv package manager
 
-### Installation
+#### Installation
 
 1. **Clone and navigate to the directory:**
 
@@ -341,27 +367,30 @@ app.state.limiter = limiter
 
 ### Docker
 
-**Dockerfile:**
+For local development, use the included `docker-compose.yml` (see [DOCKER_README.md](DOCKER_README.md)).
 
-```dockerfile
-FROM python:3.11-slim
-
-WORKDIR /app
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-**Build and run:**
+For production deployment, the Dockerfile is already configured and ready to use:
 
 ```bash
 docker build -t ingredient-api .
 docker run -p 8000:8000 --env-file .env ingredient-api
 ```
+
+### Supabase Migration
+
+This application is designed to work seamlessly with Supabase PostgreSQL. To migrate from local development to Supabase:
+
+1. **Get your Supabase connection string** from the Supabase dashboard
+2. **Update your `.env`**:
+   ```env
+   DATABASE_URL=postgresql+asyncpg://postgres.xxx:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
+   ```
+3. **Run migrations**:
+   ```bash
+   alembic upgrade head
+   ```
+
+No code changes needed! The same asyncpg driver and SQLAlchemy models work with both local PostgreSQL and Supabase.
 
 ### Production Checklist
 

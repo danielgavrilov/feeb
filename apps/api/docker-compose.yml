@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: feeb-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-feeb_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-feeb_password}
+      POSTGRES_DB: ${POSTGRES_DB:-feeb_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-feeb_user} -d ${POSTGRES_DB:-feeb_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - feeb-network
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: feeb-api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-feeb_user}:${POSTGRES_PASSWORD:-feeb_password}@postgres:5432/${POSTGRES_DB:-feeb_db}
+      OFF_BASE_URL: ${OFF_BASE_URL:-https://world.openfoodfacts.org}
+      DATA_SOURCE: ${DATA_SOURCE:-off}
+      SAMPLE_PRODUCT_LIMIT: ${SAMPLE_PRODUCT_LIMIT:-10000}
+      API_TITLE: ${API_TITLE:-Allergen-Aware Ingredient API}
+      API_VERSION: ${API_VERSION:-0.1.0}
+      API_DESCRIPTION: ${API_DESCRIPTION:-REST API for ingredient and allergen lookups using OpenFoodFacts data}
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount source code for hot reload during development
+      - ./app:/app/app:ro
+      - ./alembic:/app/alembic:ro
+      - ./alembic.ini:/app/alembic.ini:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - feeb-network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  feeb-network:
+    driver: bridge
+
