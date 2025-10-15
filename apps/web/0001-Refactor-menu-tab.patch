@@ -1,0 +1,1124 @@
+From 6a8a7eba01e4abc80679a77f853e12cf55af9767 Mon Sep 17 00:00:00 2001
+From: "gpt-engineer-app[bot]"
+ <159125892+gpt-engineer-app[bot]@users.noreply.github.com>
+Date: Wed, 15 Oct 2025 10:49:52 +0000
+Subject: [PATCH] Refactor menu tab
+
+---
+ src/components/MenuView.tsx             | 379 +++++++++---------------
+ src/components/menu/CategoryTabs.tsx    |  26 ++
+ src/components/menu/DishCard.tsx        | 119 ++++++++
+ src/components/menu/DishDetailModal.tsx | 154 ++++++++++
+ src/components/menu/FeaturedSection.tsx |  27 ++
+ src/components/menu/MenuSearch.tsx      | 114 +++++++
+ src/data/menu.ts                        | 197 ++++++++++++
+ src/pages/Index.tsx                     |   1 -
+ 8 files changed, 776 insertions(+), 241 deletions(-)
+ create mode 100644 src/components/menu/CategoryTabs.tsx
+ create mode 100644 src/components/menu/DishCard.tsx
+ create mode 100644 src/components/menu/DishDetailModal.tsx
+ create mode 100644 src/components/menu/FeaturedSection.tsx
+ create mode 100644 src/components/menu/MenuSearch.tsx
+ create mode 100644 src/data/menu.ts
+
+diff --git a/src/components/MenuView.tsx b/src/components/MenuView.tsx
+index 30983f8..98a91f9 100644
+--- a/src/components/MenuView.tsx
++++ b/src/components/MenuView.tsx
+@@ -1,269 +1,168 @@
+ import { useState } from "react";
+-import { Card } from "@/components/ui/card";
+-import { Badge } from "@/components/ui/badge";
+-import { Button } from "@/components/ui/button";
+-import { Input } from "@/components/ui/input";
+-import { SavedDish } from "./RecipeBook";
+-import { RECIPES, DIETARY_CATEGORIES, Recipe, Ingredient } from "@/data/recipes";
+-import { ChevronDown, ChevronUp } from "lucide-react";
++import { MenuItem, MENU_ITEMS, CATEGORIES } from "@/data/menu";
++import { MenuSearch } from "./menu/MenuSearch";
++import { CategoryTabs } from "./menu/CategoryTabs";
++import { FeaturedSection } from "./menu/FeaturedSection";
++import { DishCard } from "./menu/DishCard";
++import { DishDetailModal } from "./menu/DishDetailModal";
+ 
+ interface MenuViewProps {
+-  dishes: SavedDish[];
+   restaurantName: string;
+ }
+ 
+-export const MenuView = ({ dishes, restaurantName }: MenuViewProps) => {
++export const MenuView = ({ restaurantName }: MenuViewProps) => {
++  const [searchQuery, setSearchQuery] = useState("");
++  const [selectedCategory, setSelectedCategory] = useState("all");
+   const [selectedDiets, setSelectedDiets] = useState<string[]>([]);
+-  const [excludedIngredients, setExcludedIngredients] = useState("");
+-  const [showIngredients, setShowIngredients] = useState(false);
+-  const [showAmounts, setShowAmounts] = useState(false);
+-  const [showAllergens, setShowAllergens] = useState(false);
+-  const [expandedDishes, setExpandedDishes] = useState<Set<string>>(new Set());
++  const [selectedDish, setSelectedDish] = useState<MenuItem | null>(null);
+ 
+-  // Convert hardcoded recipes to display format
+-  const hardcodedDishes = Object.entries(RECIPES).map(([key, recipe]) => ({
+-    id: key,
+-    name: recipe.name,
+-    description: "A delicious traditional dish",
+-    price: "12.00",
+-    menuCategory: "Starter",
+-    recipe,
+-  }));
++  const toggleDiet = (dietId: string) => {
++    setSelectedDiets((prev) =>
++      prev.includes(dietId) ? prev.filter((d) => d !== dietId) : [...prev, dietId]
++    );
++  };
+ 
+-  const allDishes = [...dishes.map(d => ({ ...d, recipe: null })), ...hardcodedDishes];
++  // Filter dishes
++  const filteredDishes = MENU_ITEMS.filter((dish) => {
++    // Category filter
++    if (selectedCategory !== "all" && dish.category !== selectedCategory) {
++      return false;
++    }
+ 
+-  // Filter dishes based on dietary requirements and excluded ingredients
+-  const filteredDishes = allDishes.filter(dish => {
+-    // Check dietary filters
+-    if (selectedDiets.length > 0 && dish.recipe) {
+-      const dishMeetsDietary = selectedDiets.every(diet => {
+-        return dish.recipe!.ingredients.every(ing => 
+-          ing.dietaryInfo?.includes(diet)
++    // Search filter (name, description, or excluded ingredients)
++    if (searchQuery.trim()) {
++      const query = searchQuery.toLowerCase();
++      const matchesName = dish.name.toLowerCase().includes(query);
++      const matchesDescription = dish.description.toLowerCase().includes(query);
++      
++      // Check if searching to exclude ingredients
++      if (dish.recipe) {
++        const hasExcludedIngredient = dish.recipe.ingredients.some((ing) =>
++          ing.name.toLowerCase().includes(query)
+         );
+-      });
+-      if (!dishMeetsDietary) return false;
++        // If it's an exclusion search (e.g., "no chicken"), filter out dishes with that ingredient
++        if (hasExcludedIngredient && !matchesName && !matchesDescription) {
++          return false;
++        }
++      }
++      
++      if (!matchesName && !matchesDescription) {
++        return false;
++      }
+     }
+ 
+-    // Check excluded ingredients
+-    if (excludedIngredients.trim() && dish.recipe) {
+-      const excluded = excludedIngredients.toLowerCase().split(',').map(s => s.trim());
+-      const hasExcluded = dish.recipe.ingredients.some(ing => 
+-        excluded.some(ex => ing.name.toLowerCase().includes(ex))
+-      );
+-      if (hasExcluded) return false;
++    // Dietary filters
++    if (selectedDiets.length > 0) {
++      // Check if dish meets all selected dietary requirements
++      const meetsDietary = selectedDiets.every((diet) => {
++        return dish.dietaryTags?.includes(diet);
++      });
++      if (!meetsDietary) return false;
+     }
+ 
+     return true;
+   });
+ 
+-  // Group dishes by category
+-  const categories = ["Starter", "Main", "Side", "Dessert", "Beverage", "Other"];
+-  const groupedDishes = categories.reduce((acc, category) => {
+-    acc[category] = filteredDishes.filter(
+-      (d) => d.menuCategory === category || (!d.menuCategory && category === "Other")
+-    );
+-    return acc;
+-  }, {} as Record<string, any[]>);
+-
+-  const toggleDiet = (dietId: string) => {
+-    setSelectedDiets(prev => 
+-      prev.includes(dietId) 
+-        ? prev.filter(d => d !== dietId)
+-        : [...prev, dietId]
+-    );
+-  };
+-
+-  const toggleDishExpanded = (dishId: string) => {
+-    setExpandedDishes(prev => {
+-      const next = new Set(prev);
+-      if (next.has(dishId)) {
+-        next.delete(dishId);
+-      } else {
+-        next.add(dishId);
+-      }
+-      return next;
+-    });
+-  };
++  // Featured dishes
++  const featuredDishes = filteredDishes.filter((dish) =>
++    dish.badges?.some((badge) => ["popular", "chef-pick", "bestseller"].includes(badge))
++  );
+ 
+-  const getAllergens = (ingredients: Ingredient[]) => {
+-    const allergens = new Set<string>();
+-    ingredients.forEach(ing => {
+-      ing.allergens?.forEach(a => allergens.add(a));
+-    });
+-    return Array.from(allergens);
+-  };
++  // Group by category
++  const categorizedDishes = CATEGORIES.filter((cat) => cat.id !== "all").reduce(
++    (acc, category) => {
++      acc[category.id] = filteredDishes.filter((dish) => dish.category === category.id);
++      return acc;
++    },
++    {} as Record<string, MenuItem[]>
++  );
+ 
+   return (
+-    <div className="space-y-8">
+-      <div className="text-center border-b-2 border-border pb-6">
+-        <h1 className="text-4xl font-bold text-foreground mb-2">{restaurantName}</h1>
+-        <p className="text-muted-foreground">Menu</p>
+-      </div>
+-
+-      {/* Filters Section */}
+-      <div className="space-y-4">
+-        <div>
+-          <h3 className="text-sm font-medium mb-2">Dietary Filters</h3>
+-          <div className="flex flex-wrap gap-2">
+-            {DIETARY_CATEGORIES.map(diet => (
+-              <Button
+-                key={diet.id}
+-                variant={selectedDiets.includes(diet.id) ? "default" : "outline"}
+-                size="sm"
+-                onClick={() => toggleDiet(diet.id)}
+-              >
+-                {diet.icon} {diet.label}
+-              </Button>
+-            ))}
++    <div className="min-h-screen bg-background">
++      {/* Header */}
++      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
++        <div className="container mx-auto px-4 py-4 space-y-4">
++          <div className="flex items-center justify-between">
++            <div>
++              <h1 className="text-3xl font-bold text-foreground">{restaurantName}</h1>
++              <p className="text-sm text-muted-foreground">Discover our delicious menu</p>
++            </div>
+           </div>
+-        </div>
+ 
+-        <div>
+-          <h3 className="text-sm font-medium mb-2">Exclude Ingredients</h3>
+-          <Input
+-            placeholder="Enter ingredients to exclude (comma-separated)"
+-            value={excludedIngredients}
+-            onChange={(e) => setExcludedIngredients(e.target.value)}
++          <MenuSearch
++            searchQuery={searchQuery}
++            onSearchChange={setSearchQuery}
++            selectedDiets={selectedDiets}
++            onToggleDiet={toggleDiet}
+           />
+-        </div>
+ 
+-        <div className="flex gap-2">
+-          <Button
+-            variant={showIngredients ? "default" : "outline"}
+-            size="sm"
+-            onClick={() => setShowIngredients(!showIngredients)}
+-          >
+-            Show Ingredients
+-          </Button>
+-          <Button
+-            variant={showAmounts ? "default" : "outline"}
+-            size="sm"
+-            onClick={() => setShowAmounts(!showAmounts)}
+-          >
+-            Show Amounts
+-          </Button>
+-          <Button
+-            variant={showAllergens ? "default" : "outline"}
+-            size="sm"
+-            onClick={() => setShowAllergens(!showAllergens)}
+-          >
+-            Show Allergens
+-          </Button>
++          <CategoryTabs
++            selectedCategory={selectedCategory}
++            onSelectCategory={setSelectedCategory}
++          />
+         </div>
+-      </div>
+-
+-      {categories.map((category) => {
+-        const categoryDishes = groupedDishes[category];
+-        if (categoryDishes.length === 0) return null;
+-
+-        return (
+-          <div key={category}>
+-            <h2 className="text-2xl font-bold text-foreground mb-4 border-b border-border pb-2">
+-              {category}
+-            </h2>
+-            <div className="space-y-4">
+-              {categoryDishes.map((dish) => {
+-                const isExpanded = expandedDishes.has(dish.id);
+-                const hasRecipe = !!dish.recipe;
+-
+-                return (
+-                  <Card key={dish.id} className="p-6">
+-                    {dish.image && (
+-                      <div className="w-full aspect-video rounded-lg overflow-hidden mb-4">
+-                        <img src={dish.image} alt={dish.name} className="w-full h-full object-cover" />
+-                      </div>
+-                    )}
+-                    
+-                    <div className="space-y-3">
+-                      <div className="flex justify-between items-baseline">
+-                        <h3 className="text-xl font-bold text-foreground">{dish.name}</h3>
+-                        {dish.price && (
+-                          <span className="text-lg font-semibold text-primary">${dish.price}</span>
+-                        )}
+-                      </div>
+-                      
+-                      {dish.description && (
+-                        <p className="text-muted-foreground">{dish.description}</p>
+-                      )}
+-
+-                      {hasRecipe && showIngredients && (
+-                        <div className="pt-2">
+-                          <button
+-                            onClick={() => toggleDishExpanded(dish.id)}
+-                            className="flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+-                          >
+-                            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+-                            {isExpanded ? "Hide" : "Show"} Full Ingredients
+-                          </button>
+-                          
+-                          {isExpanded && (
+-                            <div className="mt-3 space-y-2">
+-                              {dish.recipe.ingredients.map((ing: Ingredient, idx: number) => (
+-                                <div key={idx} className="text-sm">
+-                                  <span className="font-medium">{ing.name}</span>
+-                                  {showAmounts && (
+-                                    <span className="text-muted-foreground ml-2">
+-                                      ({ing.quantity} {ing.unit})
+-                                    </span>
+-                                  )}
+-                                  {showAllergens && ing.allergens && ing.allergens.length > 0 && (
+-                                    <span className="ml-2">
+-                                      {ing.allergens.map(allergen => (
+-                                        <Badge key={allergen} variant="destructive" className="text-xs ml-1">
+-                                          {allergen}
+-                                        </Badge>
+-                                      ))}
+-                                    </span>
+-                                  )}
+-                                </div>
+-                              ))}
+-                              
+-                              {showAllergens && (
+-                                <div className="mt-3 pt-3 border-t">
+-                                  <p className="text-sm font-medium">All Allergens:</p>
+-                                  <div className="flex flex-wrap gap-1 mt-1">
+-                                    {getAllergens(dish.recipe.ingredients).length > 0 ? (
+-                                      getAllergens(dish.recipe.ingredients).map(allergen => (
+-                                        <Badge key={allergen} variant="destructive" className="text-xs">
+-                                          {allergen}
+-                                        </Badge>
+-                                      ))
+-                                    ) : (
+-                                      <span className="text-sm text-muted-foreground">None</span>
+-                                    )}
+-                                  </div>
+-                                </div>
+-                              )}
+-                            </div>
+-                          )}
+-                        </div>
+-                      )}
+-
+-                      {dish.compliance && (
+-                        <div className="flex gap-2 flex-wrap pt-2">
+-                          {Object.entries(dish.compliance)
+-                            .filter(([_, value]) => value)
+-                            .map(([key]) => (
+-                              <Badge key={key} variant="outline" className="text-xs">
+-                                {key.replace("-", " ").toUpperCase()}
+-                              </Badge>
+-                            ))}
+-                        </div>
+-                      )}
+-
+-                      {dish.servingSize && dish.servingSize !== "1" && (
+-                        <p className="text-sm text-muted-foreground italic">
+-                          Serves {dish.servingSize}
+-                        </p>
+-                      )}
+-                    </div>
+-                  </Card>
+-                );
+-              })}
+-            </div>
++      </header>
++
++      {/* Content */}
++      <main className="container mx-auto px-4 py-8 space-y-12">
++        {/* Featured Section */}
++        {featuredDishes.length > 0 && selectedCategory === "all" && !searchQuery && (
++          <FeaturedSection
++            title="✨ Featured Dishes"
++            dishes={featuredDishes}
++            onViewDetails={setSelectedDish}
++          />
++        )}
++
++        {/* Category Sections */}
++        {selectedCategory === "all" ? (
++          <>
++            {CATEGORIES.filter((cat) => cat.id !== "all").map((category) => {
++              const dishes = categorizedDishes[category.id];
++              if (dishes.length === 0) return null;
++
++              return (
++                <section key={category.id} className="space-y-4">
++                  <div className="flex items-center gap-2">
++                    <span className="text-2xl">{category.icon}</span>
++                    <h2 className="text-2xl font-bold text-foreground">{category.label}</h2>
++                    <span className="text-sm text-muted-foreground">({dishes.length})</span>
++                  </div>
++
++                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
++                    {dishes.map((dish) => (
++                      <DishCard key={dish.id} dish={dish} onViewDetails={setSelectedDish} />
++                    ))}
++                  </div>
++                </section>
++              );
++            })}
++          </>
++        ) : (
++          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
++            {filteredDishes.map((dish) => (
++              <DishCard key={dish.id} dish={dish} onViewDetails={setSelectedDish} />
++            ))}
+           </div>
+-        );
+-      })}
++        )}
++
++        {/* No Results */}
++        {filteredDishes.length === 0 && (
++          <div className="text-center py-16">
++            <p className="text-xl text-muted-foreground">No dishes found matching your criteria</p>
++            <p className="text-sm text-muted-foreground mt-2">
++              Try adjusting your filters or search terms
++            </p>
++          </div>
++        )}
++      </main>
++
++      {/* Dish Detail Modal */}
++      <DishDetailModal
++        dish={selectedDish}
++        open={!!selectedDish}
++        onClose={() => setSelectedDish(null)}
++      />
+     </div>
+   );
+-};
++}
+diff --git a/src/components/menu/CategoryTabs.tsx b/src/components/menu/CategoryTabs.tsx
+new file mode 100644
+index 0000000..9ec34cc
+--- /dev/null
++++ b/src/components/menu/CategoryTabs.tsx
+@@ -0,0 +1,26 @@
++import { Button } from "@/components/ui/button";
++import { CATEGORIES } from "@/data/menu";
++
++interface CategoryTabsProps {
++  selectedCategory: string;
++  onSelectCategory: (category: string) => void;
++}
++
++export const CategoryTabs = ({ selectedCategory, onSelectCategory }: CategoryTabsProps) => {
++  return (
++    <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide">
++      {CATEGORIES.map((category) => (
++        <Button
++          key={category.id}
++          variant={selectedCategory === category.id ? "default" : "outline"}
++          size="sm"
++          onClick={() => onSelectCategory(category.id)}
++          className="whitespace-nowrap flex-shrink-0"
++        >
++          <span className="mr-1">{category.icon}</span>
++          {category.label}
++        </Button>
++      ))}
++    </div>
++  );
++};
+diff --git a/src/components/menu/DishCard.tsx b/src/components/menu/DishCard.tsx
+new file mode 100644
+index 0000000..c879129
+--- /dev/null
++++ b/src/components/menu/DishCard.tsx
+@@ -0,0 +1,119 @@
++import { Heart, Plus } from "lucide-react";
++import { Card } from "@/components/ui/card";
++import { Badge } from "@/components/ui/badge";
++import { Button } from "@/components/ui/button";
++import { MenuItem, BADGE_LABELS } from "@/data/menu";
++import { Skeleton } from "@/components/ui/skeleton";
++import { useState } from "react";
++
++interface DishCardProps {
++  dish: MenuItem;
++  onViewDetails: (dish: MenuItem) => void;
++  loading?: boolean;
++}
++
++export const DishCard = ({ dish, onViewDetails, loading }: DishCardProps) => {
++  const [imageLoaded, setImageLoaded] = useState(false);
++  const [isFavorite, setIsFavorite] = useState(false);
++
++  if (loading) {
++    return (
++      <Card className="overflow-hidden">
++        <Skeleton className="w-full aspect-[4/3]" />
++        <div className="p-4 space-y-3">
++          <Skeleton className="h-6 w-3/4" />
++          <Skeleton className="h-4 w-full" />
++          <Skeleton className="h-8 w-20" />
++        </div>
++      </Card>
++    );
++  }
++
++  return (
++    <Card className="group overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer">
++      {/* Image */}
++      <div className="relative aspect-[4/3] overflow-hidden bg-muted">
++        {!imageLoaded && <Skeleton className="absolute inset-0" />}
++        <img
++          src={dish.image}
++          alt={dish.name}
++          className={`w-full h-full object-cover transition-transform duration-300 group-hover:scale-110 ${
++            imageLoaded ? "opacity-100" : "opacity-0"
++          }`}
++          loading="lazy"
++          onLoad={() => setImageLoaded(true)}
++        />
++
++        {/* Badges */}
++        {dish.badges && dish.badges.length > 0 && (
++          <div className="absolute top-2 left-2 flex flex-col gap-1">
++            {dish.badges.slice(0, 2).map((badge) => (
++              <Badge
++                key={badge}
++                className={`${BADGE_LABELS[badge].color} text-white border-0 text-xs font-semibold px-2 py-1`}
++              >
++                {BADGE_LABELS[badge].label}
++              </Badge>
++            ))}
++          </div>
++        )}
++
++        {/* Favorite */}
++        <button
++          onClick={(e) => {
++            e.stopPropagation();
++            setIsFavorite(!isFavorite);
++          }}
++          className="absolute top-2 right-2 p-2 rounded-full bg-background/80 backdrop-blur-sm hover:bg-background transition-colors"
++        >
++          <Heart
++            size={18}
++            className={isFavorite ? "fill-red-500 text-red-500" : "text-muted-foreground"}
++          />
++        </button>
++      </div>
++
++      {/* Content */}
++      <div className="p-4 space-y-3" onClick={() => onViewDetails(dish)}>
++        <div className="space-y-1">
++          <h3 className="font-semibold text-lg text-foreground line-clamp-1">{dish.name}</h3>
++          <p className="text-sm text-muted-foreground line-clamp-2">{dish.description}</p>
++        </div>
++
++        {/* Dietary Tags */}
++        {dish.dietaryTags && dish.dietaryTags.length > 0 && (
++          <div className="flex flex-wrap gap-1">
++            {dish.dietaryTags.slice(0, 3).map((tag) => (
++              <Badge key={tag} variant="outline" className="text-xs capitalize">
++                {tag}
++              </Badge>
++            ))}
++          </div>
++        )}
++
++        {/* Footer */}
++        <div className="flex items-center justify-between pt-2">
++          <div className="flex items-baseline gap-2">
++            <span className="text-xl font-bold text-foreground">${dish.price.toFixed(2)}</span>
++            {dish.oldPrice && (
++              <span className="text-sm text-muted-foreground line-through">
++                ${dish.oldPrice.toFixed(2)}
++              </span>
++            )}
++          </div>
++          <Button
++            size="sm"
++            className="gap-1"
++            onClick={(e) => {
++              e.stopPropagation();
++              // Add to cart logic here
++            }}
++          >
++            <Plus size={16} />
++            Add
++          </Button>
++        </div>
++      </div>
++    </Card>
++  );
++};
+diff --git a/src/components/menu/DishDetailModal.tsx b/src/components/menu/DishDetailModal.tsx
+new file mode 100644
+index 0000000..1a17a86
+--- /dev/null
++++ b/src/components/menu/DishDetailModal.tsx
+@@ -0,0 +1,154 @@
++import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
++import { Badge } from "@/components/ui/badge";
++import { Button } from "@/components/ui/button";
++import { MenuItem, BADGE_LABELS } from "@/data/menu";
++import { Clock, Users, Minus, Plus, AlertCircle } from "lucide-react";
++import { useState } from "react";
++import { Separator } from "@/components/ui/separator";
++
++interface DishDetailModalProps {
++  dish: MenuItem | null;
++  open: boolean;
++  onClose: () => void;
++}
++
++export const DishDetailModal = ({ dish, open, onClose }: DishDetailModalProps) => {
++  const [quantity, setQuantity] = useState(1);
++
++  if (!dish) return null;
++
++  const total = dish.price * quantity;
++
++  return (
++    <Dialog open={open} onOpenChange={onClose}>
++      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
++        {/* Image */}
++        <div className="relative -mx-6 -mt-6 mb-4">
++          <img
++            src={dish.image}
++            alt={dish.name}
++            className="w-full aspect-[16/9] object-cover"
++          />
++          {dish.badges && dish.badges.length > 0 && (
++            <div className="absolute top-4 left-4 flex gap-2">
++              {dish.badges.map((badge) => (
++                <Badge
++                  key={badge}
++                  className={`${BADGE_LABELS[badge].color} text-white border-0 font-semibold`}
++                >
++                  {BADGE_LABELS[badge].label}
++                </Badge>
++              ))}
++            </div>
++          )}
++        </div>
++
++        <DialogHeader>
++          <DialogTitle className="text-2xl font-bold">{dish.name}</DialogTitle>
++        </DialogHeader>
++
++        {/* Meta Info */}
++        <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
++          {dish.prepTime && (
++            <div className="flex items-center gap-1">
++              <Clock size={16} />
++              <span>{dish.prepTime}</span>
++            </div>
++          )}
++          {dish.servings && (
++            <div className="flex items-center gap-1">
++              <Users size={16} />
++              <span>Serves {dish.servings}</span>
++            </div>
++          )}
++        </div>
++
++        {/* Description */}
++        <p className="text-muted-foreground">{dish.description}</p>
++
++        {/* Dietary Tags */}
++        {dish.dietaryTags && dish.dietaryTags.length > 0 && (
++          <div className="flex flex-wrap gap-2">
++            {dish.dietaryTags.map((tag) => (
++              <Badge key={tag} variant="secondary" className="capitalize">
++                {tag}
++              </Badge>
++            ))}
++          </div>
++        )}
++
++        <Separator />
++
++        {/* Ingredients */}
++        {dish.recipe && (
++          <div className="space-y-3">
++            <h3 className="font-semibold text-lg">Ingredients</h3>
++            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
++              {dish.recipe.ingredients.map((ing, idx) => (
++                <div key={idx} className="flex items-start gap-2 text-sm">
++                  <span className="text-muted-foreground">•</span>
++                  <div className="flex-1">
++                    <span className="font-medium">{ing.name}</span>
++                    <span className="text-muted-foreground ml-2">
++                      ({ing.quantity} {ing.unit})
++                    </span>
++                  </div>
++                </div>
++              ))}
++            </div>
++          </div>
++        )}
++
++        {/* Allergens */}
++        {dish.allergens && dish.allergens.length > 0 && (
++          <div className="flex items-start gap-2 p-3 bg-destructive/10 rounded-lg">
++            <AlertCircle size={18} className="text-destructive mt-0.5 flex-shrink-0" />
++            <div className="flex-1">
++              <p className="text-sm font-medium text-destructive">Allergen Warning</p>
++              <p className="text-sm text-muted-foreground">
++                Contains: {dish.allergens.join(", ")}
++              </p>
++            </div>
++          </div>
++        )}
++
++        <Separator />
++
++        {/* Quantity & Price */}
++        <div className="flex items-center justify-between">
++          <div className="flex items-center gap-3">
++            <span className="text-sm font-medium">Quantity</span>
++            <div className="flex items-center gap-2">
++              <Button
++                size="icon"
++                variant="outline"
++                onClick={() => setQuantity(Math.max(1, quantity - 1))}
++                disabled={quantity <= 1}
++              >
++                <Minus size={16} />
++              </Button>
++              <span className="w-8 text-center font-medium">{quantity}</span>
++              <Button
++                size="icon"
++                variant="outline"
++                onClick={() => setQuantity(quantity + 1)}
++              >
++                <Plus size={16} />
++              </Button>
++            </div>
++          </div>
++
++          <div className="text-right">
++            <p className="text-sm text-muted-foreground">Total</p>
++            <p className="text-2xl font-bold">${total.toFixed(2)}</p>
++          </div>
++        </div>
++
++        {/* Add to Cart */}
++        <Button size="lg" className="w-full">
++          Add to Cart - ${total.toFixed(2)}
++        </Button>
++      </DialogContent>
++    </Dialog>
++  );
++};
+diff --git a/src/components/menu/FeaturedSection.tsx b/src/components/menu/FeaturedSection.tsx
+new file mode 100644
+index 0000000..4a6d594
+--- /dev/null
++++ b/src/components/menu/FeaturedSection.tsx
+@@ -0,0 +1,27 @@
++import { MenuItem } from "@/data/menu";
++import { DishCard } from "./DishCard";
++
++interface FeaturedSectionProps {
++  title: string;
++  dishes: MenuItem[];
++  onViewDetails: (dish: MenuItem) => void;
++}
++
++export const FeaturedSection = ({ title, dishes, onViewDetails }: FeaturedSectionProps) => {
++  if (dishes.length === 0) return null;
++
++  return (
++    <section className="space-y-4">
++      <div className="flex items-center justify-between">
++        <h2 className="text-2xl font-bold text-foreground">{title}</h2>
++        <span className="text-sm text-muted-foreground">{dishes.length} items</span>
++      </div>
++      
++      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
++        {dishes.map((dish) => (
++          <DishCard key={dish.id} dish={dish} onViewDetails={onViewDetails} />
++        ))}
++      </div>
++    </section>
++  );
++};
+diff --git a/src/components/menu/MenuSearch.tsx b/src/components/menu/MenuSearch.tsx
+new file mode 100644
+index 0000000..9688949
+--- /dev/null
++++ b/src/components/menu/MenuSearch.tsx
+@@ -0,0 +1,114 @@
++import { Input } from "@/components/ui/input";
++import { Button } from "@/components/ui/button";
++import { Badge } from "@/components/ui/badge";
++import { Search, X } from "lucide-react";
++import { DIETARY_CATEGORIES } from "@/data/recipes";
++import {
++  Popover,
++  PopoverContent,
++  PopoverTrigger,
++} from "@/components/ui/popover";
++
++interface MenuSearchProps {
++  searchQuery: string;
++  onSearchChange: (query: string) => void;
++  selectedDiets: string[];
++  onToggleDiet: (dietId: string) => void;
++}
++
++export const MenuSearch = ({
++  searchQuery,
++  onSearchChange,
++  selectedDiets,
++  onToggleDiet,
++}: MenuSearchProps) => {
++  return (
++    <div className="space-y-3">
++      {/* Search Bar */}
++      <div className="relative">
++        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
++        <Input
++          placeholder="Search dishes or exclude ingredients..."
++          value={searchQuery}
++          onChange={(e) => onSearchChange(e.target.value)}
++          className="pl-10 pr-10"
++        />
++        {searchQuery && (
++          <button
++            onClick={() => onSearchChange("")}
++            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
++          >
++            <X size={18} />
++          </button>
++        )}
++      </div>
++
++      {/* Dietary Filters */}
++      <div className="flex items-center gap-2">
++        <span className="text-sm font-medium text-muted-foreground">Filters:</span>
++        <div className="flex overflow-x-auto gap-2 flex-1 scrollbar-hide">
++          {DIETARY_CATEGORIES.slice(0, 4).map((diet) => (
++            <Badge
++              key={diet.id}
++              variant={selectedDiets.includes(diet.id) ? "default" : "outline"}
++              className="cursor-pointer whitespace-nowrap flex-shrink-0"
++              onClick={() => onToggleDiet(diet.id)}
++            >
++              {diet.icon} {diet.label}
++            </Badge>
++          ))}
++          
++          {DIETARY_CATEGORIES.length > 4 && (
++            <Popover>
++              <PopoverTrigger asChild>
++                <Badge variant="outline" className="cursor-pointer whitespace-nowrap">
++                  More filters
++                </Badge>
++              </PopoverTrigger>
++              <PopoverContent className="w-72">
++                <div className="flex flex-wrap gap-2">
++                  {DIETARY_CATEGORIES.slice(4).map((diet) => (
++                    <Badge
++                      key={diet.id}
++                      variant={selectedDiets.includes(diet.id) ? "default" : "outline"}
++                      className="cursor-pointer"
++                      onClick={() => onToggleDiet(diet.id)}
++                    >
++                      {diet.icon} {diet.label}
++                    </Badge>
++                  ))}
++                </div>
++              </PopoverContent>
++            </Popover>
++          )}
++        </div>
++      </div>
++
++      {/* Active Filters */}
++      {selectedDiets.length > 0 && (
++        <div className="flex items-center gap-2 flex-wrap">
++          <span className="text-xs text-muted-foreground">Active:</span>
++          {selectedDiets.map((dietId) => {
++            const diet = DIETARY_CATEGORIES.find((d) => d.id === dietId);
++            return (
++              <Badge key={dietId} variant="secondary" className="gap-1">
++                {diet?.icon} {diet?.label}
++                <button onClick={() => onToggleDiet(dietId)} className="ml-1 hover:text-destructive">
++                  <X size={12} />
++                </button>
++              </Badge>
++            );
++          })}
++          <Button
++            variant="ghost"
++            size="sm"
++            onClick={() => selectedDiets.forEach(onToggleDiet)}
++            className="h-6 text-xs"
++          >
++            Clear all
++          </Button>
++        </div>
++      )}
++    </div>
++  );
++};
+diff --git a/src/data/menu.ts b/src/data/menu.ts
+new file mode 100644
+index 0000000..60cc6d5
+--- /dev/null
++++ b/src/data/menu.ts
+@@ -0,0 +1,197 @@
++import { Recipe, RECIPES } from "./recipes";
++
++export interface MenuItem {
++  id: string;
++  name: string;
++  description: string;
++  price: number;
++  oldPrice?: number;
++  image: string;
++  category: "starter" | "main" | "side" | "dessert" | "beverage";
++  recipe?: Recipe;
++  badges?: ("popular" | "bestseller" | "chef-pick" | "new" | "limited")[];
++  allergens?: string[];
++  dietaryTags?: string[];
++  prepTime?: string;
++  servings?: number;
++}
++
++export const MENU_ITEMS: MenuItem[] = [
++  {
++    id: "hummus-classic",
++    name: "Classic Hummus",
++    description: "Smooth and creamy chickpea dip with tahini, perfect with warm pita",
++    price: 8.50,
++    image: "https://images.unsplash.com/photo-1639744091080-4f99e6b1c3b9?w=400&h=300&fit=crop",
++    category: "starter",
++    recipe: RECIPES["hummus"],
++    badges: ["popular", "bestseller"],
++    allergens: ["sesame"],
++    dietaryTags: ["vegan", "vegetarian", "gluten-free"],
++    prepTime: "15 min",
++    servings: 2,
++  },
++  {
++    id: "baba-ganoush",
++    name: "Baba Ganoush",
++    description: "Smoky roasted eggplant dip with tahini and garlic",
++    price: 9.00,
++    image: "https://images.unsplash.com/photo-1628521563667-b9a03f77b395?w=400&h=300&fit=crop",
++    category: "starter",
++    recipe: RECIPES["baba ganoush"],
++    badges: ["chef-pick"],
++    allergens: ["sesame"],
++    dietaryTags: ["vegan", "vegetarian", "gluten-free"],
++    prepTime: "25 min",
++    servings: 2,
++  },
++  {
++    id: "falafel-platter",
++    name: "Falafel Platter",
++    description: "Crispy golden falafel balls served with tahini sauce and fresh vegetables",
++    price: 12.50,
++    oldPrice: 14.00,
++    image: "https://images.unsplash.com/photo-1593001874117-4b1c3553e19a?w=400&h=300&fit=crop",
++    category: "starter",
++    recipe: RECIPES["falafel"],
++    badges: ["popular", "limited"],
++    allergens: [],
++    dietaryTags: ["vegan", "vegetarian", "gluten-free"],
++    prepTime: "20 min",
++    servings: 1,
++  },
++  {
++    id: "grilled-salmon",
++    name: "Grilled Salmon",
++    description: "Fresh Atlantic salmon with herbs, served with roasted vegetables",
++    price: 24.50,
++    image: "https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=400&h=300&fit=crop",
++    category: "main",
++    badges: ["chef-pick", "popular"],
++    allergens: ["fish"],
++    dietaryTags: ["gluten-free", "dairy-free"],
++    prepTime: "30 min",
++    servings: 1,
++  },
++  {
++    id: "veggie-buddha-bowl",
++    name: "Buddha Bowl",
++    description: "Nourishing bowl with quinoa, roasted vegetables, and tahini dressing",
++    price: 16.00,
++    image: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400&h=300&fit=crop",
++    category: "main",
++    badges: ["bestseller"],
++    allergens: ["sesame"],
++    dietaryTags: ["vegan", "vegetarian", "gluten-free"],
++    prepTime: "25 min",
++    servings: 1,
++  },
++  {
++    id: "lamb-kebab",
++    name: "Lamb Kebab",
++    description: "Tender marinated lamb skewers with aromatic spices",
++    price: 22.00,
++    image: "https://images.unsplash.com/photo-1529692236671-f1f6cf9683ba?w=400&h=300&fit=crop",
++    category: "main",
++    badges: ["popular"],
++    allergens: [],
++    dietaryTags: ["gluten-free", "dairy-free", "halal"],
++    prepTime: "35 min",
++    servings: 1,
++  },
++  {
++    id: "mediterranean-salad",
++    name: "Mediterranean Salad",
++    description: "Fresh mixed greens with feta, olives, and lemon vinaigrette",
++    price: 11.00,
++    image: "https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?w=400&h=300&fit=crop",
++    category: "side",
++    badges: ["new"],
++    allergens: ["dairy"],
++    dietaryTags: ["vegetarian", "gluten-free"],
++    prepTime: "10 min",
++    servings: 1,
++  },
++  {
++    id: "garlic-bread",
++    name: "Garlic Bread",
++    description: "Toasted sourdough with garlic butter and herbs",
++    price: 6.50,
++    image: "https://images.unsplash.com/photo-1573140401552-3fab0b24f731?w=400&h=300&fit=crop",
++    category: "side",
++    badges: ["popular"],
++    allergens: ["gluten", "dairy"],
++    dietaryTags: ["vegetarian"],
++    prepTime: "8 min",
++    servings: 2,
++  },
++  {
++    id: "baklava",
++    name: "Baklava",
++    description: "Layers of phyllo pastry with honey and nuts",
++    price: 7.50,
++    image: "https://images.unsplash.com/photo-1519676867240-f03562e64548?w=400&h=300&fit=crop",
++    category: "dessert",
++    badges: ["chef-pick"],
++    allergens: ["gluten", "nuts"],
++    dietaryTags: ["vegetarian"],
++    prepTime: "45 min",
++    servings: 1,
++  },
++  {
++    id: "chocolate-mousse",
++    name: "Chocolate Mousse",
++    description: "Rich dark chocolate mousse with fresh berries",
++    price: 8.00,
++    image: "https://images.unsplash.com/photo-1541599468348-e96984315921?w=400&h=300&fit=crop",
++    category: "dessert",
++    badges: ["bestseller"],
++    allergens: ["dairy", "eggs"],
++    dietaryTags: ["vegetarian", "gluten-free"],
++    prepTime: "20 min",
++    servings: 1,
++  },
++  {
++    id: "mint-lemonade",
++    name: "Fresh Mint Lemonade",
++    description: "Refreshing lemonade with fresh mint and ice",
++    price: 5.50,
++    image: "https://images.unsplash.com/photo-1523677011781-c91d1bbe2f9d?w=400&h=300&fit=crop",
++    category: "beverage",
++    badges: ["popular"],
++    allergens: [],
++    dietaryTags: ["vegan", "vegetarian", "gluten-free"],
++    prepTime: "5 min",
++    servings: 1,
++  },
++  {
++    id: "turkish-coffee",
++    name: "Turkish Coffee",
++    description: "Traditional strong coffee served in authentic copper pot",
++    price: 4.50,
++    image: "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=400&h=300&fit=crop",
++    category: "beverage",
++    badges: ["chef-pick"],
++    allergens: [],
++    dietaryTags: ["vegan", "vegetarian", "gluten-free"],
++    prepTime: "8 min",
++    servings: 1,
++  },
++];
++
++export const CATEGORIES = [
++  { id: "all", label: "All", icon: "🍽️" },
++  { id: "starter", label: "Starters", icon: "🥗" },
++  { id: "main", label: "Mains", icon: "🍖" },
++  { id: "side", label: "Sides", icon: "🥖" },
++  { id: "dessert", label: "Desserts", icon: "🍰" },
++  { id: "beverage", label: "Beverages", icon: "☕" },
++];
++
++export const BADGE_LABELS = {
++  popular: { label: "Popular", color: "bg-orange-500" },
++  bestseller: { label: "Bestseller", color: "bg-yellow-500" },
++  "chef-pick": { label: "Chef's Pick", color: "bg-purple-500" },
++  new: { label: "New", color: "bg-green-500" },
++  limited: { label: "Limited Time", color: "bg-red-500" },
++};
+diff --git a/src/pages/Index.tsx b/src/pages/Index.tsx
+index 7256fbb..c909386 100644
+--- a/src/pages/Index.tsx
++++ b/src/pages/Index.tsx
+@@ -296,7 +296,6 @@ const Index = () => {
+           <TabsContent value="menu">
+             <div className="bg-card rounded-xl shadow-lg p-8">
+               <MenuView 
+-                dishes={savedDishes}
+                 restaurantName={restaurantName}
+               />
+             </div>
+-- 
+2.39.5 (Apple Git-154)
+

@@ -332,12 +332,10 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="menu">
-            <div className="bg-card rounded-xl shadow-lg p-8">
-              <MenuView 
-                dishes={savedDishes}
-                restaurantName={restaurant?.name || "My Restaurant"}
-              />
-            </div>
+            <MenuView 
+              dishes={savedDishes}
+              restaurantName={restaurant?.name || "My Restaurant"}
+            />
           </TabsContent>
 
           <TabsContent value="settings">
