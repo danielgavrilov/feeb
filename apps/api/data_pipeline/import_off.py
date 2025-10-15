@@ -40,19 +40,16 @@ async def load_off_data(product_limit: Optional[int] = None):
     5. Log summary statistics
     
     Data source: https://world.openfoodfacts.org/data
+    
+    By default, imports ALL products (no limit).
     """
     log("=" * 80)
-    log("OpenFoodFacts Data Import Starting")
+    log("OpenFoodFacts Data Import Starting (FULL dataset)")
     log("=" * 80)
     start_time = datetime.now()
 
-    # Resolve desired product limit: explicit argument beats config, <=0 disables limit
-    resolved_limit = product_limit
-    if resolved_limit is None:
-        resolved_limit = settings.sample_product_limit
-
-    if resolved_limit is not None and resolved_limit <= 0:
-        resolved_limit = None
+    # No artificial limits - import everything by default
+    resolved_limit = None
 
     # Create temp directory
     temp_dir = ensure_temp_dir()
@@ -83,15 +80,14 @@ async def load_off_data(product_limit: Optional[int] = None):
         # =====================================================================
         log("")
         log("[STEP 2/4] Extracting unique allergens from products")
-        limit_desc = 'unlimited' if settings.sample_product_limit <= 0 else f'{settings.sample_product_limit:,}'
-        log(f"  Product scan limit: {limit_desc}")
+        log("  Scanning ALL products for allergens...")
         
         allergen_set = set()  # Collect unique allergen codes
         
         # First pass: collect all unique allergens
         iter_count = 0
         step2_start = datetime.now()
-        for product_data in parse_product_jsonl(products_file, limit=settings.sample_product_limit * 2):
+        for product_data in parse_product_jsonl(products_file, limit=None):
             # Collect allergens
             for allergen_code in product_data.get("allergens_tags", []):
                 if allergen_code and allergen_code.startswith("en:"):
@@ -132,14 +128,14 @@ async def load_off_data(product_limit: Optional[int] = None):
         # =====================================================================
         log("")
         log("[STEP 3/4] Extracting unique ingredients from products")
-        log(f"  Product scan limit: {limit_desc}")
+        log("  Scanning ALL products for ingredients...")
         
         ingredient_set = set()  # Collect unique ingredient codes
         
         # First pass: collect all unique ingredients  
         iter_count = 0
         step3_start = datetime.now()
-        for product_data in parse_product_jsonl(products_file, limit=settings.sample_product_limit * 2):
+        for product_data in parse_product_jsonl(products_file, limit=None):
             # Collect ingredients
             for ing_code in product_data.get("ingredients_tags", []):
                 if ing_code and ing_code.startswith("en:"):
@@ -178,24 +174,11 @@ async def load_off_data(product_limit: Optional[int] = None):
         log(f"  Imported {len(ingredient_map):,} ingredients to database")
         
         # =====================================================================
-        # Step 3: Parse and Import Data in a Single Pass
+        # Step 4: Import Products with Links
         # =====================================================================
-        limit_text = (
-            f"{resolved_limit} products" if resolved_limit is not None else "all products"
-        )
-        print(f"\n[3/4] Importing {limit_text} in a single streaming pass...")
-
-        product_count = 0
-        ingredient_link_count = 0
-        allergen_link_count = 0
-
-        allergen_map: Dict[str, int] = {}
-        ingredient_map: Dict[str, int] = {}
-
         log("")
-        log("[STEP 4/4] Importing products with ingredients, allergens, and nutrition")
-        final_limit_desc = 'unlimited (FULL dataset)' if settings.sample_product_limit <= 0 else f'{settings.sample_product_limit:,}'
-        log(f"  Product import limit: {final_limit_desc}")
+        log("[STEP 4/4] Importing ALL products with ingredients, allergens, and nutrition")
+        log(f"  Using {len(allergen_map):,} allergens and {len(ingredient_map):,} ingredients for linking")
         
         product_count = 0
         ingredient_link_count = 0

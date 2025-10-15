@@ -27,7 +27,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-feeb_user}:${POSTGRES_PASSWORD:-feeb_password}@postgres:5432/${POSTGRES_DB:-feeb_db}
       OFF_BASE_URL: ${OFF_BASE_URL:-https://world.openfoodfacts.org}
       DATA_SOURCE: ${DATA_SOURCE:-off}
-      SAMPLE_PRODUCT_LIMIT: ${SAMPLE_PRODUCT_LIMIT:-10000}
+      SAMPLE_PRODUCT_LIMIT: ${SAMPLE_PRODUCT_LIMIT:-0}
       API_TITLE: ${API_TITLE:-Allergen-Aware Ingredient API}
       API_VERSION: ${API_VERSION:-0.1.0}
       API_DESCRIPTION: ${API_DESCRIPTION:-REST API for ingredient and allergen lookups using OpenFoodFacts data}

@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     # OpenFoodFacts
     off_base_url: str = "https://world.openfoodfacts.org"
     data_source: str = "off"
-    sample_product_limit: int = 10000
+    sample_product_limit: int = 0  # 0 = no limit, import all products
     
     # API
     api_title: str = "Allergen-Aware Ingredient API"
