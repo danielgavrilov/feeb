@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SavedDish } from "./RecipeBook";
-import { DIETARY_CATEGORIES, Ingredient } from "@/data/recipes";
+import { DIETARY_CATEGORIES, ALLERGEN_CATEGORIES, Ingredient } from "@/data/recipes";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 interface MenuViewProps {
@@ -15,6 +15,7 @@ interface MenuViewProps {
 export const MenuView = ({ dishes, restaurantName }: MenuViewProps) => {
   const [selectedDiets, setSelectedDiets] = useState<string[]>([]);
   const [excludedIngredients, setExcludedIngredients] = useState("");
+  const [excludedAllergens, setExcludedAllergens] = useState<string[]>([]);
   const [showIngredients, setShowIngredients] = useState(false);
   const [showAmounts, setShowAmounts] = useState(false);
   const [showAllergens, setShowAllergens] = useState(false);
@@ -34,6 +35,17 @@ export const MenuView = ({ dishes, restaurantName }: MenuViewProps) => {
       if (hasExcluded) return false;
     }
 
+    // Check excluded allergens
+    if (excludedAllergens.length > 0 && dish.ingredients) {
+      const dishAllergens = getAllergens(dish.ingredients);
+      const hasExcludedAllergen = excludedAllergens.some(allergen => 
+        dishAllergens.some(dishAllergen => 
+          dishAllergen.toLowerCase().includes(allergen.toLowerCase())
+        )
+      );
+      if (hasExcludedAllergen) return false;
+    }
+
     return true;
   });
 
@@ -51,6 +63,14 @@ export const MenuView = ({ dishes, restaurantName }: MenuViewProps) => {
       prev.includes(dietId) 
         ? prev.filter(d => d !== dietId)
         : [...prev, dietId]
+    );
+  };
+
+  const toggleAllergenExclusion = (allergenId: string) => {
+    setExcludedAllergens(prev => 
+      prev.includes(allergenId) 
+        ? prev.filter(a => a !== allergenId)
+        : [...prev, allergenId]
     );
   };
 
@@ -108,6 +128,22 @@ export const MenuView = ({ dishes, restaurantName }: MenuViewProps) => {
           />
         </div>
 
+        <div>
+          <h3 className="text-sm font-medium mb-2">Exclude Allergens</h3>
+          <div className="flex flex-wrap gap-2">
+            {ALLERGEN_CATEGORIES.map(allergen => (
+              <Button
+                key={allergen.id}
+                variant={excludedAllergens.includes(allergen.id) ? "destructive" : "outline"}
+                size="sm"
+                onClick={() => toggleAllergenExclusion(allergen.id)}
+              >
+                {allergen.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
         <div className="flex gap-2">
           <Button
             variant={showIngredients ? "default" : "outline"}
@@ -146,6 +182,7 @@ export const MenuView = ({ dishes, restaurantName }: MenuViewProps) => {
               {categoryDishes.map((dish) => {
                 const isExpanded = expandedDishes.has(dish.id);
                 const hasIngredients = dish.ingredients && dish.ingredients.length > 0;
+                const dishAllergens = hasIngredients ? getAllergens(dish.ingredients) : [];
 
                 return (
                   <Card key={dish.id} className="p-6">
@@ -191,6 +228,19 @@ export const MenuView = ({ dishes, restaurantName }: MenuViewProps) => {
                               ))}
                             </div>
                           )}
+                        </div>
+                      )}
+
+                      {showAllergens && dishAllergens.length > 0 && (
+                        <div className="pt-2">
+                          <h4 className="text-sm font-medium text-foreground mb-2">Allergens:</h4>
+                          <div className="flex gap-2 flex-wrap">
+                            {dishAllergens.map((allergen) => (
+                              <Badge key={allergen} variant="destructive" className="text-xs">
+                                Contains {allergen}
+                              </Badge>
+                            ))}
+                          </div>
                         </div>
                       )}
 
