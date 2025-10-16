@@ -43,6 +43,7 @@ export interface RecipeIngredient {
     name: string;
     certainty?: string;
   }>;
+  confirmed: boolean;
 }
 
 export interface Recipe {
@@ -55,6 +56,10 @@ export interface Recipe {
   serving_size?: string;
   price?: string;
   image?: string;
+  options?: string | null;
+  special_notes?: string | null;
+  prominence_score?: number | null;
+  confirmed: boolean;
   created_at: string;
   ingredients: RecipeIngredient[];
 }
@@ -64,6 +69,7 @@ export interface CreateRecipeIngredient {
   quantity?: number;
   unit?: string;
   notes?: string;
+  confirmed?: boolean;
 }
 
 export interface CreateRecipeRequest {
@@ -76,6 +82,10 @@ export interface CreateRecipeRequest {
   price?: string;
   image?: string;
   ingredients?: CreateRecipeIngredient[];
+  options?: string;
+  special_notes?: string;
+  prominence_score?: number;
+  confirmed?: boolean;
 }
 
 export interface UpdateRecipeRequest {
@@ -86,6 +96,55 @@ export interface UpdateRecipeRequest {
   serving_size?: string;
   price?: string;
   image?: string;
+  options?: string;
+  special_notes?: string;
+  prominence_score?: number;
+  confirmed?: boolean;
+}
+
+export type MenuUploadSourceType = 'pdf' | 'image' | 'url';
+
+export interface MenuUploadStageStatus {
+  stage: string;
+  status: string;
+  started_at?: string;
+  completed_at?: string;
+  error_message?: string;
+  details?: string;
+}
+
+export interface MenuUploadRecipeLink {
+  recipe_id: number;
+  stage: string;
+}
+
+export interface MenuUpload {
+  id: number;
+  restaurant_id?: number;
+  user_id?: number;
+  source_type: MenuUploadSourceType;
+  source_value: string;
+  status: string;
+  error_message?: string;
+  created_at: string;
+  updated_at: string;
+  stage0_completed_at?: string;
+  stage1_completed_at?: string;
+  stage2_completed_at?: string;
+  stages: MenuUploadStageStatus[];
+  recipes: MenuUploadRecipeLink[];
+}
+
+export interface MenuUploadCreateResponse extends MenuUpload {
+  created_recipe_ids: number[];
+}
+
+export interface CreateMenuUploadParams {
+  restaurantId: number;
+  sourceType: MenuUploadSourceType;
+  userId?: number;
+  url?: string;
+  file?: File;
 }
 
 // ============================================================================
@@ -94,13 +153,26 @@ export interface UpdateRecipeRequest {
 
 async function fetchAPI(endpoint: string, options: RequestInit = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
-  
+
+  const isFormData = options.body instanceof FormData;
+  const providedHeaders = options.headers;
+  let headers: HeadersInit | undefined = providedHeaders;
+
+  if (!isFormData) {
+    if (!headers) {
+      headers = { 'Content-Type': 'application/json' };
+    } else if (headers instanceof Headers) {
+      headers.set('Content-Type', 'application/json');
+    } else if (Array.isArray(headers)) {
+      headers = [...headers, ['Content-Type', 'application/json']];
+    } else {
+      headers = { 'Content-Type': 'application/json', ...headers };
+    }
+  }
+
   const response = await fetch(url, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
+    headers,
   });
 
   if (!response.ok) {
@@ -229,5 +301,44 @@ export async function addRecipeIngredient(
     method: 'POST',
     body: JSON.stringify(ingredient),
   });
+}
+
+// ============================================================================
+// Menu upload API
+// ============================================================================
+
+export async function createMenuUpload(params: CreateMenuUploadParams): Promise<MenuUploadCreateResponse> {
+  const formData = new FormData();
+  formData.append('restaurant_id', params.restaurantId.toString());
+  formData.append('source_type', params.sourceType);
+
+  if (params.userId) {
+    formData.append('user_id', params.userId.toString());
+  }
+
+  if (params.sourceType === 'url') {
+    if (!params.url) {
+      throw new Error('URL is required for URL uploads');
+    }
+    formData.append('url', params.url);
+  } else {
+    if (!params.file) {
+      throw new Error('File is required for this upload type');
+    }
+    formData.append('file', params.file);
+  }
+
+  return fetchAPI('/menu-uploads', {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+export async function getMenuUpload(uploadId: number): Promise<MenuUpload> {
+  return fetchAPI(`/menu-uploads/${uploadId}`);
+}
+
+export async function listMenuUploads(restaurantId: number): Promise<MenuUpload[]> {
+  return fetchAPI(`/menu-uploads/restaurant/${restaurantId}`);
 }
 

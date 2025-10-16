@@ -14,6 +14,7 @@ export interface SavedDish {
     name: string;
     quantity: string;
     unit: string;
+    confirmed?: boolean;
   }>;
   prepMethod: string;
   compliance: Record<string, boolean>;

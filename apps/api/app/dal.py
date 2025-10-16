@@ -689,7 +689,11 @@ async def create_recipe(
     menu_category: Optional[str] = None,
     serving_size: Optional[str] = None,
     price: Optional[str] = None,
-    image: Optional[str] = None
+    image: Optional[str] = None,
+    options: Optional[str] = None,
+    special_notes: Optional[str] = None,
+    prominence_score: Optional[float] = None,
+    confirmed: bool = False
 ) -> int:
     """
     Create a new recipe.
@@ -718,7 +722,11 @@ async def create_recipe(
         menu_category=menu_category,
         serving_size=serving_size,
         price=price,
-        image=image
+        image=image,
+        options=options,
+        special_notes=special_notes,
+        prominence_score=prominence_score,
+        confirmed=confirmed
     )
     session.add(recipe)
     await session.flush()
@@ -838,7 +846,9 @@ async def add_recipe_ingredient(
     ingredient_id: int,
     quantity: Optional[float] = None,
     unit: Optional[str] = None,
-    notes: Optional[str] = None
+    notes: Optional[str] = None,
+    allergens: Optional[str] = None,
+    confirmed: bool = False
 ) -> None:
     """
     Add or update an ingredient in a recipe.
@@ -867,6 +877,8 @@ async def add_recipe_ingredient(
         link.quantity = quantity
         link.unit = unit
         link.notes = notes
+        link.allergens = allergens
+        link.confirmed = confirmed
     else:
         # Insert new
         link = RecipeIngredient(
@@ -874,10 +886,12 @@ async def add_recipe_ingredient(
             ingredient_id=ingredient_id,
             quantity=quantity,
             unit=unit,
-            notes=notes
+            notes=notes,
+            allergens=allergens,
+            confirmed=confirmed
         )
         session.add(link)
-    
+
     await session.flush()
 
 
@@ -915,6 +929,8 @@ async def get_recipe_with_details(
     
     # Build ingredient list with allergens
     ingredients = []
+    import json
+
     for ri in recipe.ingredients:
         allergens = [
             {
@@ -924,14 +940,39 @@ async def get_recipe_with_details(
             }
             for ia in ri.ingredient.allergens
         ]
-        
+
+        if ri.allergens:
+            try:
+                predicted = json.loads(ri.allergens)
+                if isinstance(predicted, list):
+                    for entry in predicted:
+                        if isinstance(entry, dict):
+                            allergens.append({
+                                "code": entry.get("code") or entry.get("name", "predicted"),
+                                "name": entry.get("name", ""),
+                                "certainty": entry.get("certainty", "predicted")
+                            })
+                        elif isinstance(entry, str):
+                            allergens.append({
+                                "code": entry,
+                                "name": entry,
+                                "certainty": "predicted"
+                            })
+            except json.JSONDecodeError:
+                allergens.append({
+                    "code": "predicted",
+                    "name": ri.allergens,
+                    "certainty": "predicted"
+                })
+
         ingredients.append({
             "ingredient_id": ri.ingredient_id,
             "ingredient_name": ri.ingredient.name,
             "quantity": float(ri.quantity) if ri.quantity else None,
             "unit": ri.unit,
             "notes": ri.notes,
-            "allergens": allergens
+            "allergens": allergens,
+            "confirmed": ri.confirmed
         })
     
     return {
@@ -945,6 +986,10 @@ async def get_recipe_with_details(
         "price": recipe.price,
         "image": recipe.image,
         "created_at": recipe.created_at,
+        "options": recipe.options,
+        "special_notes": recipe.special_notes,
+        "prominence_score": recipe.prominence_score,
+        "confirmed": recipe.confirmed,
         "ingredients": ingredients
     }
 

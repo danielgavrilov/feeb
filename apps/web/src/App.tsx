@@ -9,6 +9,7 @@ import { LoginForm } from "@/components/auth/LoginForm";
 import { SignupForm } from "@/components/auth/SignupForm";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+import MenuUploadPage from "./pages/MenuUpload";
 
 const queryClient = new QueryClient();
 
@@ -27,6 +28,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Index />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/upload"
+              element={
+                <ProtectedRoute>
+                  <MenuUploadPage />
                 </ProtectedRoute>
               }
             />

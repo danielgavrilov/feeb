@@ -4,9 +4,10 @@ SQLAlchemy ORM models for ingredients, allergens, and products.
 
 from datetime import datetime
 from typing import List, Optional
+from enum import Enum
 from sqlalchemy import (
-    Column, Integer, String, TIMESTAMP, ForeignKey, 
-    DECIMAL, UniqueConstraint, Index, func, Boolean, Text
+    Column, Integer, String, TIMESTAMP, ForeignKey,
+    DECIMAL, UniqueConstraint, Index, func, Boolean, Text, Float
 )
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from pydantic import BaseModel, ConfigDict
@@ -257,6 +258,10 @@ class Recipe(Base):
     serving_size = mapped_column(Text, nullable=True)
     price = mapped_column(Text, nullable=True)
     image = mapped_column(Text, nullable=True)
+    options = mapped_column(Text, nullable=True)
+    special_notes = mapped_column(Text, nullable=True)
+    prominence_score = mapped_column(Float, nullable=True)
+    confirmed = mapped_column(Boolean, nullable=False, default=False)
     created_at = mapped_column(TIMESTAMP, default=func.now())
     
     # Relationships
@@ -292,6 +297,8 @@ class RecipeIngredient(Base):
     quantity = mapped_column(DECIMAL(10, 3), nullable=True)
     unit = mapped_column(Text, nullable=True)
     notes = mapped_column(Text, nullable=True)
+    allergens = mapped_column(Text, nullable=True)
+    confirmed = mapped_column(Boolean, nullable=False, default=False)
     
     # Relationships
     recipe: Mapped["Recipe"] = relationship("Recipe", back_populates="ingredients")
@@ -434,6 +441,7 @@ class RecipeIngredientRequest(BaseModel):
     quantity: Optional[float] = None
     unit: Optional[str] = None
     notes: Optional[str] = None
+    confirmed: Optional[bool] = None
 
 
 class RecipeIngredientResponse(BaseModel):
@@ -444,7 +452,8 @@ class RecipeIngredientResponse(BaseModel):
     unit: Optional[str] = None
     notes: Optional[str] = None
     allergens: List[AllergenResponse] = []
-    
+    confirmed: bool = False
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -458,6 +467,10 @@ class RecipeCreate(BaseModel):
     serving_size: Optional[str] = None
     price: Optional[str] = None
     image: Optional[str] = None
+    options: Optional[str] = None
+    special_notes: Optional[str] = None
+    prominence_score: Optional[float] = None
+    confirmed: Optional[bool] = None
     ingredients: Optional[List[RecipeIngredientRequest]] = []
 
 
@@ -470,6 +483,10 @@ class RecipeUpdate(BaseModel):
     serving_size: Optional[str] = None
     price: Optional[str] = None
     image: Optional[str] = None
+    options: Optional[str] = None
+    special_notes: Optional[str] = None
+    prominence_score: Optional[float] = None
+    confirmed: Optional[bool] = None
 
 
 class RecipeResponse(BaseModel):
@@ -483,8 +500,12 @@ class RecipeResponse(BaseModel):
     serving_size: Optional[str] = None
     price: Optional[str] = None
     image: Optional[str] = None
+    options: Optional[str] = None
+    special_notes: Optional[str] = None
+    prominence_score: Optional[float] = None
+    confirmed: bool
     created_at: datetime
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -499,8 +520,168 @@ class RecipeWithIngredients(BaseModel):
     serving_size: Optional[str] = None
     price: Optional[str] = None
     image: Optional[str] = None
+    options: Optional[str] = None
+    special_notes: Optional[str] = None
+    prominence_score: Optional[float] = None
+    confirmed: bool
     created_at: datetime
     ingredients: List[RecipeIngredientResponse] = []
-    
+
     model_config = ConfigDict(from_attributes=True)
+
+
+# ============================================================================
+# Menu upload pipeline models
+# ============================================================================
+
+
+class MenuUploadSourceType(str, Enum):
+    """Supported input sources for menu upload."""
+
+    PDF = "pdf"
+    IMAGE = "image"
+    URL = "url"
+
+
+class MenuUploadStatus(str, Enum):
+    """Overall processing status for a menu upload."""
+
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class MenuUploadStageName(str, Enum):
+    """Individual pipeline stages."""
+
+    STAGE_0 = "stage_0"
+    STAGE_1 = "stage_1"
+    STAGE_2 = "stage_2"
+
+
+class MenuUploadStageStatus(str, Enum):
+    """Status for a pipeline stage."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+class MenuUpload(Base):
+    """Top-level record for uploaded menus."""
+
+    __tablename__ = "menu_upload"
+
+    id = mapped_column(Integer, primary_key=True, autoincrement=True)
+    restaurant_id = mapped_column(Integer, ForeignKey("restaurant.id"), nullable=True)
+    user_id = mapped_column(Integer, ForeignKey("app_user.id"), nullable=True)
+    source_type = mapped_column(String(50), nullable=False)
+    source_value = mapped_column(Text, nullable=False)
+    status = mapped_column(String(50), nullable=False, default=MenuUploadStatus.PENDING.value)
+    error_message = mapped_column(Text, nullable=True)
+    stage0_completed_at = mapped_column(TIMESTAMP, nullable=True)
+    stage1_completed_at = mapped_column(TIMESTAMP, nullable=True)
+    stage2_completed_at = mapped_column(TIMESTAMP, nullable=True)
+    created_at = mapped_column(TIMESTAMP, default=func.now())
+    updated_at = mapped_column(TIMESTAMP, default=func.now(), onupdate=func.now())
+
+    restaurant: Mapped[Optional["Restaurant"]] = relationship("Restaurant")
+    user: Mapped[Optional["AppUser"]] = relationship("AppUser")
+    stages: Mapped[List["MenuUploadStage"]] = relationship(
+        "MenuUploadStage", back_populates="menu_upload", cascade="all, delete-orphan"
+    )
+    recipes: Mapped[List["MenuUploadRecipe"]] = relationship(
+        "MenuUploadRecipe", back_populates="menu_upload", cascade="all, delete-orphan"
+    )
+
+
+class MenuUploadStage(Base):
+    """Track the status of each stage in the pipeline."""
+
+    __tablename__ = "menu_upload_stage"
+
+    id = mapped_column(Integer, primary_key=True, autoincrement=True)
+    menu_upload_id = mapped_column(Integer, ForeignKey("menu_upload.id"), nullable=False)
+    stage = mapped_column(String(50), nullable=False)
+    status = mapped_column(String(50), nullable=False, default=MenuUploadStageStatus.PENDING.value)
+    started_at = mapped_column(TIMESTAMP, nullable=True)
+    completed_at = mapped_column(TIMESTAMP, nullable=True)
+    error_message = mapped_column(Text, nullable=True)
+    details = mapped_column(Text, nullable=True)
+
+    menu_upload: Mapped["MenuUpload"] = relationship("MenuUpload", back_populates="stages")
+
+    __table_args__ = (
+        UniqueConstraint("menu_upload_id", "stage", name="uq_menu_upload_stage"),
+    )
+
+
+class MenuUploadRecipe(Base):
+    """Link created recipes back to their source upload."""
+
+    __tablename__ = "menu_upload_recipe"
+
+    id = mapped_column(Integer, primary_key=True, autoincrement=True)
+    menu_upload_id = mapped_column(Integer, ForeignKey("menu_upload.id"), nullable=False)
+    recipe_id = mapped_column(Integer, ForeignKey("recipe.id"), nullable=False)
+    stage = mapped_column(String(50), nullable=False, default=MenuUploadStageName.STAGE_1.value)
+
+    menu_upload: Mapped["MenuUpload"] = relationship("MenuUpload", back_populates="recipes")
+    recipe: Mapped["Recipe"] = relationship("Recipe")
+
+    __table_args__ = (
+        UniqueConstraint("menu_upload_id", "recipe_id", name="uq_menu_upload_recipe"),
+    )
+
+
+class MenuUploadStageResponse(BaseModel):
+    """Pydantic model for stage status in API responses."""
+
+    stage: str
+    status: str
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    error_message: Optional[str] = None
+    details: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MenuUploadRecipeResponse(BaseModel):
+    """Link between a menu upload and created recipes."""
+
+    recipe_id: int
+    stage: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MenuUploadResponse(BaseModel):
+    """Summary response for menu uploads."""
+
+    id: int
+    restaurant_id: Optional[int] = None
+    user_id: Optional[int] = None
+    source_type: str
+    source_value: str
+    status: str
+    error_message: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    stage0_completed_at: Optional[datetime] = None
+    stage1_completed_at: Optional[datetime] = None
+    stage2_completed_at: Optional[datetime] = None
+    stages: List[MenuUploadStageResponse] = []
+    recipes: List[MenuUploadRecipeResponse] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MenuUploadCreateResponse(MenuUploadResponse):
+    """Detailed response returned immediately after processing."""
+
+    created_recipe_ids: List[int] = []
 

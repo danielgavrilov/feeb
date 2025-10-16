@@ -14,6 +14,7 @@ import { useRestaurant } from "@/hooks/useRestaurant";
 import { useRecipes } from "@/hooks/useRecipes";
 import { Recipe } from "@/lib/api";
 import { LandingPage } from "@/components/LandingPage";
+import { useSearchParams } from "react-router-dom";
 
 type Step = "name" | "ingredients" | "prep" | "compliance";
 
@@ -21,7 +22,13 @@ const Index = () => {
   const { restaurant, restaurants, createRestaurant: createRestaurantAPI, selectRestaurant } = useRestaurant();
   const { recipes, createRecipe: createRecipeAPI, updateRecipe: updateRecipeAPI, deleteRecipe: deleteRecipeAPI } = useRecipes(restaurant?.id || null);
   
-  const [activeTab, setActiveTab] = useState("landing");
+  const validTabs = ["landing", "add", "recipes", "menu", "settings"] as const;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTabParam = searchParams.get("tab");
+  const initialTab = validTabs.includes(initialTabParam as typeof validTabs[number])
+    ? (initialTabParam as typeof validTabs[number])
+    : "landing";
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [step, setStep] = useState<Step>("name");
   const [dishName, setDishName] = useState("");
   const [menuCategory, setMenuCategory] = useState("");
@@ -46,6 +53,7 @@ const Index = () => {
       name: ing.ingredient_name,
       quantity: ing.quantity?.toString() || "",
       unit: ing.unit || "",
+      confirmed: ing.confirmed,
     })),
     prepMethod: recipe.instructions || "",
     compliance: {}, // We'll compute this from ingredients
@@ -201,7 +209,7 @@ const Index = () => {
     setPrice(dish.price);
     setIngredients(dish.ingredients.map(ing => ({
       ...ing,
-      confirmed: true,
+      confirmed: ing.confirmed ?? false,
       allergens: [],
       dietaryInfo: [],
     })));
@@ -210,6 +218,27 @@ const Index = () => {
     setDishImage(dish.image || "");
     setStep("name");
     setActiveTab("add");
+  };
+
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    const nextTab = validTabs.includes(tabParam as typeof validTabs[number])
+      ? (tabParam as typeof validTabs[number])
+      : "landing";
+    if (nextTab !== activeTab) {
+      setActiveTab(nextTab);
+    }
+  }, [searchParams, activeTab]);
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    const params = new URLSearchParams(searchParams);
+    if (value === "landing") {
+      params.delete("tab");
+    } else {
+      params.set("tab", value);
+    }
+    setSearchParams(params, { replace: true });
   };
 
   const canProceed = () => {
@@ -235,7 +264,7 @@ const Index = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8 max-w-4xl">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           <TabsList className="mb-6 flex w-full flex-wrap gap-2 sm:gap-3 sm:h-14">
             <TabsTrigger value="landing" className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base">
               Landing

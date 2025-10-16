@@ -2,7 +2,9 @@
 FastAPI route handlers for ingredient and allergen lookups.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from .database import get_db
@@ -20,8 +22,12 @@ from .models import (
     RecipeUpdate,
     RecipeWithIngredients,
     RecipeIngredientRequest,
+    MenuUploadCreateResponse,
+    MenuUploadResponse,
+    MenuUploadSourceType,
 )
 from . import dal
+from .services.menu_upload import menu_upload_service
 
 router = APIRouter()
 
@@ -285,9 +291,13 @@ async def create_recipe(
         menu_category=recipe_data.menu_category,
         serving_size=recipe_data.serving_size,
         price=recipe_data.price,
-        image=recipe_data.image
+        image=recipe_data.image,
+        options=recipe_data.options,
+        special_notes=recipe_data.special_notes,
+        prominence_score=recipe_data.prominence_score,
+        confirmed=recipe_data.confirmed or False
     )
-    
+
     # Add ingredients if provided
     if recipe_data.ingredients:
         for ing in recipe_data.ingredients:
@@ -297,7 +307,8 @@ async def create_recipe(
                 ingredient_id=ing.ingredient_id,
                 quantity=ing.quantity,
                 unit=ing.unit,
-                notes=ing.notes
+                notes=ing.notes,
+                confirmed=ing.confirmed or False
             )
     
     await session.commit()
@@ -413,6 +424,72 @@ async def delete_recipe(
     return {"status": "success", "message": f"Recipe {recipe_id} deleted"}
 
 
+# ============================================================================
+# Menu upload pipeline routes
+# ============================================================================
+
+
+@router.post(
+    "/menu-uploads",
+    response_model=MenuUploadCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_menu_upload(
+    restaurant_id: int = Form(...),
+    source_type: MenuUploadSourceType = Form(...),
+    user_id: Optional[int] = Form(None),
+    url: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
+    session: AsyncSession = Depends(get_db),
+):
+    """Create a menu upload and trigger LLM processing."""
+
+    try:
+        upload = await menu_upload_service.create_upload(
+            session,
+            restaurant_id=restaurant_id,
+            user_id=user_id,
+            source_type=source_type,
+            file=file,
+            url=url,
+        )
+        response = await menu_upload_service.process_upload(session, upload)
+        await session.commit()
+        return response
+    except HTTPException:
+        await session.rollback()
+        raise
+    except Exception as exc:  # pylint: disable=broad-except
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/menu-uploads/{upload_id}", response_model=MenuUploadResponse)
+async def get_menu_upload(
+    upload_id: int,
+    session: AsyncSession = Depends(get_db),
+):
+    """Fetch a menu upload with stage details."""
+
+    upload = await menu_upload_service.fetch_upload(session, upload_id)
+    if not upload:
+        raise HTTPException(status_code=404, detail="Menu upload not found")
+    return menu_upload_service.build_summary(upload)
+
+
+@router.get(
+    "/menu-uploads/restaurant/{restaurant_id}",
+    response_model=list[MenuUploadResponse],
+)
+async def list_menu_uploads(
+    restaurant_id: int,
+    session: AsyncSession = Depends(get_db),
+):
+    """List uploads for a restaurant ordered by most recent."""
+
+    return await menu_upload_service.list_uploads_for_restaurant(session, restaurant_id)
+
+
 @router.post("/recipes/{recipe_id}/ingredients")
 async def add_recipe_ingredient(
     recipe_id: int,
@@ -441,7 +518,8 @@ async def add_recipe_ingredient(
         ingredient_id=ingredient_data.ingredient_id,
         quantity=ingredient_data.quantity,
         unit=ingredient_data.unit,
-        notes=ingredient_data.notes
+        notes=ingredient_data.notes,
+        confirmed=ingredient_data.confirmed or False
     )
     
     await session.commit()

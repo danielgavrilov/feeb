@@ -19,6 +19,12 @@ interface QuickAction {
 
 const quickActions: QuickAction[] = [
   {
+    icon: "📤",
+    label: "Upload Menu",
+    description: "Use AI to capture your menu instantly",
+    href: "/upload",
+  },
+  {
     icon: "➕",
     label: "Add Dish",
     description: "Capture a new recipe in minutes",
