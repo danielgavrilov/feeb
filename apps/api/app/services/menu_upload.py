@@ -45,9 +45,24 @@ class MenuUploadService:
             base_dir = Path(settings.menu_upload_storage_dir).resolve()
         base_dir.mkdir(parents=True, exist_ok=True)
         self.storage_dir = base_dir
-        self.extraction_url = extraction_url or settings.llm_extraction_url
-        self.recipe_deduction_url = recipe_deduction_url or settings.llm_recipe_deduction_url
-        self.api_key = api_key or settings.llm_api_key
+        self._extraction_url_override = extraction_url
+        self._recipe_deduction_url_override = recipe_deduction_url
+        self._api_key_override = api_key
+
+    @property
+    def extraction_url(self) -> Optional[str]:
+        """Get extraction URL, checking override first then settings."""
+        return self._extraction_url_override or settings.llm_extraction_url
+
+    @property
+    def recipe_deduction_url(self) -> Optional[str]:
+        """Get recipe deduction URL, checking override first then settings."""
+        return self._recipe_deduction_url_override or settings.llm_recipe_deduction_url
+
+    @property
+    def api_key(self) -> Optional[str]:
+        """Get API key, checking override first then settings."""
+        return self._api_key_override or settings.llm_api_key
 
     async def create_upload(
         self,
@@ -175,14 +190,49 @@ class MenuUploadService:
         )
         await session.flush()
 
-        # Stage 2 - ingredient deduction (SKIPPED for now)
-        self._update_stage_record(
-            stage2,
-            MenuUploadStageStatus.SKIPPED,
-            details={"reason": "Stage 2 not implemented yet - ingredients will be added manually"},
-        )
-        upload.stage2_completed_at = datetime.utcnow()
-        await session.flush()
+        # Stage 2 - ingredient deduction
+        if created_recipes:
+            self._update_stage_record(stage2, MenuUploadStageStatus.RUNNING)
+            await session.flush()
+
+            try:
+                # Call Stage 2 endpoint
+                recipes_for_deduction = [
+                    {"name": name, "recipe_id": recipe_id}
+                    for recipe_id, name in created_recipes
+                ]
+                
+                ingredient_payload = await self._call_recipe_deduction(recipes_for_deduction)
+            except Exception as exc:
+                self._update_stage_record(stage2, MenuUploadStageStatus.FAILED, error=str(exc))
+                upload.status = MenuUploadStatus.FAILED.value
+                upload.error_message = f"Stage 2 failed: {exc}"
+                await session.flush()
+                raise
+
+            # Save ingredients to database
+            added_count = await self._store_deduced_ingredients(
+                session,
+                created_recipes,
+                ingredient_payload,
+            )
+
+            upload.stage2_completed_at = datetime.utcnow()
+            self._update_stage_record(
+                stage2,
+                MenuUploadStageStatus.COMPLETED,
+                details={"ingredients_added": added_count},
+            )
+            await session.flush()
+        else:
+            # No recipes to process
+            self._update_stage_record(
+                stage2,
+                MenuUploadStageStatus.SKIPPED,
+                details={"reason": "No recipes created in Stage 1"},
+            )
+            upload.stage2_completed_at = datetime.utcnow()
+            await session.flush()
 
         upload.status = MenuUploadStatus.COMPLETED.value
         upload.error_message = None

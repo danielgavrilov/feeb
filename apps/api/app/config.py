@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     llm_extraction_url: Optional[str] = None
     llm_recipe_deduction_url: Optional[str] = None
     llm_api_key: Optional[str] = None
-    # Gemini (Stage 1 extraction)
+    # Gemini (Stage 1 extraction and Stage 2 ingredient deduction)
     gemini_api_key: Optional[str] = None
     gemini_model: str = "gemini-flash-lite-latest"
 

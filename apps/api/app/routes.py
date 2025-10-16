@@ -559,6 +559,82 @@ async def extract_menu_items(
     return {"recipes": normalized}
 
 
+# ============================================================================
+# LLM Ingredient Deduction endpoint (Stage 2)
+# ============================================================================
+
+
+@router.post("/llm/deduce-ingredients")
+async def deduce_recipe_ingredients(request: dict):
+    """Call Gemini to infer ingredients for each recipe.
+    
+    Request: { "recipes": [{"name": "Pizza Margherita", "recipe_id": 123}, ...] }
+    Response: { "recipes": [{"name": "Pizza Margherita", "ingredients": [...]}, ...] }
+    """
+    
+    recipes = request.get("recipes", [])
+    if not recipes:
+        raise HTTPException(status_code=400, detail="No recipes provided")
+    
+    # Extract recipe names for the prompt
+    recipe_names = [recipe.get("name") for recipe in recipes if recipe.get("name")]
+    if not recipe_names:
+        raise HTTPException(status_code=400, detail="No valid recipe names found")
+    
+    # Build the prompt for Stage 2
+    prompt = """For each recipe name provided, infer the ingredients needed to make it for 1 person. 
+Return a JSON object with this structure:
+
+{
+  "recipes": [
+    {
+      "name": "Recipe Name",
+      "ingredients": [
+        {
+          "name": "ingredient name",
+          "quantity": 0.0,
+          "unit": "g/ml/piece/etc",
+          "allergens": ["gluten", "dairy", "nuts", etc]
+        }
+      ]
+    }
+  ]
+}
+
+Rules:
+- Quantities should be metric (grams, milliliters, pieces)
+- Base quantities on 1 person serving
+- Infer common allergens per ingredient
+- Use ONLY singular, specific ingredient names (NOT "pancetta or bacon" - choose ONE)
+- Choose the most common/traditional ingredient variant
+- Use simple ingredient names without alternatives or options
+- Don't infer anything else
+- Return only valid JSON, no prose
+
+Recipe names:
+""" + "\n".join(f"- {name}" for name in recipe_names)
+    
+    client = GeminiClient()
+    
+    # Call Gemini API
+    result = await client.extract_from_payload(prompt=prompt, text="")
+    
+    # The client returns a list, but we need to check if it's wrapped in a recipes key
+    if isinstance(result, list) and result:
+        # If result is a list of recipe objects, wrap it
+        return {"recipes": result}
+    elif isinstance(result, dict) and "recipes" in result:
+        return result
+    else:
+        # Return the recipes with empty ingredients as fallback
+        return {
+            "recipes": [
+                {"name": recipe.get("name"), "ingredients": []}
+                for recipe in recipes
+            ]
+        }
+
+
 @router.post("/recipes/{recipe_id}/ingredients")
 async def add_recipe_ingredient(
     recipe_id: int,

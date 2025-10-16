@@ -2,6 +2,8 @@
 
 ## Current Status ✅
 
+This is a handover for the Menu upload flow of the app, describing how to srape menu items from a given menu (stage 1). The next stage will translate the menu items to actual recipes with ingredients (see below)
+
 **Stage 1 is COMPLETE and working:**
 - ✅ Gemini Flash Lite integration for menu extraction
 - ✅ Database migrations applied (menu_upload tables exist)
@@ -51,7 +53,6 @@ Return a JSON object with this structure:
           "name": "ingredient name",
           "quantity": 0.0,
           "unit": "g/ml/piece/etc",
-          "notes": "optional preparation notes",
           "allergens": ["gluten", "dairy", "nuts", etc]
         }
       ]
@@ -62,8 +63,8 @@ Return a JSON object with this structure:
 Rules:
 - Quantities should be metric (grams, milliliters, pieces)
 - Base quantities on 1 person serving
-- Include common allergens when obvious
-- Don't infer missing information
+- Infer common allergens per ingredient
+- Don't infer anything else
 - Return only valid JSON, no prose
 ```
 
@@ -225,41 +226,6 @@ async def _store_deduced_ingredients(
 
 ## Testing Steps
 
-### 1. Test Stage 2 Endpoint Directly
-
-```bash
-curl -X POST http://localhost:8000/llm/deduce-ingredients \
-  -H "Content-Type: application/json" \
-  -d '{"recipes": [{"name": "Pizza Margherita", "recipe_id": 1}]}'
-```
-
-**Expected response:**
-```json
-{
-  "recipes": [
-    {
-      "name": "Pizza Margherita",
-      "ingredients": [
-        {
-          "name": "pizza dough",
-          "quantity": 200,
-          "unit": "g",
-          "notes": "fresh or store-bought",
-          "allergens": ["gluten"]
-        },
-        {
-          "name": "tomato sauce",
-          "quantity": 100,
-          "unit": "ml",
-          "notes": "passata or crushed tomatoes",
-          "allergens": []
-        }
-      ]
-    }
-  ]
-}
-```
-
 ### 2. Test Full Pipeline
 
 ```bash
@@ -275,7 +241,7 @@ async def test_stage2():
             data={
                 "restaurant_id": 1,
                 "source_type": "url", 
-                "url": "https://example.com"
+                "url": "https://www.humm.love/menu"
             }
         )
         result = response.json()
@@ -346,9 +312,8 @@ After implementation:
 
 - Stage 2 uses the same Gemini client as Stage 1
 - Ingredients are created with `source="llm"` and `confirmed=false`
-- The pipeline expects the same JSON structure as Stage 1
 - All error handling patterns from Stage 1 apply to Stage 2
-- Test with simple recipes first (pizza, pasta, salad) before complex dishes
+
 
 ---
 

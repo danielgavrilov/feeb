@@ -33,6 +33,7 @@ services:
       API_DESCRIPTION: ${API_DESCRIPTION:-REST API for ingredient and allergen lookups using OpenFoodFacts data}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       LLM_EXTRACTION_URL: ${LLM_EXTRACTION_URL:-http://localhost:8000/llm/extract-menu}
+      LLM_RECIPE_DEDUCTION_URL: ${LLM_RECIPE_DEDUCTION_URL:-http://localhost:8000/llm/deduce-ingredients}
     ports:
       - "8000:8000"
     volumes:
