@@ -9,7 +9,6 @@ import { Settings } from "@/components/Settings";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { ChefHat } from "lucide-react";
 import { useRestaurant } from "@/hooks/useRestaurant";
 import { useRecipes } from "@/hooks/useRecipes";
 import { Recipe } from "@/lib/api";
@@ -253,8 +252,8 @@ const Index = () => {
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <ChefHat className="w-8 h-8 text-primary" />
-              <h1 className="text-2xl font-bold text-foreground">Feeb</h1>
+              <img src="/logo.svg" alt="Feeb Logo" className="w-8 h-8 feeb-logo" />
+              <h1 className="text-2xl font-bold text-brand-primary">Feeb</h1>
             </div>
             <div className="flex items-center gap-4">
               <span className="text-sm text-muted-foreground">{restaurant?.name || "No Restaurant"}</span>
