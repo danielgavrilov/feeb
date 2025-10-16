@@ -13,6 +13,7 @@ import { ChefHat } from "lucide-react";
 import { useRestaurant } from "@/hooks/useRestaurant";
 import { useRecipes } from "@/hooks/useRecipes";
 import { Recipe } from "@/lib/api";
+import { LandingPage } from "@/components/LandingPage";
 
 type Step = "name" | "ingredients" | "prep" | "compliance";
 
@@ -20,7 +21,7 @@ const Index = () => {
   const { restaurant, restaurants, createRestaurant: createRestaurantAPI, selectRestaurant } = useRestaurant();
   const { recipes, createRecipe: createRecipeAPI, updateRecipe: updateRecipeAPI, deleteRecipe: deleteRecipeAPI } = useRecipes(restaurant?.id || null);
   
-  const [activeTab, setActiveTab] = useState("add");
+  const [activeTab, setActiveTab] = useState("landing");
   const [step, setStep] = useState<Step>("name");
   const [dishName, setDishName] = useState("");
   const [menuCategory, setMenuCategory] = useState("");
@@ -235,20 +236,27 @@ const Index = () => {
 
       <main className="container mx-auto px-4 py-8 max-w-4xl">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4 h-14 mb-6">
-            <TabsTrigger value="add" className="text-base font-semibold">
+          <TabsList className="mb-6 flex w-full flex-wrap gap-2 sm:gap-3 sm:h-14">
+            <TabsTrigger value="landing" className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base">
+              Landing
+            </TabsTrigger>
+            <TabsTrigger value="add" className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base">
               Add Dish
             </TabsTrigger>
-            <TabsTrigger value="recipes" className="text-base font-semibold">
+            <TabsTrigger value="recipes" className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base">
               Recipe Book
             </TabsTrigger>
-            <TabsTrigger value="menu" className="text-base font-semibold">
+            <TabsTrigger value="menu" className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base">
               Menu
             </TabsTrigger>
-            <TabsTrigger value="settings" className="text-base font-semibold">
+            <TabsTrigger value="settings" className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base">
               Settings
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="landing">
+            <LandingPage restaurantName={restaurant?.name ?? undefined} />
+          </TabsContent>
 
           <TabsContent value="add">
             <div className="bg-card rounded-xl shadow-lg p-8 space-y-8">
