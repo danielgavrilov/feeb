@@ -13,9 +13,7 @@
     "api:import": "cd apps/api && ./scripts/run_full_import.sh",
     "api:import:sample": "cd apps/api && SAMPLE_PRODUCT_LIMIT=10000 python -m data_pipeline.import_off",
     "api:status": "cd apps/api && ./scripts/check_import_status.sh",
-    "api:test": "cd apps/api && source venv/bin/activate && pytest tests/ -v",
-    "cli:build": "pnpm --filter @feeb/create-volo-app build",
-    "cli:test": "pnpm --filter @feeb/create-volo-app test"
+    "api:test": "cd apps/api && source venv/bin/activate && pytest tests/ -v"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

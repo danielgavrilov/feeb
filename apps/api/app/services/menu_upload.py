@@ -175,46 +175,14 @@ class MenuUploadService:
         )
         await session.flush()
 
-        # Stage 2 - ingredient deduction
-        if created_recipes:
-            self._update_stage_record(stage2, MenuUploadStageStatus.RUNNING)
-            await session.flush()
-
-            try:
-                ingredient_payload = await self._call_recipe_deduction(
-                    [
-                        {"name": name, "recipe_id": recipe_id}
-                        for recipe_id, name in created_recipes
-                    ]
-                )
-            except Exception as exc:  # pylint: disable=broad-except
-                self._update_stage_record(stage2, MenuUploadStageStatus.FAILED, error=str(exc))
-                upload.status = MenuUploadStatus.FAILED.value
-                upload.error_message = f"Stage 2 failed: {exc}"
-                await session.flush()
-                raise
-
-            added_count = await self._store_deduced_ingredients(
-                session,
-                created_recipes,
-                ingredient_payload,
-            )
-
-            upload.stage2_completed_at = datetime.utcnow()
-            self._update_stage_record(
-                stage2,
-                MenuUploadStageStatus.COMPLETED,
-                details={"ingredients_added": added_count},
-            )
-            await session.flush()
-        else:
-            self._update_stage_record(
-                stage2,
-                MenuUploadStageStatus.SKIPPED,
-                details={"reason": "no recipes returned"},
-            )
-            upload.stage2_completed_at = datetime.utcnow()
-            await session.flush()
+        # Stage 2 - ingredient deduction (SKIPPED for now)
+        self._update_stage_record(
+            stage2,
+            MenuUploadStageStatus.SKIPPED,
+            details={"reason": "Stage 2 not implemented yet - ingredients will be added manually"},
+        )
+        upload.stage2_completed_at = datetime.utcnow()
+        await session.flush()
 
         upload.status = MenuUploadStatus.COMPLETED.value
         upload.error_message = None

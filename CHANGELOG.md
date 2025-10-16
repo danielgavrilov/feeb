@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.1.0] - 2025-10-16
+
+### Removed
+
+- **CLI Tool (create-volo-app)**
+  - Removed `feeb/` directory containing the create-volo-app CLI tool
+  - Removed from `pnpm-workspace.yaml` workspace configuration
+  - Removed `pnpm cli:build` and `pnpm cli:test` scripts from root `package.json`
+  - Updated all documentation to reflect simplified monorepo structure
+  - Reason: The CLI tool is a separate product not used by the Feeb application
+
+### Changed
+
+- **Documentation**
+  - Updated `agents.md` to focus on web and API components only
+  - Updated `README.md` to remove CLI tool references
+  - Updated `SETUP.md` to clarify frontend-only dependency installation
+  - Simplified repository structure diagrams across all documentation
+
 ## [1.0.0] - 2025-10-14
 
 ### Major Refactor: Monorepo Structure
@@ -43,8 +62,8 @@
   - Added `pnpm api:import:sample` - Import sample dataset (10k products)
   - Added `pnpm api:status` - Check data import status
   - Added `pnpm api:test` - Run API tests
-  - Added `pnpm cli:build` - Build create-volo-app CLI
-  - Added `pnpm cli:test` - Test CLI tool
+  - Added `pnpm cli:build` - Build create-volo-app CLI (removed in v1.1.0)
+  - Added `pnpm cli:test` - Test CLI tool (removed in v1.1.0)
 
 - **Configuration**
   - Updated `.gitignore` with environment files and Python artifacts
@@ -72,10 +91,11 @@ feeb/
 ├── apps/
 │   ├── web/          # React frontend with Supabase auth
 │   └── api/          # Python FastAPI (moved from /ingredient-api)
-├── feeb/             # create-volo-app CLI tool
 ├── package.json      # Root workspace config
 └── pnpm-workspace.yaml
 ```
+
+**Note:** As of v1.1.0, the `feeb/` CLI tool directory has been removed.
 
 ### Migration Guide
 

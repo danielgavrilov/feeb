@@ -9,7 +9,6 @@ feeb/
 ├── apps/
 │   ├── web/          # React + TypeScript frontend (Lovable design)
 │   └── api/          # Python FastAPI ingredient database
-├── feeb/             # create-volo-app CLI tool
 ├── package.json      # Root workspace configuration
 └── pnpm-workspace.yaml
 ```
@@ -174,18 +173,6 @@ pnpm api:status       # Check import status
 pnpm api:test         # Run tests
 ```
 
-## 🛠️ CLI Tool (feeb/)
-
-The `create-volo-app` CLI for scaffolding full-stack applications.
-
-### Development
-```bash
-pnpm cli:build        # Build the CLI
-pnpm cli:test         # Test the CLI
-```
-
-See [feeb/README.md](./feeb/README.md) for detailed documentation.
-
 ## 📦 Workspace Scripts
 
 All scripts can be run from the repository root:
@@ -203,10 +190,6 @@ pnpm api:dev          # Start API server
 pnpm api:setup        # Initialize database
 pnpm api:import       # Import OpenFoodFacts data
 pnpm api:test         # Run API tests
-
-# CLI Tool
-pnpm cli:build        # Build create-volo-app
-pnpm cli:test         # Test create-volo-app
 ```
 
 ## 🔧 Development Workflow
@@ -277,7 +260,6 @@ const data = await response.json();
 - [API Documentation](./apps/api/README.md)
 - [Docker Setup Guide](./apps/api/DOCKER_README.md)
 - [Frontend Docker Integration](./apps/web/DOCKER_INTEGRATION.md)
-- [CLI Tool Documentation](./feeb/README.md)
 
 ## 🧪 Testing
 

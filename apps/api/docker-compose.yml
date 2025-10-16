@@ -31,6 +31,8 @@ services:
       API_TITLE: ${API_TITLE:-Allergen-Aware Ingredient API}
       API_VERSION: ${API_VERSION:-0.1.0}
       API_DESCRIPTION: ${API_DESCRIPTION:-REST API for ingredient and allergen lookups using OpenFoodFacts data}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      LLM_EXTRACTION_URL: ${LLM_EXTRACTION_URL:-http://localhost:8000/llm/extract-menu}
     ports:
       - "8000:8000"
     volumes:

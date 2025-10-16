@@ -22,7 +22,7 @@ cd feeb
 pnpm install
 ```
 
-This will install all dependencies for the frontend and CLI tool.
+This will install all dependencies for the frontend.
 
 ### 2. Set Up Supabase Authentication
 

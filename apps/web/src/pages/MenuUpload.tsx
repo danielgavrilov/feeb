@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { createMenuUpload, MenuUploadCreateResponse, MenuUploadSourceType } from "@/lib/api";
+import { createMenuUpload, createRestaurant, MenuUploadCreateResponse, MenuUploadSourceType } from "@/lib/api";
 import { useRestaurant } from "@/hooks/useRestaurant";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -87,10 +87,12 @@ const methodRequiresFile = (method: MenuUploadSourceType | "manual" | null) =>
 
 const MenuUploadPage = () => {
   const navigate = useNavigate();
-  const { restaurant, restaurants, loading: restaurantsLoading, selectRestaurant } = useRestaurant();
+  const { restaurant, restaurants, loading: restaurantsLoading, selectRestaurant, refreshRestaurants } = useRestaurant();
   const { backendUserId } = useAuth();
 
   const [selectedRestaurantId, setSelectedRestaurantId] = useState<number | null>(restaurant?.id ?? null);
+  const [newRestaurantName, setNewRestaurantName] = useState("");
+  const [isCreatingRestaurant, setIsCreatingRestaurant] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState<MenuUploadSourceType | "manual" | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [urlValue, setUrlValue] = useState("");
@@ -113,6 +115,35 @@ const MenuUploadPage = () => {
     const id = Number(value);
     setSelectedRestaurantId(id);
     selectRestaurant(id);
+  };
+
+  const handleCreateRestaurant = async () => {
+    if (!newRestaurantName.trim()) {
+      toast.error("Please enter a restaurant name");
+      return;
+    }
+    
+    if (!backendUserId) {
+      toast.error("You must be logged in to create a restaurant");
+      return;
+    }
+
+    try {
+      setIsCreatingRestaurant(true);
+      setError(null);
+      const newRestaurant = await createRestaurant(newRestaurantName.trim(), backendUserId);
+      await refreshRestaurants();
+      setSelectedRestaurantId(newRestaurant.id);
+      selectRestaurant(newRestaurant.id);
+      setNewRestaurantName("");
+      toast.success(`Restaurant "${newRestaurant.name}" created successfully`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to create restaurant";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setIsCreatingRestaurant(false);
+    }
   };
 
   const handleSelectMethod = (method: MenuUploadSourceType | "manual") => {
@@ -171,21 +202,7 @@ const MenuUploadPage = () => {
     }
   };
 
-  if (!restaurantsLoading && restaurants.length === 0) {
-    return (
-      <main className="min-h-screen bg-background">
-        <div className="container mx-auto max-w-3xl py-16">
-          <Card className="p-8 text-center space-y-6">
-            <h1 className="text-3xl font-semibold text-foreground">Let’s start with your restaurant</h1>
-            <p className="text-muted-foreground">
-              Create your first restaurant profile in Settings so we know where to save your menu.
-            </p>
-            <Button onClick={() => navigate("/?tab=settings")}>Go to settings</Button>
-          </Card>
-        </div>
-      </main>
-    );
-  }
+  // No need for special handling - we'll show restaurant creation inline if needed
 
   return (
     <main className="min-h-screen bg-background">
@@ -201,22 +218,49 @@ const MenuUploadPage = () => {
         <form onSubmit={handleSubmit} className="space-y-8">
           <Card className="p-6 space-y-4">
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-muted-foreground">Restaurant</Label>
-              <Select
-                value={selectedRestaurantId ? String(selectedRestaurantId) : undefined}
-                onValueChange={handleSelectRestaurant}
-              >
-                <SelectTrigger className="w-full sm:w-80 h-12 text-left text-base">
-                  <SelectValue placeholder="Select a restaurant" />
-                </SelectTrigger>
-                <SelectContent>
-                  {restaurants.map(item => (
-                    <SelectItem key={item.id} value={String(item.id)}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-sm font-medium text-muted-foreground">
+                {restaurants.length > 0 ? "Select your restaurant" : "Restaurant name"}
+              </Label>
+              {restaurants.length > 0 ? (
+                <Select
+                  value={selectedRestaurantId ? String(selectedRestaurantId) : undefined}
+                  onValueChange={handleSelectRestaurant}
+                >
+                  <SelectTrigger className="w-full sm:w-80 h-12 text-left text-base">
+                    <SelectValue placeholder="Select a restaurant" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {restaurants.map(item => (
+                      <SelectItem key={item.id} value={String(item.id)}>
+                        {item.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="flex gap-3">
+                  <Input
+                    type="text"
+                    placeholder="Enter your restaurant name"
+                    value={newRestaurantName}
+                    onChange={(e) => setNewRestaurantName(e.target.value)}
+                    className="h-12 flex-1"
+                    disabled={isCreatingRestaurant}
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleCreateRestaurant}
+                    disabled={isCreatingRestaurant || !newRestaurantName.trim()}
+                    className="h-12"
+                  >
+                    {isCreatingRestaurant ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      "Create"
+                    )}
+                  </Button>
+                </div>
+              )}
             </div>
 
             <Separator />

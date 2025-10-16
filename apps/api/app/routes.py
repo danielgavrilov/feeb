@@ -28,6 +28,7 @@ from .models import (
 )
 from . import dal
 from .services.menu_upload import menu_upload_service
+from .services.gemini_client import GeminiClient
 
 router = APIRouter()
 
@@ -488,6 +489,74 @@ async def list_menu_uploads(
     """List uploads for a restaurant ordered by most recent."""
 
     return await menu_upload_service.list_uploads_for_restaurant(session, restaurant_id)
+
+
+# ============================================================================
+# LLM Extraction endpoint (Stage 1)
+# ============================================================================
+
+
+@router.post("/llm/extract-menu")
+async def extract_menu_items(
+    request: dict,
+):
+    """Call Gemini to extract dishes and return normalized JSON structure.
+
+    Contract expected by menu_upload_service:
+    - Request may contain url OR filename + content_base64 for image/pdf.
+    - Response: { "recipes": [ { name, description?, category?, options?, special_notes?, prominence? } ] }
+    """
+
+    source_type = request.get("source_type")
+    url = request.get("url")
+    filename = request.get("filename")
+    content_base64 = request.get("content_base64")
+
+    # Build prompt from stage.plan.md (compressed to single instruction)
+    prompt = (
+        "Extract all menu items from the attached PDF or provided URL and output them as a JSON array. "
+        "Each item must include: title, price (float if present), currency (if available otherwise €), description, "
+        "category, options (list), notes (list). Do not infer missing info. Return only a valid JSON array with no prose."
+    )
+
+    client = GeminiClient()
+
+    # Map to inline or url usage. We don't prefetch URLs; Gemini handles them if provided as text.
+    if source_type == "url" and url:
+        items = await client.extract_from_payload(prompt=prompt, url=url)
+    elif source_type in {"image", "pdf"} and content_base64 and filename:
+        # Best-effort MIME
+        mime = "application/pdf" if source_type == "pdf" else "image/*"
+        items = await client.extract_from_payload(
+            prompt=prompt,
+            inline_mime_type=mime,
+            inline_base64=content_base64,
+        )
+    else:
+        raise HTTPException(status_code=400, detail="Invalid payload for extraction")
+
+    # Normalize to pipeline fields expected by menu_upload_service
+    normalized = []
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        title = item.get("title") or item.get("name")
+        if not title:
+            continue
+        normalized.append(
+            {
+                "name": str(title).strip(),
+                "description": (item.get("description") or None),
+                "category": (item.get("category") or None),
+                "options": (item.get("options") or None),
+                "special_notes": (item.get("notes") or item.get("special_notes") or None),
+                "prominence": item.get("prominence") or item.get("score"),
+                "price": item.get("price"),
+                "currency": item.get("currency"),
+            }
+        )
+
+    return {"recipes": normalized}
 
 
 @router.post("/recipes/{recipe_id}/ingredients")
