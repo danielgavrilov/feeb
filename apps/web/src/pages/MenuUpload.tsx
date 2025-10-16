@@ -1,0 +1,385 @@
+import { useEffect, useMemo, useState, type ComponentType, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
+import { Camera, FileText, Link2, NotebookPen, Loader2 } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { createMenuUpload, MenuUploadCreateResponse, MenuUploadSourceType } from "@/lib/api";
+import { useRestaurant } from "@/hooks/useRestaurant";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
+
+const optionConfig: Array<{
+  id: MenuUploadSourceType | "manual";
+  title: string;
+  description: string;
+  icon: ComponentType<{ className?: string }>;
+  accept?: string;
+}> = [
+  {
+    id: "pdf",
+    title: "Upload a PDF",
+    description: "Perfect for menus exported from design tools or POS systems.",
+    icon: FileText,
+    accept: "application/pdf",
+  },
+  {
+    id: "image",
+    title: "Snap or upload photos",
+    description: "Take a photo of your menu or upload existing imagery.",
+    icon: Camera,
+    accept: "image/*",
+  },
+  {
+    id: "url",
+    title: "Link to an online menu",
+    description: "Paste a URL and we’ll fetch the latest version for you.",
+    icon: Link2,
+  },
+  {
+    id: "manual",
+    title: "Enter dishes manually",
+    description: "Use our guided Add Dish flow to capture each recipe.",
+    icon: NotebookPen,
+  },
+];
+
+const stageLabels: Record<string, string> = {
+  stage_0: "Stage 0 · Save upload",
+  stage_1: "Stage 1 · Item extraction",
+  stage_2: "Stage 2 · Ingredient deduction",
+};
+
+const statusTone: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
+  pending: { label: "Pending", variant: "outline" },
+  running: { label: "Running", variant: "secondary" },
+  completed: { label: "Completed", variant: "default" },
+  failed: { label: "Failed", variant: "destructive" },
+  skipped: { label: "Skipped", variant: "outline" },
+};
+
+const formatDate = (value?: string) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString();
+};
+
+const parseDetails = (details?: string) => {
+  if (!details) return null;
+  try {
+    const parsed = JSON.parse(details);
+    if (parsed && typeof parsed === "object") {
+      return parsed;
+    }
+  } catch (error) {
+    return details;
+  }
+  return details;
+};
+
+const methodRequiresFile = (method: MenuUploadSourceType | "manual" | null) =>
+  method === "pdf" || method === "image";
+
+const MenuUploadPage = () => {
+  const navigate = useNavigate();
+  const { restaurant, restaurants, loading: restaurantsLoading, selectRestaurant } = useRestaurant();
+  const { backendUserId } = useAuth();
+
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState<number | null>(restaurant?.id ?? null);
+  const [selectedMethod, setSelectedMethod] = useState<MenuUploadSourceType | "manual" | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [urlValue, setUrlValue] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [result, setResult] = useState<MenuUploadCreateResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (restaurant?.id && restaurant.id !== selectedRestaurantId) {
+      setSelectedRestaurantId(restaurant.id);
+    }
+  }, [restaurant?.id, selectedRestaurantId]);
+
+  const activeOption = useMemo(
+    () => optionConfig.find(option => option.id === selectedMethod),
+    [selectedMethod],
+  );
+
+  const handleSelectRestaurant = (value: string) => {
+    const id = Number(value);
+    setSelectedRestaurantId(id);
+    selectRestaurant(id);
+  };
+
+  const handleSelectMethod = (method: MenuUploadSourceType | "manual") => {
+    if (method === "manual") {
+      navigate("/?tab=add", { replace: false });
+      return;
+    }
+    setSelectedMethod(method);
+    setFile(null);
+    setUrlValue("");
+    setResult(null);
+    setError(null);
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+
+    if (!selectedRestaurantId) {
+      setError("Please select a restaurant before uploading.");
+      return;
+    }
+
+    if (!selectedMethod || selectedMethod === "manual") {
+      setError("Choose how you’d like to import your menu.");
+      return;
+    }
+
+    if (selectedMethod === "url" && !urlValue.trim()) {
+      setError("Enter a valid URL so we can fetch your menu.");
+      return;
+    }
+
+    if (methodRequiresFile(selectedMethod) && !file) {
+      setError("Please attach a file to continue.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const response = await createMenuUpload({
+        restaurantId: selectedRestaurantId,
+        sourceType: selectedMethod,
+        userId: backendUserId ?? undefined,
+        url: selectedMethod === "url" ? urlValue.trim() : undefined,
+        file: methodRequiresFile(selectedMethod) ? file ?? undefined : undefined,
+      });
+      setResult(response);
+      toast.success("Menu uploaded successfully. We’ve added the dishes to your recipe book.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "We couldn’t process the menu.";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!restaurantsLoading && restaurants.length === 0) {
+    return (
+      <main className="min-h-screen bg-background">
+        <div className="container mx-auto max-w-3xl py-16">
+          <Card className="p-8 text-center space-y-6">
+            <h1 className="text-3xl font-semibold text-foreground">Let’s start with your restaurant</h1>
+            <p className="text-muted-foreground">
+              Create your first restaurant profile in Settings so we know where to save your menu.
+            </p>
+            <Button onClick={() => navigate("/?tab=settings")}>Go to settings</Button>
+          </Card>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-background">
+      <div className="container mx-auto max-w-5xl py-12 space-y-10">
+        <div className="space-y-3">
+          <h1 className="text-3xl font-semibold text-foreground">Upload your menu</h1>
+          <p className="text-muted-foreground max-w-2xl">
+            Choose how you’d like to share your menu. We’ll extract each dish, infer ingredients, and place everything into your
+            recipe book ready for review.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-8">
+          <Card className="p-6 space-y-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-muted-foreground">Restaurant</Label>
+              <Select
+                value={selectedRestaurantId ? String(selectedRestaurantId) : undefined}
+                onValueChange={handleSelectRestaurant}
+              >
+                <SelectTrigger className="w-full sm:w-80 h-12 text-left text-base">
+                  <SelectValue placeholder="Select a restaurant" />
+                </SelectTrigger>
+                <SelectContent>
+                  {restaurants.map(item => (
+                    <SelectItem key={item.id} value={String(item.id)}>
+                      {item.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+              <Label className="text-sm font-medium text-muted-foreground">How would you like to import your menu?</Label>
+              <div className="grid gap-4 md:grid-cols-2">
+                {optionConfig.map(option => {
+                  const Icon = option.icon;
+                  const isActive = selectedMethod === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => handleSelectMethod(option.id)}
+                      className={`text-left rounded-2xl border p-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-2 ${
+                        isActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/60"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <span
+                          className={`flex h-10 w-10 items-center justify-center rounded-full border ${
+                            isActive ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
+                          }`}
+                        >
+                          <Icon className="h-5 w-5" />
+                        </span>
+                        <div className="space-y-1">
+                          <p className="text-base font-semibold text-foreground">{option.title}</p>
+                          <p className="text-sm text-muted-foreground">{option.description}</p>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {selectedMethod && selectedMethod !== "manual" ? (
+              <div className="grid gap-6 md:grid-cols-[1fr,1.5fr]">
+                <div className="space-y-3">
+                  <h2 className="text-lg font-semibold text-foreground">Provide your menu</h2>
+                  <p className="text-sm text-muted-foreground">
+                    We’ll store a copy securely, send it to our LLM extraction service, and return structured dishes within minutes.
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  {methodRequiresFile(selectedMethod) ? (
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium text-muted-foreground">Upload file</Label>
+                      <Input
+                        type="file"
+                        accept={activeOption?.accept}
+                        capture={selectedMethod === "image" ? "environment" : undefined}
+                        onChange={event => {
+                          const selected = event.target.files?.[0] ?? null;
+                          setFile(selected);
+                        }}
+                        className="h-12"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {selectedMethod === "pdf"
+                          ? "Accepted format: PDF up to 10MB"
+                          : "Accepted formats: JPG, PNG or HEIC up to 10MB"}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium text-muted-foreground">Menu URL</Label>
+                      <Input
+                        type="url"
+                        placeholder="https://restaurant.com/menu"
+                        value={urlValue}
+                        onChange={event => setUrlValue(event.target.value)}
+                        className="h-12"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : null}
+
+            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+            {selectedMethod && selectedMethod !== "manual" ? (
+              <div className="flex items-center gap-3">
+                <Button type="submit" disabled={isSubmitting} className="h-12 px-8 text-base font-semibold">
+                  {isSubmitting ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Uploading…
+                    </span>
+                  ) : (
+                    "Upload menu"
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => navigate("/?tab=add")}
+                  className="h-12 px-6"
+                >
+                  Add dishes manually
+                </Button>
+              </div>
+            ) : null}
+          </Card>
+        </form>
+
+        {result ? (
+          <Card className="p-6 space-y-6 border-primary/30 bg-primary/5">
+            <div className="space-y-1">
+              <h2 className="text-xl font-semibold text-foreground">Upload processed</h2>
+              <p className="text-sm text-muted-foreground">
+                We extracted {result.created_recipe_ids.length} dish{result.created_recipe_ids.length === 1 ? "" : "es"} and populated their
+                ingredients. Review and confirm them in your recipe book.
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              {result.stages.map(stage => {
+                const tone = statusTone[stage.status] ?? statusTone.pending;
+                const label = stageLabels[stage.stage] ?? stage.stage;
+                const parsed = parseDetails(stage.details);
+                return (
+                  <div key={stage.stage} className="rounded-xl border border-border bg-card/60 p-4 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-foreground">{label}</p>
+                      <Badge variant={tone.variant}>{tone.label}</Badge>
+                    </div>
+                    {parsed ? (
+                      <div className="text-xs text-muted-foreground space-y-1">
+                        {typeof parsed === "string" ? (
+                          <p>{parsed}</p>
+                        ) : (
+                          Object.entries(parsed).map(([key, value]) => (
+                            <p key={key} className="capitalize">
+                              {key.replace(/_/g, " ")}: <span className="font-medium">{String(value)}</span>
+                            </p>
+                          ))
+                        )}
+                      </div>
+                    ) : null}
+                    <div className="text-[11px] text-muted-foreground space-y-1">
+                      {formatDate(stage.started_at) ? <p>Started: {formatDate(stage.started_at)}</p> : null}
+                      {formatDate(stage.completed_at) ? <p>Completed: {formatDate(stage.completed_at)}</p> : null}
+                      {stage.error_message ? <p className="text-destructive">{stage.error_message}</p> : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <Button onClick={() => navigate("/?tab=recipes")}>Review extracted dishes</Button>
+              <Button variant="outline" onClick={() => navigate("/?tab=add")}>Add another dish manually</Button>
+            </div>
+          </Card>
+        ) : null}
+      </div>
+    </main>
+  );
+};
+
+export default MenuUploadPage;
