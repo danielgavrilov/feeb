@@ -1,16 +1,21 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Check, Trash2, Plus } from "lucide-react";
+import { toast } from "sonner";
 
 export interface IngredientState {
   name: string;
   quantity: string;
   unit: string;
   confirmed: boolean;
-  allergens?: string[];
+  allergens?: Array<{
+    code: string;
+    name: string;
+    certainty?: string;
+  }>;
   dietaryInfo?: string[];
 }
 
@@ -43,83 +48,126 @@ export const IngredientsList = ({
       setNewUnit("g");
     }
   };
+  const hasAnyAllergens = useMemo(
+    () => ingredients.some((ingredient) => (ingredient.allergens?.length ?? 0) > 0),
+    [ingredients]
+  );
+
   return (
     <div className="space-y-4">
       <Label className="text-xl font-semibold text-foreground">Ingredients</Label>
       <div className="space-y-3">
-        {ingredients.map((ingredient, index) => (
-          <div
-            key={index}
-            className={`p-4 rounded-lg border-2 transition-all ${
-              ingredient.confirmed
-                ? "bg-confirmed border-confirmed"
-                : "bg-inferred border-inferred border-dashed"
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-2">
-                  <span
-                    className={`text-lg font-medium ${
-                      ingredient.confirmed ? "text-confirmed-foreground" : "text-inferred-foreground"
-                    }`}
-                  >
-                    {ingredient.name}
-                  </span>
-                  {ingredient.confirmed && (
-                    <Check className="w-5 h-5 text-confirmed-foreground" />
+        {ingredients.map((ingredient, index) => {
+          const handleConfirmClick = () => {
+            if (!ingredient.quantity.trim() || !ingredient.unit.trim()) {
+              toast.error("Please confirm quantity");
+              return;
+            }
+            onConfirmIngredient(index);
+          };
+
+          return (
+            <div
+              key={index}
+              className={`p-4 rounded-lg border-2 transition-all ${
+                ingredient.confirmed
+                  ? "bg-confirmed border-confirmed"
+                  : "bg-inferred border-inferred border-dashed"
+              }`}
+            >
+              <div className="grid gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+                <div className="space-y-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`text-lg font-medium ${
+                          ingredient.confirmed ? "text-confirmed-foreground" : "text-inferred-foreground"
+                        }`}
+                      >
+                        {ingredient.name}
+                      </span>
+                      {ingredient.confirmed && (
+                        <Check className="w-5 h-5 text-confirmed-foreground" />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {!ingredient.confirmed && (
+                        <button
+                          onClick={handleConfirmClick}
+                          className="h-11 px-5 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition-opacity"
+                        >
+                          Confirm
+                        </button>
+                      )}
+                      <Button
+                        onClick={() => onDeleteIngredient(index)}
+                        variant="outline"
+                        size="icon"
+                        className="h-11 w-11 border-2 hover:bg-destructive hover:text-destructive-foreground"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Input
+                      type="number"
+                      value={ingredient.quantity}
+                      onChange={(e) => onUpdateIngredient(index, e.target.value)}
+                      className="h-11 w-28 text-lg font-medium"
+                    />
+                    <Select
+                      value={ingredient.unit || undefined}
+                      onValueChange={(value) => onUpdateIngredientUnit(index, value)}
+                    >
+                      <SelectTrigger className="h-11 w-32 text-lg">
+                        <SelectValue placeholder="Unit" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="g">g</SelectItem>
+                        <SelectItem value="kg">kg</SelectItem>
+                        <SelectItem value="ml">ml</SelectItem>
+                        <SelectItem value="l">l</SelectItem>
+                        <SelectItem value="tsp">tsp</SelectItem>
+                        <SelectItem value="tbsp">tbsp</SelectItem>
+                        <SelectItem value="cup">cup</SelectItem>
+                        <SelectItem value="pcs">pcs</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div
+                  className={`rounded-lg border ${
+                    hasAnyAllergens ? "border-border bg-background" : "border-border/60 bg-background/60"
+                  } p-4`}
+                >
+                  <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Allergens</p>
+                  {ingredient.allergens && ingredient.allergens.length > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {ingredient.allergens.map((allergen, allergenIndex) => (
+                        <span
+                          key={`${allergen.code ?? "unknown"}-${allergen.name ?? allergenIndex}`}
+                          className="inline-flex items-center rounded-full bg-destructive/10 px-3 py-1 text-xs font-semibold text-destructive"
+                        >
+                          {allergen.name || allergen.code}
+                          {allergen.certainty && (
+                            <span className="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                              {allergen.certainty}
+                            </span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm text-muted-foreground">No allergens recorded</p>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                    value={ingredient.quantity}
-                    onChange={(e) => onUpdateIngredient(index, e.target.value)}
-                    className={`h-12 w-24 text-lg font-medium ${
-                      ingredient.confirmed ? "bg-card" : "bg-card"
-                    }`}
-                  />
-                  <Select
-                    value={ingredient.unit}
-                    onValueChange={(value) => onUpdateIngredientUnit(index, value)}
-                  >
-                    <SelectTrigger className="h-12 w-28 text-lg">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="g">g</SelectItem>
-                      <SelectItem value="kg">kg</SelectItem>
-                      <SelectItem value="ml">ml</SelectItem>
-                      <SelectItem value="l">l</SelectItem>
-                      <SelectItem value="tsp">tsp</SelectItem>
-                      <SelectItem value="tbsp">tbsp</SelectItem>
-                      <SelectItem value="cup">cup</SelectItem>
-                      <SelectItem value="pcs">pcs</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {!ingredient.confirmed && (
-                  <button
-                    onClick={() => onConfirmIngredient(index)}
-                    className="h-12 px-6 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition-opacity"
-                  >
-                    Confirm
-                  </button>
-                )}
-                <Button
-                  onClick={() => onDeleteIngredient(index)}
-                  variant="outline"
-                  size="icon"
-                  className="h-12 w-12 border-2 hover:bg-destructive hover:text-destructive-foreground"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </Button>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="pt-4 border-t-2 border-border border-dashed">

@@ -15,6 +15,11 @@ export interface SavedDish {
     quantity: string;
     unit: string;
     confirmed?: boolean;
+    allergens?: Array<{
+      code: string;
+      name: string;
+      certainty?: string;
+    }>;
   }>;
   prepMethod: string;
   compliance: Record<string, boolean>;
