@@ -678,3 +678,43 @@ async def add_recipe_ingredient(
     
     return {"status": "success", "message": "Ingredient added to recipe"}
 
+
+@router.put("/recipes/{recipe_id}/ingredients/{ingredient_id}")
+async def update_recipe_ingredient(
+    recipe_id: int,
+    ingredient_id: int,
+    ingredient_data: RecipeIngredientRequest,
+    session: AsyncSession = Depends(get_db)
+):
+    """
+    Update an ingredient in a recipe.
+    
+    - **recipe_id**: Recipe ID
+    - **ingredient_id**: Ingredient ID
+    - **quantity**: Optional quantity
+    - **unit**: Optional unit
+    - **notes**: Optional notes
+    - **confirmed**: Optional confirmation status
+    
+    Returns success status.
+    """
+    # Verify recipe exists
+    recipe = await dal.get_recipe_by_id(session, recipe_id)
+    if not recipe:
+        raise HTTPException(status_code=404, detail=f"Recipe with ID {recipe_id} not found")
+    
+    # Update via add_recipe_ingredient (which does upsert)
+    await dal.add_recipe_ingredient(
+        session,
+        recipe_id=recipe_id,
+        ingredient_id=ingredient_id,
+        quantity=ingredient_data.quantity,
+        unit=ingredient_data.unit,
+        notes=ingredient_data.notes,
+        confirmed=ingredient_data.confirmed if ingredient_data.confirmed is not None else False
+    )
+    
+    await session.commit()
+    
+    return {"status": "success", "message": "Ingredient updated"}
+

@@ -1,9 +1,10 @@
 import { DIETARY_CATEGORIES } from "@/data/recipes";
-import { Check, X, Camera, Upload } from "lucide-react";
+import { Check, X, Camera, Upload, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useRef } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface ComplianceOverviewProps {
   compliance: Record<string, boolean>;
@@ -11,9 +12,17 @@ interface ComplianceOverviewProps {
   onSave?: () => void;
   image?: string;
   onImageChange?: (image: string) => void;
+  allIngredientsConfirmed?: boolean;
 }
 
-export const ComplianceOverview = ({ compliance, onStartNew, onSave, image, onImageChange }: ComplianceOverviewProps) => {
+export const ComplianceOverview = ({ 
+  compliance, 
+  onStartNew, 
+  onSave, 
+  image, 
+  onImageChange,
+  allIngredientsConfirmed = false 
+}: ComplianceOverviewProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -31,6 +40,24 @@ export const ComplianceOverview = ({ compliance, onStartNew, onSave, image, onIm
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-foreground">Dietary Compliance</h2>
+      
+      {!allIngredientsConfirmed && (
+        <Alert variant="default" className="border-amber-500 bg-amber-50 dark:bg-amber-950">
+          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          <AlertDescription className="text-amber-800 dark:text-amber-200">
+            Some ingredients are not yet confirmed. Go back to confirm all ingredients to mark this recipe as reviewed.
+          </AlertDescription>
+        </Alert>
+      )}
+      
+      {allIngredientsConfirmed && (
+        <Alert variant="default" className="border-green-500 bg-green-50 dark:bg-green-950">
+          <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
+          <AlertDescription className="text-green-800 dark:text-green-200">
+            All ingredients confirmed! This recipe will be marked as reviewed when you save it.
+          </AlertDescription>
+        </Alert>
+      )}
       <div className="grid grid-cols-2 gap-4">
         {DIETARY_CATEGORIES.map((category) => {
           const isCompliant = compliance[category.id];

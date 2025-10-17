@@ -165,6 +165,9 @@ const Index = () => {
     }
 
     try {
+      // Check if all ingredients are confirmed
+      const allIngredientsConfirmed = ingredients.length > 0 && ingredients.every(ing => ing.confirmed);
+      
       // For now, we're saving recipes without ingredient links
       // TODO: Implement ingredient search and linking
       if (editingDishId) {
@@ -176,8 +179,9 @@ const Index = () => {
           serving_size: servingSize,
           price,
           image: dishImage,
+          confirmed: allIngredientsConfirmed,
         });
-        toast.success("Dish updated");
+        toast.success(allIngredientsConfirmed ? "Dish reviewed and confirmed" : "Dish updated");
       } else {
         await createRecipeAPI({
           restaurant_id: restaurant.id,
@@ -189,8 +193,9 @@ const Index = () => {
           price,
           image: dishImage,
           ingredients: [], // TODO: Map ingredients to ingredient IDs
+          confirmed: allIngredientsConfirmed,
         });
-        toast.success("Dish saved");
+        toast.success(allIngredientsConfirmed ? "Dish saved and confirmed" : "Dish saved");
       }
 
       handleStartNew();
@@ -353,6 +358,7 @@ const Index = () => {
                   onSave={handleSaveDish}
                   image={dishImage}
                   onImageChange={setDishImage}
+                  allIngredientsConfirmed={ingredients.length > 0 && ingredients.every(ing => ing.confirmed)}
                 />
               )}
 

@@ -303,6 +303,17 @@ export async function addRecipeIngredient(
   });
 }
 
+export async function updateRecipeIngredient(
+  recipeId: number,
+  ingredientId: number,
+  updates: Partial<CreateRecipeIngredient>
+): Promise<void> {
+  return fetchAPI(`/recipes/${recipeId}/ingredients/${ingredientId}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+}
+
 // ============================================================================
 // Menu upload API
 // ============================================================================
