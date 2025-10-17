@@ -24,8 +24,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Trash2, Edit } from "lucide-react";
+import { Trash2, Edit, AlertTriangle } from "lucide-react";
 
 export type RecipeBulkAction =
   | "delete"
@@ -147,13 +148,13 @@ export const RecipeBook = ({ dishes, onDelete, onEdit, onBulkAction }: RecipeBoo
   };
 
   const actionDetails: Partial<Record<RecipeBulkAction, string>> = {
-    delete: "this action cannot be undone",
+    delete: "This means these dishes will be permanently deleted from the recipe book and your menu. This action cannot be undone.",
     addToMenu:
-      "this means customers in your restaurant will be able to view and order this dish",
+      "This means customers in your restaurant will be able to view and order this dish",
     removeFromMenu:
-      "this means customers in your restaurant will no longer be able to view and order this dish",
+      "This means customers in your restaurant will no longer be able to view and order this dish",
     markForReview:
-      "this means you will accept the unchecked ingredient and allergen list, which may contain errors",
+      "This means you will need to re-confirm the ingredients and allergens for this dish.",
   };
 
   const openBulkDialog = (action: RecipeBulkAction) => {
@@ -411,13 +412,70 @@ export const RecipeBook = ({ dishes, onDelete, onEdit, onBulkAction }: RecipeBoo
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm bulk action</AlertDialogTitle>
             <AlertDialogDescription>
-              {bulkAction
-                ? `Are you sure you want to ${actionLabels[bulkAction].toLowerCase()} ${selectedCount} ${selectedCount === 1 ? "recipe" : "recipes"}?`
-                : "Select an action to continue."}
+              {bulkAction ? (
+                <>
+                  {bulkAction === "delete" && (
+                    <>
+                      Are you sure you want to delete{" "}
+                      <strong>
+                        {selectedCount} {selectedCount === 1 ? "recipe" : "recipes"}
+                      </strong>
+                      ?
+                    </>
+                  )}
+                  {bulkAction === "markForReview" && (
+                    <>
+                      Are you sure you want to mark{" "}
+                      <strong>
+                        {selectedCount} {selectedCount === 1 ? "recipe" : "recipes"}
+                      </strong>{" "}
+                      for review?
+                    </>
+                  )}
+                  {bulkAction === "markAsReviewed" && (
+                    <>
+                      Are you sure you want to mark{" "}
+                      <strong>
+                        {selectedCount} {selectedCount === 1 ? "recipe" : "recipes"}
+                      </strong>{" "}
+                      as reviewed?
+                    </>
+                  )}
+                  {bulkAction === "addToMenu" && (
+                    <>
+                      Are you sure you want to add{" "}
+                      <strong>
+                        {selectedCount} {selectedCount === 1 ? "recipe" : "recipes"}
+                      </strong>{" "}
+                      to menu?
+                    </>
+                  )}
+                  {bulkAction === "removeFromMenu" && (
+                    <>
+                      Are you sure you want to remove{" "}
+                      <strong>
+                        {selectedCount} {selectedCount === 1 ? "recipe" : "recipes"}
+                      </strong>{" "}
+                      from menu?
+                    </>
+                  )}
+                  {!bulkAction && "Select an action to continue."}
+                </>
+              ) : (
+                "Select an action to continue."
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {bulkAction && actionDetails[bulkAction] && (
             <p className="text-sm text-muted-foreground">{actionDetails[bulkAction]}</p>
+          )}
+          {bulkAction === "markAsReviewed" && (
+            <Alert variant="destructive" className="mt-2">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Warning:</strong> This means you will mark the ingredients and allergens for {selectedCount === 1 ? "this dish" : "these dishes"} as reviewed without checking them. We do not recommend this, as ingredient lists can contain errors and you may wrongly inform your customers about allergens.
+              </AlertDescription>
+            </Alert>
           )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isProcessingBulk}>Cancel</AlertDialogCancel>
