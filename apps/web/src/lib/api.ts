@@ -60,6 +60,7 @@ export interface Recipe {
   special_notes?: string | null;
   prominence_score?: number | null;
   confirmed: boolean;
+  is_on_menu: boolean;
   created_at: string;
   ingredients: RecipeIngredient[];
 }
@@ -86,6 +87,7 @@ export interface CreateRecipeRequest {
   special_notes?: string;
   prominence_score?: number;
   confirmed?: boolean;
+  is_on_menu?: boolean;
 }
 
 export interface UpdateRecipeRequest {
@@ -100,6 +102,7 @@ export interface UpdateRecipeRequest {
   special_notes?: string;
   prominence_score?: number;
   confirmed?: boolean;
+  is_on_menu?: boolean;
 }
 
 export type MenuUploadSourceType = 'pdf' | 'image' | 'url';
