@@ -344,6 +344,31 @@ const Index = () => {
     }
   };
 
+  const handleToggleMenuStatus = async (id: string, nextStatus: boolean) => {
+    const recipeId = Number(id);
+    if (Number.isNaN(recipeId)) {
+      return;
+    }
+
+    const recipe = recipes.find((item) => item.id === recipeId);
+
+    try {
+      await updateRecipeAPI(recipeId, { is_on_menu: nextStatus });
+      const message = recipe
+        ? nextStatus
+          ? `${recipe.name} is now live on your menu`
+          : `${recipe.name} was removed from your menu`
+        : nextStatus
+          ? "Recipe is now live on your menu"
+          : "Recipe was removed from your menu";
+      toast.success(message);
+    } catch (error) {
+      console.error("Failed to update menu status", error);
+      toast.error("Unable to update the recipe's menu status");
+      throw error;
+    }
+  };
+
   const handleEditDish = (id: string) => {
     const recipe = recipes.find((item) => item.id.toString() === id);
     if (!recipe) return;
@@ -505,6 +530,7 @@ const Index = () => {
                 onDelete={handleDeleteDish}
                 onEdit={handleEditDish}
                 onBulkAction={handleBulkRecipeAction}
+                onToggleMenuStatus={handleToggleMenuStatus}
               />
             </div>
           </TabsContent>
