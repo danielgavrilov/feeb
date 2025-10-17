@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Restaurant } from "@/lib/api";
 
@@ -12,13 +13,17 @@ interface SettingsProps {
   restaurants: Restaurant[];
   onCreateRestaurant: (name: string, description?: string) => Promise<Restaurant>;
   onSelectRestaurant: (restaurantId: number) => void;
+  showMenuImages: boolean;
+  onToggleMenuImages: (show: boolean) => void;
 }
 
-export const Settings = ({ 
-  restaurant, 
-  restaurants, 
-  onCreateRestaurant, 
-  onSelectRestaurant 
+export const Settings = ({
+  restaurant,
+  restaurants,
+  onCreateRestaurant,
+  onSelectRestaurant,
+  showMenuImages,
+  onToggleMenuImages,
 }: SettingsProps) => {
   const [newRestaurantName, setNewRestaurantName] = useState("");
   const [newRestaurantDescription, setNewRestaurantDescription] = useState("");
@@ -55,8 +60,8 @@ export const Settings = ({
               <Label htmlFor="select-restaurant" className="text-lg font-semibold mb-2 block">
                 Current Restaurant
               </Label>
-              <Select 
-                value={restaurant?.id.toString()} 
+              <Select
+                value={restaurant?.id.toString()}
                 onValueChange={(value) => onSelectRestaurant(parseInt(value))}
               >
                 <SelectTrigger className="h-12 text-lg">
@@ -74,6 +79,21 @@ export const Settings = ({
           </div>
         </Card>
       )}
+
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold text-foreground mb-4">Menu Preferences</h3>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <Label htmlFor="menu-images" className="text-base font-semibold text-foreground">
+              Show images on menu
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              Toggle dish photos on the menu page. Images are hidden by default.
+            </p>
+          </div>
+          <Switch id="menu-images" checked={showMenuImages} onCheckedChange={onToggleMenuImages} />
+        </div>
+      </Card>
 
       <Card className="p-6">
         <h3 className="text-lg font-semibold text-foreground mb-4">

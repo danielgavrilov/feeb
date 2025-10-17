@@ -41,6 +41,7 @@ const Index = () => {
   const [dishImage, setDishImage] = useState("");
   const [editingDishId, setEditingDishId] = useState<number | null>(null);
   const [showPrepMethod, setShowPrepMethod] = useState(false);
+  const [showMenuImages, setShowMenuImages] = useState(false);
   const prepInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Convert API recipes to SavedDish format for existing components
@@ -536,19 +537,22 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="menu">
-            <MenuView 
+            <MenuView
               dishes={savedDishes}
               restaurantName={restaurant?.name || "My Restaurant"}
+              showImages={showMenuImages}
             />
           </TabsContent>
 
           <TabsContent value="settings">
             <div className="bg-card rounded-xl shadow-lg p-8">
-              <Settings 
+              <Settings
                 restaurant={restaurant}
                 restaurants={restaurants}
                 onCreateRestaurant={createRestaurantAPI}
                 onSelectRestaurant={selectRestaurant}
+                showMenuImages={showMenuImages}
+                onToggleMenuImages={setShowMenuImages}
               />
             </div>
           </TabsContent>
