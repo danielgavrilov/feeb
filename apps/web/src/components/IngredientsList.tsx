@@ -169,15 +169,20 @@ export const IngredientsList = ({
                                 const certaintyLabel = (allergen.certainty || (ingredient.confirmed ? "confirmed" : "predicted"))
                                   .toLowerCase();
                                 const displayLabel = `${certaintyLabel.charAt(0).toUpperCase()}${certaintyLabel.slice(1)}`;
+                                const statusClassName =
+                                  certaintyLabel === "confirmed"
+                                    ? "text-primary"
+                                    : "text-muted-foreground";
+
                                 return (
                                   <span
                                     key={`${allergen.code ?? "unknown"}-${allergen.name ?? allergenIndex}`}
-                                    className="inline-flex items-center gap-2 rounded-full border border-orange-300 bg-orange-100 px-3 py-1 text-xs"
+                                    className="inline-flex items-center gap-2 rounded-full border border-secondary/40 bg-secondary/15 px-3 py-1 text-xs"
                                   >
-                                    <span className="text-sm font-semibold text-purple-700">
+                                    <span className="text-sm font-semibold text-secondary">
                                       {allergen.name || allergen.code}
                                     </span>
-                                    <span className="text-[10px] uppercase tracking-wide text-purple-500">
+                                    <span className={`text-[10px] uppercase tracking-wide ${statusClassName}`}>
                                       {displayLabel}
                                     </span>
                                   </span>
