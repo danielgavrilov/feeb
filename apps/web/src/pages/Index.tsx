@@ -57,6 +57,7 @@ const Index = () => {
     prepMethod: recipe.instructions || "",
     compliance: {}, // We'll compute this from ingredients
     image: recipe.image || "",
+    confirmed: recipe.confirmed,
   }));
 
   const handleRecipeMatch = (recipeKey: string) => {
@@ -216,7 +217,7 @@ const Index = () => {
     setCompliance(dish.compliance);
     setDishImage(dish.image || "");
     setStep("name");
-    setActiveTab("add");
+    handleTabChange("add");
   };
 
   useEffect(() => {
@@ -269,7 +270,7 @@ const Index = () => {
               Landing
             </TabsTrigger>
             <TabsTrigger value="add" className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base">
-              Add Dish
+              Add/Edit Dish
             </TabsTrigger>
             <TabsTrigger value="recipes" className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base">
               Recipe Book
@@ -301,6 +302,7 @@ const Index = () => {
                   onServingSizeChange={setServingSize}
                   price={price}
                   onPriceChange={setPrice}
+                  existingDishNames={savedDishes.map((dish) => dish.name)}
                 />
               )}
 
