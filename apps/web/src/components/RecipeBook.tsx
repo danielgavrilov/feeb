@@ -65,9 +65,16 @@ interface RecipeBookProps {
   onDelete: (id: string) => void;
   onEdit: (id: string) => void;
   onBulkAction: (action: RecipeBulkAction, ids: string[]) => Promise<void> | void;
+  onToggleMenuStatus: (id: string, nextStatus: boolean) => Promise<void> | void;
 }
 
-export const RecipeBook = ({ dishes, onDelete, onEdit, onBulkAction }: RecipeBookProps) => {
+export const RecipeBook = ({
+  dishes,
+  onDelete,
+  onEdit,
+  onBulkAction,
+  onToggleMenuStatus,
+}: RecipeBookProps) => {
   if (dishes.length === 0) {
     return (
       <div className="text-center py-12">
@@ -84,6 +91,7 @@ export const RecipeBook = ({ dishes, onDelete, onEdit, onBulkAction }: RecipeBoo
   const [bulkAction, setBulkAction] = useState<RecipeBulkAction | null>(null);
   const [isBulkDialogOpen, setIsBulkDialogOpen] = useState(false);
   const [isProcessingBulk, setIsProcessingBulk] = useState(false);
+  const [menuUpdatingIds, setMenuUpdatingIds] = useState<string[]>([]);
 
   const categories = useMemo(
     () =>
@@ -130,11 +138,11 @@ export const RecipeBook = ({ dishes, onDelete, onEdit, onBulkAction }: RecipeBoo
   };
 
   const handleSelectAll = () => {
-    if (selectedIds.length === filteredDishes.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(filteredDishes.map((dish) => dish.id));
-    }
+    setSelectedIds(filteredDishes.map((dish) => dish.id));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedIds([]);
   };
 
   const selectedCount = selectedIds.length;
@@ -256,7 +264,10 @@ export const RecipeBook = ({ dishes, onDelete, onEdit, onBulkAction }: RecipeBoo
             </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={handleSelectAll}>
-                {selectedCount === filteredDishes.length ? "Clear selection" : "Select all"}
+                Select all
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleClearSelection}>
+                Clear selection
               </Button>
               <Button variant="outline" size="sm" onClick={() => openBulkDialog("markForReview")}>
                 Mark for review
@@ -285,6 +296,8 @@ export const RecipeBook = ({ dishes, onDelete, onEdit, onBulkAction }: RecipeBoo
           )}
           {filteredDishes.map((dish) => {
             const isSelected = selectedIds.includes(dish.id);
+            const isOnMenu = Boolean(dish.isOnMenu);
+            const isMenuUpdating = menuUpdatingIds.includes(dish.id);
 
             return (
               <Card
@@ -302,7 +315,9 @@ export const RecipeBook = ({ dishes, onDelete, onEdit, onBulkAction }: RecipeBoo
                 }}
                 className={cn(
                   "p-6 relative border-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                  isSelected ? "border-primary shadow-sm" : "border-border hover:border-primary/50",
+                  isSelected
+                    ? "border-[3px] border-orange-500 bg-amber-50 shadow-sm"
+                    : "border-border hover:border-primary/50",
                 )}
               >
                 {dish.image && (
@@ -333,70 +348,103 @@ export const RecipeBook = ({ dishes, onDelete, onEdit, onBulkAction }: RecipeBoo
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    {dish.confirmed ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <img
-                            src="/logo_with_tick.svg"
-                            alt="Recipe approved"
-                            className="h-6 w-6"
-                          />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          Ingredients have been manually confirmed.
-                        </TooltipContent>
-                      </Tooltip>
+                  <div className="flex flex-col items-end gap-3">
+                    {isOnMenu ? (
+                      <Badge
+                        aria-label="Recipe is live on the menu"
+                        className="border-purple-200 bg-purple-100 text-purple-700"
+                      >
+                        Live
+                      </Badge>
                     ) : (
+                      <button
+                        type="button"
+                        aria-label={`Add ${dish.name} to the menu`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (isMenuUpdating) {
+                            return;
+                          }
+
+                          setMenuUpdatingIds((prev) => [...prev, dish.id]);
+
+                          Promise.resolve(onToggleMenuStatus(dish.id, true))
+                            .catch(() => null)
+                            .finally(() =>
+                              setMenuUpdatingIds((prev) => prev.filter((id) => id !== dish.id))
+                            );
+                        }}
+                        disabled={isMenuUpdating}
+                        className="inline-flex items-center rounded-full border border-border bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted/80 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isMenuUpdating ? "Adding..." : "Add to Menu"}
+                      </button>
+                    )}
+                    <div className="flex items-center gap-2">
+                      {dish.confirmed ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <img
+                              src="/logo_with_tick.svg"
+                              alt="Recipe approved"
+                              className="h-6 w-6"
+                            />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Ingredients have been manually confirmed.
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onEdit(dish.id);
+                          }}
+                        >
+                          Review
+                        </Button>
+                      )}
                       <Button
-                        variant="secondary"
-                        size="sm"
+                        variant="ghost"
+                        size="icon"
                         onClick={(event) => {
                           event.stopPropagation();
                           onEdit(dish.id);
                         }}
                       >
-                        Review
+                        <Edit className="w-5 h-5" />
                       </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onEdit(dish.id);
-                      }}
-                    >
-                      <Edit className="w-5 h-5" />
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          <Trash2 className="w-5 h-5 text-destructive" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Delete recipe</AlertDialogTitle>
-                        </AlertDialogHeader>
-                        <AlertDialogDescription>
-                          Are you sure you want to delete this item?
-                        </AlertDialogDescription>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => onDelete(dish.id)}
-                            className="bg-destructive hover:bg-destructive/90"
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(event) => event.stopPropagation()}
                           >
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                            <Trash2 className="w-5 h-5 text-destructive" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete recipe</AlertDialogTitle>
+                          </AlertDialogHeader>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete this item?
+                          </AlertDialogDescription>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => onDelete(dish.id)}
+                              className="bg-destructive hover:bg-destructive/90"
+                            >
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </div>
                 </div>
 
