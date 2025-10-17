@@ -8,6 +8,14 @@ import { mockRestaurant, RestaurantProgress } from "@/data/mockRestaurant";
 
 interface LandingPageProps {
   restaurantName?: string;
+  menuUploaded?: boolean;
+  ingredientsConfirmed?: boolean;
+  customisationDone?: boolean;
+  imagesUploaded?: boolean;
+  showImages?: boolean;
+  totalRecipes?: number;
+  unconfirmedRecipes?: number;
+  onReviewFirstRecipe?: () => void;
 }
 
 interface QuickAction {
@@ -62,39 +70,88 @@ const quickActions: QuickAction[] = [
   },
 ];
 
-export const LandingPage = ({ restaurantName }: LandingPageProps) => {
-  const [restaurant] = useState<RestaurantProgress>({
-    ...mockRestaurant,
-    name: restaurantName ?? mockRestaurant.name,
-  });
-  const { nextStep, isSetupComplete } = useNextStep(restaurant);
+export const LandingPage = ({
+  restaurantName,
+  menuUploaded: menuUploadedProp,
+  ingredientsConfirmed: ingredientsConfirmedProp,
+  customisationDone: customisationDoneProp,
+  imagesUploaded: imagesUploadedProp,
+  showImages: showImagesProp,
+  totalRecipes = 0,
+  unconfirmedRecipes = 0,
+  onReviewFirstRecipe,
+}: LandingPageProps) => {
+  const effectiveMenuUploaded = menuUploadedProp ?? totalRecipes > 0;
+  const effectiveIngredientsConfirmed =
+    ingredientsConfirmedProp ?? (effectiveMenuUploaded ? unconfirmedRecipes === 0 : false);
+  const wantsImages = showImagesProp ?? mockRestaurant.showImages;
+  const effectiveImagesUploaded = imagesUploadedProp ?? mockRestaurant.imagesUploaded;
+
+  const restaurant = useMemo<RestaurantProgress>(
+    () => ({
+      name: restaurantName ?? mockRestaurant.name,
+      menuUploaded: effectiveMenuUploaded,
+      ingredientsConfirmed: effectiveIngredientsConfirmed,
+      customisationDone: customisationDoneProp ?? mockRestaurant.customisationDone,
+      imagesUploaded: effectiveImagesUploaded,
+      showImages: wantsImages,
+    }),
+    [
+      restaurantName,
+      effectiveMenuUploaded,
+      effectiveIngredientsConfirmed,
+      customisationDoneProp,
+      effectiveImagesUploaded,
+      wantsImages,
+    ],
+  );
+
+  const { nextStep, isSetupComplete } = useNextStep(restaurant, { unconfirmedRecipes });
   const carouselStep = isCarouselStep(nextStep) ? nextStep : null;
   const actionStep = carouselStep ? null : nextStep;
   const [upsellDismissed, setUpsellDismissed] = useState(false);
 
+  const reviewStatusMessage = useMemo(() => {
+    if (!effectiveMenuUploaded) {
+      return null;
+    }
+
+    if (unconfirmedRecipes > 0) {
+      return `${unconfirmedRecipes} ${unconfirmedRecipes === 1 ? "menu item" : "menu items"} still need confirmation`;
+    }
+
+    if (totalRecipes > 0) {
+      return "All menu items have been confirmed.";
+    }
+
+    return null;
+  }, [effectiveMenuUploaded, unconfirmedRecipes, totalRecipes]);
+
+  const isReviewAction = actionStep?.actionLabel === "Review recipe";
+
   const progressSteps = useMemo<ProgressStep[]>(() => {
     if (!restaurant) return [];
 
-    const wantsImages = restaurant.showImages ?? true;
+    const wantsImagesForStep = restaurant.showImages ?? true;
 
     return [
       {
         key: "upload",
-        label: "Upload",
+        label: "Upload menu",
         link: "/upload",
         completed: restaurant.menuUploaded,
         isCurrent: !restaurant.menuUploaded,
       },
       {
         key: "confirm",
-        label: "Confirm",
+        label: "Confirm ingredients",
         link: "/ingredients",
         completed: restaurant.ingredientsConfirmed,
         isCurrent: restaurant.menuUploaded && !restaurant.ingredientsConfirmed,
       },
       {
         key: "customise",
-        label: "Customise",
+        label: "Customise Menu",
         link: "/customise",
         completed: restaurant.customisationDone,
         isCurrent:
@@ -104,19 +161,19 @@ export const LandingPage = ({ restaurantName }: LandingPageProps) => {
       },
       {
         key: "photos",
-        label: "Photos",
+        label: "Add photos (optional)",
         link: "/photos",
-        completed: !wantsImages || restaurant.imagesUploaded,
+        completed: !wantsImagesForStep || restaurant.imagesUploaded,
         isCurrent:
           restaurant.menuUploaded &&
           restaurant.ingredientsConfirmed &&
           restaurant.customisationDone &&
-          wantsImages &&
+          wantsImagesForStep &&
           !restaurant.imagesUploaded,
       },
       {
         key: "live",
-        label: "Go Live",
+        label: "Set Menu Live",
         link: "/menu",
         completed: isSetupComplete,
         isCurrent: isSetupComplete,
@@ -133,7 +190,7 @@ export const LandingPage = ({ restaurantName }: LandingPageProps) => {
         className="rounded-3xl border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-rose-50 p-6 shadow-sm"
       >
         <p className="text-xs font-semibold uppercase tracking-wide text-orange-500">
-          {carouselStep ? "You’re live!" : "Let’s get you live"}
+        {carouselStep ? "You’re live!" : "Let’s get you live"}
         </p>
         {actionStep ? (
           <div className="mt-3 space-y-4">
@@ -144,10 +201,19 @@ export const LandingPage = ({ restaurantName }: LandingPageProps) => {
               <p className="text-sm leading-relaxed text-slate-700">
                 {actionStep.description}
               </p>
+              {isReviewAction && reviewStatusMessage ? (
+                <p className="text-xs font-semibold text-amber-600">{reviewStatusMessage}</p>
+              ) : null}
             </div>
-            <Button asChild className="w-full sm:w-auto">
-              <Link to={actionStep.actionLink}>{actionStep.actionLabel}</Link>
-            </Button>
+            {isReviewAction && onReviewFirstRecipe ? (
+              <Button className="w-full sm:w-auto" onClick={onReviewFirstRecipe}>
+                {actionStep.actionLabel}
+              </Button>
+            ) : (
+              <Button asChild className="w-full sm:w-auto">
+                <Link to={actionStep.actionLink}>{actionStep.actionLabel}</Link>
+              </Button>
+            )}
           </div>
         ) : (
           <div className="mt-3 space-y-4">

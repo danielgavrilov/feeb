@@ -65,6 +65,12 @@ const Index = () => {
     isOnMenu: recipe.is_on_menu,
   }));
 
+  const totalRecipes = recipes.length;
+  const unconfirmedRecipeCount = recipes.filter(recipe => !recipe.confirmed).length;
+  const hasRecipeImages = recipes.some(recipe => Boolean(recipe.image));
+  const menuUploadComplete = totalRecipes > 0 || hasRecipeImages;
+  const firstUnconfirmedRecipe = recipes.find(recipe => !recipe.confirmed);
+
   const populateFormFromRecipe = (recipe: Recipe) => {
     setEditingDishId(recipe.id);
     setDishName(recipe.name);
@@ -366,6 +372,20 @@ const Index = () => {
     setSearchParams(params, { replace: true });
   };
 
+  const handleReviewFirstUnconfirmed = () => {
+    if (firstUnconfirmedRecipe) {
+      populateFormFromRecipe(firstUnconfirmedRecipe);
+      return;
+    }
+
+    if (recipes.length > 0) {
+      populateFormFromRecipe(recipes[0]);
+      return;
+    }
+
+    handleTabChange("recipes");
+  };
+
   const canSave = () => dishName.trim().length > 0 && ingredients.length > 0;
 
   return (
@@ -405,7 +425,15 @@ const Index = () => {
           </TabsList>
 
           <TabsContent value="landing">
-            <LandingPage restaurantName={restaurant?.name ?? undefined} />
+            <LandingPage
+              restaurantName={restaurant?.name ?? undefined}
+              menuUploaded={menuUploadComplete}
+              ingredientsConfirmed={menuUploadComplete && unconfirmedRecipeCount === 0}
+              imagesUploaded={hasRecipeImages}
+              totalRecipes={totalRecipes}
+              unconfirmedRecipes={unconfirmedRecipeCount}
+              onReviewFirstRecipe={handleReviewFirstUnconfirmed}
+            />
           </TabsContent>
 
           <TabsContent value="add">
