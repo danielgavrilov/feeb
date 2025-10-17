@@ -20,6 +20,10 @@ export interface CarouselStep {
 
 export type NextStep = NextStepBase | CarouselStep;
 
+export interface UseNextStepOptions {
+  unconfirmedRecipes?: number;
+}
+
 export interface UseNextStepResult {
   nextStep: NextStep;
   isSetupComplete: boolean;
@@ -29,7 +33,10 @@ export const isCarouselStep = (step: NextStep): step is CarouselStep => "carouse
 
 export const useNextStep = (
   restaurant?: RestaurantProgress | null,
+  options: UseNextStepOptions = {},
 ): UseNextStepResult => {
+  const { unconfirmedRecipes } = options;
+
   return useMemo(() => {
     if (!restaurant) {
       return {
@@ -56,10 +63,12 @@ export const useNextStep = (
       };
     } else if (!restaurant.ingredientsConfirmed) {
       nextStep = {
-        title: "Confirm your ingredients",
-        description: "Make sure each dish has its ingredients and allergens checked.",
-        actionLabel: "Review Ingredients",
-        actionLink: "/ingredients",
+        title: "Let’s review your recipes.",
+        description:
+          "Confirm the ingredients for each of the meals you have uploaded to make sure we get the allergens right.",
+        actionLabel: "Review recipe",
+        actionLink:
+          unconfirmedRecipes && unconfirmedRecipes > 0 ? "/recipes?status=needs_review" : "/ingredients",
       };
     } else if (!restaurant.customisationDone) {
       nextStep = {
@@ -104,5 +113,5 @@ export const useNextStep = (
       (!wantsImages || restaurant.imagesUploaded);
 
     return { nextStep, isSetupComplete };
-  }, [restaurant]);
+  }, [restaurant, unconfirmedRecipes]);
 };
