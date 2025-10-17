@@ -7,12 +7,12 @@ Usage: python view_menu_data.py
 import asyncio
 import pandas as pd
 from sqlalchemy import text
-from app.database import get_async_session
+from app.database import AsyncSessionLocal
 
 
 async def view_table(table_name: str, limit: int = 10):
     """View the first N rows of a table in a pandas-like format."""
-    async for session in get_async_session():
+    async with AsyncSessionLocal() as session:
         result = await session.execute(text(f"SELECT * FROM {table_name} LIMIT {limit}"))
         rows = result.fetchall()
         columns = result.keys()
@@ -27,7 +27,6 @@ async def view_table(table_name: str, limit: int = 10):
         print("=" * 100)
         print(df.to_string(index=False))
         print()
-        break
 
 
 async def main():
