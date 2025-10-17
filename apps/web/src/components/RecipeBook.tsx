@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -25,7 +26,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Trash2, Edit, AlertTriangle } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Trash2, Edit, AlertTriangle, ArrowDown, ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type RecipeBulkAction =
@@ -60,6 +62,11 @@ export interface SavedDish {
   isOnMenu?: boolean;
 }
 
+type SectionDefinition = {
+  id: string;
+  label: string;
+};
+
 interface RecipeBookProps {
   dishes: SavedDish[];
   onDelete: (id: string) => void;
@@ -75,17 +82,9 @@ export const RecipeBook = ({
   onBulkAction,
   onToggleMenuStatus,
 }: RecipeBookProps) => {
-  if (dishes.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground text-lg">No dishes added yet.</p>
-        <p className="text-muted-foreground mt-2">Start by adding your first dish!</p>
-      </div>
-    );
-  }
-
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [reviewFilter, setReviewFilter] = useState<"all" | "reviewed" | "needs_review">("all");
+  const [recipeStatusFilter, setRecipeStatusFilter] =
+    useState<"all" | "reviewed" | "needs_review" | "live">("all");
   const [showIngredients, setShowIngredients] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState<RecipeBulkAction | null>(null);
@@ -95,6 +94,9 @@ export const RecipeBook = ({
   const [showLiveOnly, setShowLiveOnly] = useState(false);
   const [removalDialogDishId, setRemovalDialogDishId] = useState<string | null>(null);
   const [unconfirmedDialogDishId, setUnconfirmedDialogDishId] = useState<string | null>(null);
+  const [sections, setSections] = useState<SectionDefinition[]>([]);
+  const [isManageSectionsOpen, setIsManageSectionsOpen] = useState(false);
+  const [editingSections, setEditingSections] = useState<SectionDefinition[]>([]);
 
   const isRemovalUpdating = removalDialogDishId
     ? menuUpdatingIds.includes(removalDialogDishId)
@@ -112,23 +114,75 @@ export const RecipeBook = ({
     [dishes],
   );
 
+  useEffect(() => {
+    setSections((prev) => {
+      if (categories.length === 0) {
+        return [];
+      }
+
+      if (prev.length === 0) {
+        return categories.map((category) => ({ id: category, label: category }));
+      }
+
+      const next: SectionDefinition[] = [];
+      const seen = new Set<string>();
+
+      prev.forEach((section) => {
+        if (categories.includes(section.id)) {
+          next.push(section);
+          seen.add(section.id);
+        }
+      });
+
+      categories.forEach((category) => {
+        if (!seen.has(category)) {
+          next.push({ id: category, label: category });
+        }
+      });
+
+      if (next.length === prev.length && next.every((section, index) => section === prev[index])) {
+        return prev;
+      }
+
+      return next;
+    });
+  }, [categories]);
+
+  useEffect(() => {
+    if (selectedCategory !== "all" && !categories.includes(selectedCategory)) {
+      setSelectedCategory("all");
+    }
+  }, [categories, selectedCategory]);
+
+  const sectionLabelMap = useMemo(() => {
+    const map = new Map<string, string>();
+    sections.forEach((section) => {
+      map.set(section.id, section.label);
+    });
+    return map;
+  }, [sections]);
+
   const filteredDishes = useMemo(
     () =>
       dishes
         .filter((dish) => selectedCategory === "all" || dish.menuCategory === selectedCategory)
         .filter((dish) => {
-          if (reviewFilter === "reviewed") {
-            return dish.confirmed;
+          if (recipeStatusFilter === "live") {
+            return Boolean(dish.isOnMenu);
           }
 
-          if (reviewFilter === "needs_review") {
+          if (recipeStatusFilter === "reviewed") {
+            return dish.confirmed && !dish.isOnMenu;
+          }
+
+          if (recipeStatusFilter === "needs_review") {
             return !dish.confirmed;
           }
 
           return true;
         })
         .filter((dish) => (showLiveOnly ? Boolean(dish.isOnMenu) : true)),
-    [dishes, selectedCategory, reviewFilter, showLiveOnly],
+    [dishes, selectedCategory, recipeStatusFilter, showLiveOnly],
   );
 
   useEffect(() => {
@@ -159,6 +213,43 @@ export const RecipeBook = ({
   };
 
   const selectedCount = selectedIds.length;
+
+  const handleManageSectionsOpenChange = (open: boolean) => {
+    setIsManageSectionsOpen(open);
+    if (open) {
+      setEditingSections(sections.map((section) => ({ ...section })));
+    } else {
+      setEditingSections([]);
+    }
+  };
+
+  const handleSectionLabelChange = (index: number, label: string) => {
+    setEditingSections((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], label };
+      return next;
+    });
+  };
+
+  const moveEditingSection = (fromIndex: number, toIndex: number) => {
+    setEditingSections((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  };
+
+  const handleSaveSectionChanges = () => {
+    setSections(
+      editingSections.map((section) => ({
+        ...section,
+        label: section.label.trim() || section.id,
+      })),
+    );
+    setIsManageSectionsOpen(false);
+    setEditingSections([]);
+  };
 
   const actionLabels: Record<RecipeBulkAction, string> = {
     delete: "Delete",
@@ -208,33 +299,20 @@ export const RecipeBook = ({
     }
   };
 
+  if (dishes.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-muted-foreground text-lg">No dishes added yet.</p>
+        <p className="text-muted-foreground mt-2">Start by adding your first dish!</p>
+      </div>
+    );
+  }
+
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="space-y-4">
-        <div className="flex flex-col gap-4 mb-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="text-2xl font-bold text-foreground">Recipe Book</h2>
-            <Select
-              value={reviewFilter}
-              onValueChange={(value: "all" | "reviewed" | "needs_review") => setReviewFilter(value)}
-            >
-              <SelectTrigger id="review-filter" className="w-[180px]" aria-label="Review status">
-                <SelectValue>
-                  {reviewFilter === "all"
-                    ? "Review status"
-                    : reviewFilter === "reviewed"
-                      ? "Reviewed"
-                      : "Needs review"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="reviewed">Reviewed</SelectItem>
-                <SelectItem value="needs_review">Needs review</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <h2 className="text-2xl font-bold text-foreground">Recipe Book</h2>
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
               <Switch id="show-ingredients" checked={showIngredients} onCheckedChange={setShowIngredients} />
@@ -255,9 +333,98 @@ export const RecipeBook = ({
                 </TooltipContent>
               </Tooltip>
             </div>
+            <Select
+              value={recipeStatusFilter}
+              onValueChange={(value: "all" | "reviewed" | "needs_review" | "live") => setRecipeStatusFilter(value)}
+            >
+              <SelectTrigger id="recipe-status-filter" className="w-[200px]" aria-label="Recipe status">
+                <SelectValue>
+                  {recipeStatusFilter === "all"
+                    ? "Recipe status"
+                    : recipeStatusFilter === "reviewed"
+                      ? "Reviewed"
+                      : recipeStatusFilter === "needs_review"
+                        ? "Needs Review"
+                        : "Live"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="needs_review">Needs Review</SelectItem>
+                <SelectItem value="reviewed">Reviewed</SelectItem>
+                <SelectItem value="live">Live</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
+        </div>
 
-          {categories.length > 0 && (
+        {sections.length > 0 && (
+          <Card className="p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Sections</h3>
+                <p className="text-xs text-muted-foreground">Choose which section of your recipe book to view.</p>
+              </div>
+              <Dialog open={isManageSectionsOpen} onOpenChange={handleManageSectionsOpenChange}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    Manage sections
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Manage sections</DialogTitle>
+                    <DialogDescription>Rename or reorder how sections appear in your recipe book.</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-3">
+                    {editingSections.length === 0 && (
+                      <p className="text-sm text-muted-foreground">There are no sections to manage yet.</p>
+                    )}
+                    {editingSections.map((section, index) => (
+                      <div key={section.id} className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm text-muted-foreground w-6 text-right">{index + 1}.</span>
+                        <Input
+                          value={section.label}
+                          onChange={(event) => handleSectionLabelChange(index, event.target.value)}
+                          aria-label={`Rename section ${section.label || section.id}`}
+                          className="flex-1 min-w-[180px]"
+                        />
+                        <div className="flex items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => moveEditingSection(index, index - 1)}
+                            disabled={index === 0}
+                            aria-label="Move section up"
+                          >
+                            <ArrowUp className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => moveEditingSection(index, index + 1)}
+                            disabled={index === editingSections.length - 1}
+                            aria-label="Move section down"
+                          >
+                            <ArrowDown className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <DialogFooter className="pt-2">
+                    <Button variant="outline" onClick={() => handleManageSectionsOpenChange(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleSaveSectionChanges} disabled={editingSections.length === 0}>
+                      Save changes
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
             <div className="flex flex-wrap gap-2">
               <Button
                 variant={selectedCategory === "all" ? "default" : "outline"}
@@ -266,19 +433,19 @@ export const RecipeBook = ({
               >
                 All sections
               </Button>
-              {categories.map((category) => (
+              {sections.map((section) => (
                 <Button
-                  key={category}
-                  variant={selectedCategory === category ? "default" : "outline"}
+                  key={section.id}
+                  variant={selectedCategory === section.id ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setSelectedCategory(category)}
+                  onClick={() => setSelectedCategory(section.id)}
                 >
-                  {category}
+                  {section.label}
                 </Button>
               ))}
             </div>
-          )}
-        </div>
+          </Card>
+        )}
 
         {selectedCount > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 p-4">
@@ -321,6 +488,28 @@ export const RecipeBook = ({
             const isSelected = selectedIds.includes(dish.id);
             const isOnMenu = Boolean(dish.isOnMenu);
             const isMenuUpdating = menuUpdatingIds.includes(dish.id);
+            const statusKey: "live" | "reviewed" | "needs_review" = isOnMenu
+              ? "live"
+              : dish.confirmed
+                ? "reviewed"
+                : "needs_review";
+            const statusLabel =
+              statusKey === "live"
+                ? "Live"
+                : statusKey === "reviewed"
+                  ? "Reviewed"
+                  : "Needs Review";
+            const statusClassName = cn(
+              "rounded-full px-3 py-1 text-xs font-semibold",
+              statusKey === "live"
+                ? "border-transparent bg-[color:var(--color-primary)] text-white"
+                : statusKey === "reviewed"
+                  ? "border-emerald-200 bg-emerald-100 text-emerald-800"
+                  : "border-amber-200 bg-amber-100 text-amber-900",
+            );
+            const displayCategory = dish.menuCategory
+              ? sectionLabelMap.get(dish.menuCategory) ?? dish.menuCategory
+              : undefined;
 
             return (
               <Card
@@ -359,8 +548,8 @@ export const RecipeBook = ({
                       )}
                     </div>
                     <div className="mt-3 flex gap-2 flex-wrap">
-                      {dish.menuCategory && (
-                        <Badge variant="outline">{dish.menuCategory}</Badge>
+                      {displayCategory && (
+                        <Badge variant="outline">{displayCategory}</Badge>
                       )}
                       {dish.servingSize !== "1" && (
                         <Badge variant="outline">Serves {dish.servingSize}</Badge>
@@ -372,21 +561,59 @@ export const RecipeBook = ({
                   </div>
 
                   <div className="flex flex-col items-end gap-3">
-                    <div className="flex items-center gap-2">
-                      {dish.confirmed ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <img
-                              src="/logo_with_tick.svg"
-                              alt="Recipe approved"
-                              className="h-6 w-6"
-                            />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            Ingredients have been manually confirmed.
-                          </TooltipContent>
-                        </Tooltip>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <Badge variant="outline" className={statusClassName}>
+                        {statusLabel}
+                      </Badge>
+                      {isOnMenu ? (
+                        <button
+                          type="button"
+                          aria-label={`Remove ${dish.name} from the menu`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (isMenuUpdating) {
+                              return;
+                            }
+
+                            setRemovalDialogDishId(dish.id);
+                          }}
+                          disabled={isMenuUpdating}
+                          className="inline-flex items-center rounded-full border border-transparent bg-[color:var(--color-primary)] px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-[color:var(--color-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[color:var(--color-secondary)] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isMenuUpdating ? "Updating..." : "Live"}
+                        </button>
                       ) : (
+                        <button
+                          type="button"
+                          aria-label={`Add ${dish.name} to the menu`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (isMenuUpdating) {
+                              return;
+                            }
+
+                            if (!dish.confirmed) {
+                              setUnconfirmedDialogDishId(dish.id);
+                              return;
+                            }
+
+                            setMenuUpdatingIds((prev) => [...prev, dish.id]);
+
+                            Promise.resolve(onToggleMenuStatus(dish.id, true))
+                              .catch(() => null)
+                              .finally(() =>
+                                setMenuUpdatingIds((prev) => prev.filter((id) => id !== dish.id))
+                              );
+                          }}
+                          disabled={isMenuUpdating}
+                          className="inline-flex items-center rounded-full border border-border bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted/80 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isMenuUpdating ? "Adding..." : "Add to menu"}
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {!dish.confirmed && (
                         <Button
                           variant="secondary"
                           size="sm"
@@ -405,6 +632,7 @@ export const RecipeBook = ({
                           event.stopPropagation();
                           onEdit(dish.id);
                         }}
+                        aria-label={`Edit ${dish.name}`}
                       >
                         <Edit className="w-5 h-5" />
                       </Button>
@@ -414,6 +642,7 @@ export const RecipeBook = ({
                             variant="ghost"
                             size="icon"
                             onClick={(event) => event.stopPropagation()}
+                            aria-label={`Delete ${dish.name}`}
                           >
                             <Trash2 className="w-5 h-5 text-destructive" />
                           </Button>
@@ -437,52 +666,6 @@ export const RecipeBook = ({
                         </AlertDialogContent>
                       </AlertDialog>
                     </div>
-                    {isOnMenu ? (
-                      <button
-                        type="button"
-                        aria-label={`Remove ${dish.name} from the menu`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          if (isMenuUpdating) {
-                            return;
-                          }
-
-                          setRemovalDialogDishId(dish.id);
-                        }}
-                        disabled={isMenuUpdating}
-                        className="inline-flex items-center rounded-full border border-transparent bg-[color:var(--color-primary)] px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-[color:var(--color-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[color:var(--color-secondary)] disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {isMenuUpdating ? "Updating..." : "Live"}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        aria-label={`Add ${dish.name} to the menu`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          if (isMenuUpdating) {
-                            return;
-                          }
-
-                          if (!dish.confirmed) {
-                            setUnconfirmedDialogDishId(dish.id);
-                            return;
-                          }
-
-                          setMenuUpdatingIds((prev) => [...prev, dish.id]);
-
-                          Promise.resolve(onToggleMenuStatus(dish.id, true))
-                            .catch(() => null)
-                            .finally(() =>
-                              setMenuUpdatingIds((prev) => prev.filter((id) => id !== dish.id))
-                            );
-                        }}
-                        disabled={isMenuUpdating}
-                        className="inline-flex items-center rounded-full border border-border bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted/80 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {isMenuUpdating ? "Adding..." : "Add to menu"}
-                      </button>
-                    )}
                   </div>
                 </div>
 
