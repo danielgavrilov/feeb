@@ -189,11 +189,12 @@ const Index = () => {
       toast.error("Add at least one ingredient");
       return;
     }
-    const hasIncompleteIngredient = ingredients.some(
+    const incompleteIngredient = ingredients.find(
       (ingredient) => !ingredient.quantity.trim() || !ingredient.unit.trim()
     );
-    if (hasIncompleteIngredient) {
-      toast.error("Please confirm quantity");
+    if (incompleteIngredient) {
+      const ingredientName = incompleteIngredient.name?.trim() || "this ingredient";
+      toast.error(`Please specify the quantity of ${ingredientName}`);
       return;
     }
 
@@ -255,6 +256,9 @@ const Index = () => {
 
       if (nextUnconfirmedRecipe) {
         populateFormFromRecipe(nextUnconfirmedRecipe);
+        if (typeof window !== "undefined") {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
       } else {
         handleStartNew();
         setActiveTab("recipes");
