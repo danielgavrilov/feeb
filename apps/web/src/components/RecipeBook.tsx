@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -27,6 +26,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Trash2, Edit, AlertTriangle } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export type RecipeBulkAction =
   | "delete"
@@ -283,127 +283,162 @@ export const RecipeBook = ({ dishes, onDelete, onEdit, onBulkAction }: RecipeBoo
               <p className="text-muted-foreground">No dishes match the selected filters.</p>
             </div>
           )}
-          {filteredDishes.map((dish) => (
-          <Card key={dish.id} className="p-6 relative">
-            <div className="absolute top-4 left-4">
-              <Checkbox
-                checked={selectedIds.includes(dish.id)}
-                onCheckedChange={(checked) => setSelectionState(dish.id, checked === true)}
+          {filteredDishes.map((dish) => {
+            const isSelected = selectedIds.includes(dish.id);
+
+            return (
+              <Card
+                key={dish.id}
+                role="checkbox"
+                aria-checked={isSelected}
                 aria-label={`Select ${dish.name}`}
-              />
-            </div>
-            {dish.image && (
-              <div className="w-full aspect-video rounded-lg overflow-hidden mb-4">
-                <img src={dish.image} alt={dish.name} className="w-full h-full object-cover" />
-              </div>
-            )}
-            <div className="flex justify-between items-start mb-4">
-              <div className="flex-1">
-                <div className="flex flex-col gap-2">
-                  <h3 className="text-xl font-bold text-foreground break-words md:max-w-[66%]">
-                    {dish.name}
-                  </h3>
-                  {dish.description && (
-                    <p className="text-sm text-muted-foreground md:max-w-[66%]">{dish.description}</p>
-                  )}
-                </div>
-                <div className="mt-3 flex gap-2 flex-wrap">
-                  {dish.menuCategory && (
-                    <Badge variant="outline">{dish.menuCategory}</Badge>
-                  )}
-                  {dish.servingSize !== "1" && (
-                    <Badge variant="outline">Serves {dish.servingSize}</Badge>
-                  )}
-                  {dish.price && (
-                    <Badge variant="outline">${dish.price}</Badge>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {dish.confirmed ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <img
-                        src="/logo_with_tick.svg"
-                        alt="Recipe approved"
-                        className="h-6 w-6"
-                      />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      Ingredients have been manually confirmed.
-                    </TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <Button variant="secondary" size="sm" onClick={() => onEdit(dish.id)}>
-                    Review
-                  </Button>
+                tabIndex={0}
+                onClick={() => setSelectionState(dish.id, !isSelected)}
+                onKeyDown={(event) => {
+                  if (event.key === " " || event.key === "Enter") {
+                    event.preventDefault();
+                    setSelectionState(dish.id, !isSelected);
+                  }
+                }}
+                className={cn(
+                  "p-6 relative border-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                  isSelected ? "border-primary shadow-sm" : "border-border hover:border-primary/50",
                 )}
-                <Button variant="ghost" size="icon" onClick={() => onEdit(dish.id)}>
-                  <Edit className="w-5 h-5" />
-                </Button>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="icon">
-                      <Trash2 className="w-5 h-5 text-destructive" />
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Delete recipe</AlertDialogTitle>
-                    </AlertDialogHeader>
-                    <AlertDialogDescription>
-                      Are you sure you want to delete this item?
-                    </AlertDialogDescription>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => onDelete(dish.id)} className="bg-destructive hover:bg-destructive/90">
-                        Delete
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
-            </div>
+              >
+                {dish.image && (
+                  <div className="w-full aspect-video rounded-lg overflow-hidden mb-4">
+                    <img src={dish.image} alt={dish.name} className="w-full h-full object-cover" />
+                  </div>
+                )}
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex-1">
+                    <div className="flex flex-col gap-2">
+                      <h3 className="text-xl font-bold text-foreground break-words md:max-w-[66%]">
+                        {dish.name}
+                      </h3>
+                      {dish.description && (
+                        <p className="text-sm text-muted-foreground md:max-w-[66%]">{dish.description}</p>
+                      )}
+                    </div>
+                    <div className="mt-3 flex gap-2 flex-wrap">
+                      {dish.menuCategory && (
+                        <Badge variant="outline">{dish.menuCategory}</Badge>
+                      )}
+                      {dish.servingSize !== "1" && (
+                        <Badge variant="outline">Serves {dish.servingSize}</Badge>
+                      )}
+                      {dish.price && (
+                        <Badge variant="outline">${dish.price}</Badge>
+                      )}
+                    </div>
+                  </div>
 
-            {showIngredients && (
-              <div className="mb-4">
-                <h4 className="font-semibold text-sm text-foreground mb-2">Ingredients:</h4>
-                <div className="grid grid-cols-2 gap-2">
-                  {dish.ingredients.map((ing, idx) => (
-                    <p key={idx} className="text-sm text-muted-foreground">
-                      {ing.quantity} {ing.unit} {ing.name}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {dish.prepMethod && (
-              <div className="mb-4">
-                <h4 className="font-semibold text-sm text-foreground mb-2">Preparation:</h4>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{dish.prepMethod}</p>
-              </div>
-            )}
-
-            {showIngredients && (
-              <div>
-                <h4 className="font-semibold text-sm text-foreground mb-2">Dietary Compliance:</h4>
-                <div className="flex gap-2 flex-wrap">
-                  {Object.entries(dish.compliance).map(([key, value]) => (
-                    <Badge
-                      key={key}
-                      variant={value ? "default" : "secondary"}
-                      className={value ? "bg-primary" : "bg-muted"}
+                  <div className="flex items-center gap-2">
+                    {dish.confirmed ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <img
+                            src="/logo_with_tick.svg"
+                            alt="Recipe approved"
+                            className="h-6 w-6"
+                          />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          Ingredients have been manually confirmed.
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onEdit(dish.id);
+                        }}
+                      >
+                        Review
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onEdit(dish.id);
+                      }}
                     >
-                      {key.replace("-", " ").toUpperCase()}
-                    </Badge>
-                  ))}
+                      <Edit className="w-5 h-5" />
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <Trash2 className="w-5 h-5 text-destructive" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete recipe</AlertDialogTitle>
+                        </AlertDialogHeader>
+                        <AlertDialogDescription>
+                          Are you sure you want to delete this item?
+                        </AlertDialogDescription>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => onDelete(dish.id)}
+                            className="bg-destructive hover:bg-destructive/90"
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
                 </div>
-              </div>
-            )}
-          </Card>
-        ))}
+
+                {showIngredients && (
+                  <div className="mb-4">
+                    <h4 className="font-semibold text-sm text-foreground mb-2">Ingredients:</h4>
+                    <div className="grid grid-cols-2 gap-2">
+                      {dish.ingredients.map((ing, idx) => (
+                        <p key={idx} className="text-sm text-muted-foreground">
+                          {ing.quantity} {ing.unit} {ing.name}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {dish.prepMethod && (
+                  <div className="mb-4">
+                    <h4 className="font-semibold text-sm text-foreground mb-2">Preparation:</h4>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{dish.prepMethod}</p>
+                  </div>
+                )}
+
+                {showIngredients && (
+                  <div>
+                    <h4 className="font-semibold text-sm text-foreground mb-2">Dietary Compliance:</h4>
+                    <div className="flex gap-2 flex-wrap">
+                      {Object.entries(dish.compliance).map(([key, value]) => (
+                        <Badge
+                          key={key}
+                          variant={value ? "default" : "secondary"}
+                          className={value ? "bg-primary" : "bg-muted"}
+                        >
+                          {key.replace("-", " ").toUpperCase()}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </Card>
+            );
+          })}
       </div>
       </div>
 

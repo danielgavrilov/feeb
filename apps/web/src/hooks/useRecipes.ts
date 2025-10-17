@@ -43,7 +43,7 @@ export function useRecipes(restaurantId: number | null) {
   const createRecipe = async (recipeData: CreateRecipeRequest): Promise<Recipe> => {
     try {
       const newRecipe = await apiCreateRecipe(recipeData);
-      setRecipes([...recipes, newRecipe]);
+      setRecipes((prevRecipes) => [...prevRecipes, newRecipe]);
       return newRecipe;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create recipe');
@@ -54,7 +54,7 @@ export function useRecipes(restaurantId: number | null) {
   const updateRecipe = async (recipeId: number, updates: UpdateRecipeRequest): Promise<Recipe> => {
     try {
       const updatedRecipe = await apiUpdateRecipe(recipeId, updates);
-      setRecipes(recipes.map(r => r.id === recipeId ? updatedRecipe : r));
+      setRecipes((prevRecipes) => prevRecipes.map((r) => (r.id === recipeId ? updatedRecipe : r)));
       return updatedRecipe;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update recipe');
@@ -65,7 +65,7 @@ export function useRecipes(restaurantId: number | null) {
   const deleteRecipe = async (recipeId: number): Promise<void> => {
     try {
       await apiDeleteRecipe(recipeId);
-      setRecipes(recipes.filter(r => r.id !== recipeId));
+      setRecipes((prevRecipes) => prevRecipes.filter((r) => r.id !== recipeId));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete recipe');
       throw err;
