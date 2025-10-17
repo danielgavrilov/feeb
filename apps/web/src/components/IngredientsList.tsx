@@ -1,9 +1,12 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Check, Trash2, Plus } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ALLERGEN_CATEGORIES } from "@/data/recipes";
+import { Check, Trash2, Plus, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 
 export interface IngredientState {
@@ -26,6 +29,14 @@ interface IngredientsListProps {
   onConfirmIngredient: (index: number) => void;
   onDeleteIngredient: (index: number) => void;
   onAddIngredient: (name: string, quantity: string, unit: string) => void;
+  onUpdateIngredientAllergens: (
+    index: number,
+    allergens: Array<{
+      code: string;
+      name: string;
+      certainty?: string;
+    }>
+  ) => void;
 }
 
 export const IngredientsList = ({
@@ -35,6 +46,7 @@ export const IngredientsList = ({
   onConfirmIngredient,
   onDeleteIngredient,
   onAddIngredient,
+  onUpdateIngredientAllergens,
 }: IngredientsListProps) => {
   const [newName, setNewName] = useState("");
   const [newQuantity, setNewQuantity] = useState("");
@@ -48,22 +60,42 @@ export const IngredientsList = ({
       setNewUnit("g");
     }
   };
-  const hasAnyAllergens = useMemo(
-    () => ingredients.some((ingredient) => (ingredient.allergens?.length ?? 0) > 0),
-    [ingredients]
-  );
-
   return (
     <div className="space-y-4">
       <Label className="text-xl font-semibold text-foreground">Ingredients</Label>
       <div className="space-y-3">
         {ingredients.map((ingredient, index) => {
+          const selectedAllergens = ingredient.allergens ?? [];
           const handleConfirmClick = () => {
             if (!ingredient.quantity.trim() || !ingredient.unit.trim()) {
               toast.error("Please confirm quantity");
               return;
             }
             onConfirmIngredient(index);
+          };
+
+          const toggleAllergen = (allergenId: string, allergenLabel: string) => {
+            const normalizedId = allergenId.toLowerCase();
+            const updatedAllergens = selectedAllergens.some((existing) => {
+              const codeMatch = existing.code?.toLowerCase() === normalizedId;
+              const nameMatch = existing.name?.toLowerCase() === normalizedId;
+              return codeMatch || nameMatch;
+            })
+              ? selectedAllergens.filter((existing) => {
+                  const codeMatch = existing.code?.toLowerCase() === normalizedId;
+                  const nameMatch = existing.name?.toLowerCase() === normalizedId;
+                  return !(codeMatch || nameMatch);
+                })
+              : [
+                  ...selectedAllergens,
+                  {
+                    code: allergenId,
+                    name: allergenLabel,
+                    certainty: ingredient.confirmed ? "confirmed" : "predicted",
+                  },
+                ];
+
+            onUpdateIngredientAllergens(index, updatedAllergens);
           };
 
           return (
@@ -75,7 +107,7 @@ export const IngredientsList = ({
                   : "bg-inferred border-inferred border-dashed"
               }`}
             >
-              <div className="grid gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+              <div className="grid gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)_auto] md:items-start">
                 <div className="space-y-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-2">
@@ -89,24 +121,6 @@ export const IngredientsList = ({
                       {ingredient.confirmed && (
                         <Check className="w-5 h-5 text-confirmed-foreground" />
                       )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {!ingredient.confirmed && (
-                        <button
-                          onClick={handleConfirmClick}
-                          className="h-11 px-5 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition-opacity"
-                        >
-                          Confirm
-                        </button>
-                      )}
-                      <Button
-                        onClick={() => onDeleteIngredient(index)}
-                        variant="outline"
-                        size="icon"
-                        className="h-11 w-11 border-2 hover:bg-destructive hover:text-destructive-foreground"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </Button>
                     </div>
                   </div>
 
@@ -138,31 +152,98 @@ export const IngredientsList = ({
                   </div>
                 </div>
 
-                <div
-                  className={`rounded-lg border ${
-                    hasAnyAllergens ? "border-border bg-background" : "border-border/60 bg-background/60"
-                  } p-4`}
-                >
-                  <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Allergens</p>
-                  {ingredient.allergens && ingredient.allergens.length > 0 ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {ingredient.allergens.map((allergen, allergenIndex) => (
-                        <span
-                          key={`${allergen.code ?? "unknown"}-${allergen.name ?? allergenIndex}`}
-                          className="inline-flex items-center rounded-full bg-destructive/10 px-3 py-1 text-xs font-semibold text-destructive"
-                        >
-                          {allergen.name || allergen.code}
-                          {allergen.certainty && (
-                            <span className="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-                              {allergen.certainty}
-                            </span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className={`rounded-lg border text-left transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary ${
+                        selectedAllergens.length > 0 ? "border-border bg-background" : "border-border/60 bg-background/60"
+                      } p-4 w-full`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Allergens</p>
+                          {selectedAllergens.length > 0 ? (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {selectedAllergens.map((allergen, allergenIndex) => {
+                                const certaintyLabel = (allergen.certainty || (ingredient.confirmed ? "confirmed" : "predicted"))
+                                  .toLowerCase();
+                                const displayLabel = `${certaintyLabel.charAt(0).toUpperCase()}${certaintyLabel.slice(1)}`;
+                                const statusClassName =
+                                  certaintyLabel === "confirmed"
+                                    ? "text-primary"
+                                    : "text-muted-foreground";
+
+                                return (
+                                  <span
+                                    key={`${allergen.code ?? "unknown"}-${allergen.name ?? allergenIndex}`}
+                                    className="inline-flex items-center gap-2 rounded-full border border-secondary/40 bg-secondary/15 px-3 py-1 text-xs"
+                                  >
+                                    <span className="text-sm font-semibold text-secondary">
+                                      {allergen.name || allergen.code}
+                                    </span>
+                                    <span className={`text-[10px] uppercase tracking-wide ${statusClassName}`}>
+                                      {displayLabel}
+                                    </span>
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="mt-3 text-sm text-muted-foreground">Click to select allergens</p>
                           )}
-                        </span>
-                      ))}
+                        </div>
+                        <ChevronsUpDown className="mt-1 h-5 w-5 flex-shrink-0 text-muted-foreground" />
+                      </div>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64" align="end">
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold text-foreground">Select allergens</p>
+                      <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+                        {ALLERGEN_CATEGORIES.map((category) => {
+                          const normalizedId = category.id.toLowerCase();
+                          const isChecked = selectedAllergens.some((existing) => {
+                            const codeMatch = existing.code?.toLowerCase() === normalizedId;
+                            const nameMatch = existing.name?.toLowerCase() === normalizedId;
+                            return codeMatch || nameMatch;
+                          });
+                          return (
+                            <label
+                              key={category.id}
+                              className="flex items-center gap-2 text-sm font-medium text-foreground"
+                            >
+                              <Checkbox
+                                checked={isChecked}
+                                onCheckedChange={() => toggleAllergen(category.id, category.label)}
+                                id={`ingredient-${index}-allergen-${category.id}`}
+                              />
+                              <span>{category.label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
                     </div>
-                  ) : (
-                    <p className="mt-3 text-sm text-muted-foreground">No allergens recorded</p>
+                  </PopoverContent>
+                </Popover>
+
+                <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-start md:flex-col md:items-end">
+                  {!ingredient.confirmed && (
+                    <button
+                      onClick={handleConfirmClick}
+                      className="h-11 px-5 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition-opacity"
+                    >
+                      Confirm
+                    </button>
                   )}
+                  <Button
+                    onClick={() => onDeleteIngredient(index)}
+                    variant="outline"
+                    size="icon"
+                    className="h-11 w-11 border-2 hover:bg-destructive hover:text-destructive-foreground"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </Button>
                 </div>
               </div>
             </div>

@@ -40,6 +40,27 @@ export const DishNameInput = ({
     [existingDishNames]
   );
 
+  const menuCategoryLabelMap: Record<string, string> = {
+    appetizer: "Appetizer",
+    main: "Main",
+    side: "Side",
+    dessert: "Dessert",
+    beverage: "Beverage",
+  };
+
+  const optionalSummaryItems: string[] = [];
+  if (menuCategory) {
+    optionalSummaryItems.push(menuCategoryLabelMap[menuCategory] ?? menuCategory);
+  }
+  if (servingSize && servingSize !== "1") {
+    optionalSummaryItems.push(`Serves ${servingSize}`);
+  }
+  if (price.trim()) {
+    optionalSummaryItems.push(`Price: ${price}`);
+  }
+  const hasDescription = description.trim().length > 0;
+  const hasOptionalSummary = optionalSummaryItems.length > 0 || hasDescription;
+
   return (
     <div className="space-y-4">
       <div className="space-y-3">
@@ -62,6 +83,19 @@ export const DishNameInput = ({
           </datalist>
         )}
       </div>
+
+      {hasOptionalSummary && (
+        <div className="rounded-lg border border-border/60 bg-muted/40 px-4 py-3 text-sm">
+          {optionalSummaryItems.length > 0 && (
+            <p className="text-foreground/80">
+              {optionalSummaryItems.join(" • ")}
+            </p>
+          )}
+          {hasDescription && (
+            <p className="mt-1 text-muted-foreground line-clamp-2">{description}</p>
+          )}
+        </div>
+      )}
 
       <button
         type="button"
