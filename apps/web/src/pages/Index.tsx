@@ -117,10 +117,20 @@ const Index = () => {
     handleTabChange("add");
   };
 
-  const handleRecipeMatch = (recipeKey: string) => {
-    // For now, recipe matching from hard-coded recipes is removed
-    // TODO: Implement recipe template system if needed
-    toast.info("Recipe templates coming soon!");
+  const handleRecipeMatch = (recipeId: string) => {
+    const numericId = Number(recipeId);
+    if (Number.isNaN(numericId)) {
+      toast.error("We couldn't load that recipe. Please try again.");
+      return;
+    }
+
+    const recipe = recipes.find((item) => item.id === numericId);
+    if (!recipe) {
+      toast.error("That recipe is no longer available in your recipe book.");
+      return;
+    }
+
+    populateFormFromRecipe(recipe);
   };
 
   const handleUpdateIngredient = (index: number, quantity: string) => {

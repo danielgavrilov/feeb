@@ -16,7 +16,7 @@ export interface DishSuggestion {
 interface DishNameInputProps {
   value: string;
   onChange: (value: string) => void;
-  onRecipeMatch: (recipeName: string) => void;
+  onRecipeMatch: (recipeId: string) => void;
   menuCategory: string;
   onMenuCategoryChange: (value: string) => void;
   description: string;
@@ -102,7 +102,7 @@ export const DishNameInput = ({
 
   const handleOptionSelect = (option: DishSuggestion) => {
     onChange(option.name);
-    onRecipeMatch(option.name);
+    onRecipeMatch(option.id);
     setIsSuggestionOpen(false);
     window.setTimeout(() => {
       inputRef.current?.focus();
@@ -138,6 +138,9 @@ export const DishNameInput = ({
 
   const handlePopoverMouseLeave = () => {
     isMouseOverPopover.current = false;
+    if (typeof document !== "undefined" && inputRef.current === document.activeElement) {
+      return;
+    }
     setIsSuggestionOpen(false);
   };
 
