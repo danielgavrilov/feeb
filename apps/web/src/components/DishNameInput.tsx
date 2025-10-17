@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,11 +17,12 @@ interface DishNameInputProps {
   onServingSizeChange: (value: string) => void;
   price: string;
   onPriceChange: (value: string) => void;
+  existingDishNames: string[];
 }
 
-export const DishNameInput = ({ 
-  value, 
-  onChange, 
+export const DishNameInput = ({
+  value,
+  onChange,
   onRecipeMatch,
   menuCategory,
   onMenuCategoryChange,
@@ -30,9 +31,14 @@ export const DishNameInput = ({
   servingSize,
   onServingSizeChange,
   price,
-  onPriceChange
+  onPriceChange,
+  existingDishNames,
 }: DishNameInputProps) => {
   const [showOptional, setShowOptional] = useState(false);
+  const suggestionOptions = useMemo(
+    () => Array.from(new Set(existingDishNames.filter((name) => name.trim().length > 0))).sort(),
+    [existingDishNames]
+  );
 
   return (
     <div className="space-y-4">
@@ -46,7 +52,15 @@ export const DishNameInput = ({
           onChange={(e) => onChange(e.target.value)}
           placeholder="Enter dish name..."
           className="h-16 text-2xl font-medium border-2"
+          list={suggestionOptions.length > 0 ? "dish-name-suggestions" : undefined}
         />
+        {suggestionOptions.length > 0 && (
+          <datalist id="dish-name-suggestions">
+            {suggestionOptions.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
+        )}
       </div>
 
       <button

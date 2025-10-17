@@ -19,6 +19,7 @@ export interface SavedDish {
   prepMethod: string;
   compliance: Record<string, boolean>;
   image?: string;
+  confirmed: boolean;
 }
 
 interface RecipeBookProps {
@@ -51,7 +52,24 @@ export const RecipeBook = ({ dishes, onDelete, onEdit }: RecipeBookProps) => {
             )}
             <div className="flex justify-between items-start mb-4">
               <div className="flex-1">
-                <h3 className="text-xl font-bold text-foreground mb-2">{dish.name}</h3>
+                <div className="flex items-center gap-3 mb-2">
+                  <h3 className="text-xl font-bold text-foreground">{dish.name}</h3>
+                  {dish.confirmed ? (
+                    <img
+                      src="/logo_with_tick.svg"
+                      alt="Recipe approved"
+                      className="h-6 w-6"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onEdit(dish.id)}
+                      className="text-sm font-semibold bg-gradient-to-r from-[#23001E] to-[#FE7F2D] bg-clip-text text-transparent hover:opacity-80 transition-opacity"
+                    >
+                      Review
+                    </button>
+                  )}
+                </div>
                 {dish.description && (
                   <p className="text-muted-foreground mb-2">{dish.description}</p>
                 )}
