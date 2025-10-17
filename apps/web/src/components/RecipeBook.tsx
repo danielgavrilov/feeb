@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -23,7 +24,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Trash2, Edit } from "lucide-react";
+
+export type RecipeBulkAction =
+  | "delete"
+  | "markForReview"
+  | "markAsReviewed"
+  | "addToMenu"
+  | "removeFromMenu";
 
 export interface SavedDish {
   id: string;
@@ -47,15 +56,17 @@ export interface SavedDish {
   compliance: Record<string, boolean>;
   image?: string;
   confirmed: boolean;
+  isOnMenu?: boolean;
 }
 
 interface RecipeBookProps {
   dishes: SavedDish[];
   onDelete: (id: string) => void;
   onEdit: (id: string) => void;
+  onBulkAction: (action: RecipeBulkAction, ids: string[]) => Promise<void> | void;
 }
 
-export const RecipeBook = ({ dishes, onDelete, onEdit }: RecipeBookProps) => {
+export const RecipeBook = ({ dishes, onDelete, onEdit, onBulkAction }: RecipeBookProps) => {
   if (dishes.length === 0) {
     return (
       <div className="text-center py-12">
@@ -68,6 +79,10 @@ export const RecipeBook = ({ dishes, onDelete, onEdit }: RecipeBookProps) => {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [reviewFilter, setReviewFilter] = useState<"all" | "reviewed" | "needs_review">("all");
   const [showIngredients, setShowIngredients] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState<RecipeBulkAction | null>(null);
+  const [isBulkDialogOpen, setIsBulkDialogOpen] = useState(false);
+  const [isProcessingBulk, setIsProcessingBulk] = useState(false);
 
   const categories = useMemo(
     () =>
@@ -81,46 +96,125 @@ export const RecipeBook = ({ dishes, onDelete, onEdit }: RecipeBookProps) => {
     [dishes],
   );
 
-  const filteredDishes = dishes
-    .filter((dish) => selectedCategory === "all" || dish.menuCategory === selectedCategory)
-    .filter((dish) => {
-      if (reviewFilter === "reviewed") {
-        return dish.confirmed;
+  const filteredDishes = useMemo(
+    () =>
+      dishes
+        .filter((dish) => selectedCategory === "all" || dish.menuCategory === selectedCategory)
+        .filter((dish) => {
+          if (reviewFilter === "reviewed") {
+            return dish.confirmed;
+          }
+
+          if (reviewFilter === "needs_review") {
+            return !dish.confirmed;
+          }
+
+          return true;
+        }),
+    [dishes, selectedCategory, reviewFilter],
+  );
+
+  useEffect(() => {
+    setSelectedIds((prev) => prev.filter((id) => filteredDishes.some((dish) => dish.id === id)));
+  }, [filteredDishes]);
+
+  const setSelectionState = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      if (checked) {
+        return prev.includes(id) ? prev : [...prev, id];
       }
 
-      if (reviewFilter === "needs_review") {
-        return !dish.confirmed;
-      }
-
-      return true;
+      return prev.filter((selectedId) => selectedId !== id);
     });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.length === filteredDishes.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredDishes.map((dish) => dish.id));
+    }
+  };
+
+  const selectedCount = selectedIds.length;
+
+  const actionLabels: Record<RecipeBulkAction, string> = {
+    delete: "Delete",
+    markForReview: "Mark for review",
+    markAsReviewed: "Mark as reviewed",
+    addToMenu: "Add to menu",
+    removeFromMenu: "Remove from menu",
+  };
+
+  const actionDetails: Partial<Record<RecipeBulkAction, string>> = {
+    delete: "this action cannot be undone",
+    addToMenu:
+      "this means customers in your restaurant will be able to view and order this dish",
+    removeFromMenu:
+      "this means customers in your restaurant will no longer be able to view and order this dish",
+    markForReview:
+      "this means you will accept the unchecked ingredient and allergen list, which may contain errors",
+  };
+
+  const openBulkDialog = (action: RecipeBulkAction) => {
+    setBulkAction(action);
+    setIsBulkDialogOpen(true);
+  };
+
+  const handleConfirmBulkAction = async () => {
+    if (!bulkAction || selectedIds.length === 0) {
+      return;
+    }
+
+    try {
+      setIsProcessingBulk(true);
+      await onBulkAction(bulkAction, selectedIds);
+      setSelectedIds([]);
+      setIsBulkDialogOpen(false);
+      setBulkAction(null);
+    } catch (error) {
+      console.error("Bulk action failed", error);
+    } finally {
+      setIsProcessingBulk(false);
+    }
+  };
+
+  const closeBulkDialog = (open: boolean) => {
+    setIsBulkDialogOpen(open);
+    if (!open) {
+      setBulkAction(null);
+    }
+  };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-4 mb-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <h2 className="text-2xl font-bold text-foreground">Recipe Book</h2>
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Switch
-                id="show-ingredients"
-                checked={showIngredients}
-                onCheckedChange={setShowIngredients}
-              />
-              <Label htmlFor="show-ingredients" className="text-sm font-medium text-foreground">
-                Show ingredients
-              </Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Label htmlFor="review-filter" className="text-sm font-medium text-foreground">
-                Review status
-              </Label>
+    <TooltipProvider delayDuration={0}>
+      <div className="space-y-4">
+        <div className="flex flex-col gap-4 mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <h2 className="text-2xl font-bold text-foreground">Recipe Book</h2>
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="show-ingredients"
+                  checked={showIngredients}
+                  onCheckedChange={setShowIngredients}
+                />
+                <Label htmlFor="show-ingredients" className="text-sm font-medium text-foreground">
+                  Show ingredients
+                </Label>
+              </div>
               <Select
                 value={reviewFilter}
                 onValueChange={(value: "all" | "reviewed" | "needs_review") => setReviewFilter(value)}
               >
-                <SelectTrigger id="review-filter" className="w-[180px]">
-                  <SelectValue placeholder="Filter by review" />
+                <SelectTrigger id="review-filter" className="w-[180px]" aria-label="Review status">
+                  <SelectValue>
+                    {reviewFilter === "all"
+                      ? "Review status"
+                      : reviewFilter === "reviewed"
+                        ? "Reviewed"
+                        : "Needs review"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
@@ -130,39 +224,73 @@ export const RecipeBook = ({ dishes, onDelete, onEdit }: RecipeBookProps) => {
               </Select>
             </div>
           </div>
+
+          {categories.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={selectedCategory === "all" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedCategory("all")}
+              >
+                All sections
+              </Button>
+              {categories.map((category) => (
+                <Button
+                  key={category}
+                  variant={selectedCategory === category ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedCategory(category)}
+                >
+                  {category}
+                </Button>
+              ))}
+            </div>
+          )}
         </div>
 
-        {categories.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant={selectedCategory === "all" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setSelectedCategory("all")}
-            >
-              All sections
-            </Button>
-            {categories.map((category) => (
-              <Button
-                key={category}
-                variant={selectedCategory === category ? "default" : "outline"}
-                size="sm"
-                onClick={() => setSelectedCategory(category)}
-              >
-                {category}
+        {selectedCount > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 p-4">
+            <div className="text-sm font-medium text-foreground">
+              {selectedCount} {selectedCount === 1 ? "recipe" : "recipes"} selected
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={handleSelectAll}>
+                {selectedCount === filteredDishes.length ? "Clear selection" : "Select all"}
               </Button>
-            ))}
+              <Button variant="outline" size="sm" onClick={() => openBulkDialog("markForReview")}>
+                Mark for review
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => openBulkDialog("markAsReviewed")}>
+                Mark as reviewed
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => openBulkDialog("addToMenu")}>
+                Add to menu
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => openBulkDialog("removeFromMenu")}>
+                Remove from menu
+              </Button>
+              <Button variant="destructive" size="sm" onClick={() => openBulkDialog("delete")}>
+                Delete
+              </Button>
+            </div>
           </div>
         )}
-      </div>
 
-      <div className="grid gap-4">
-        {filteredDishes.length === 0 && (
-          <div className="text-center py-10">
-            <p className="text-muted-foreground">No dishes match the selected filters.</p>
-          </div>
-        )}
-        {filteredDishes.map((dish) => (
-          <Card key={dish.id} className="p-6">
+        <div className="grid gap-4">
+          {filteredDishes.length === 0 && (
+            <div className="text-center py-10">
+              <p className="text-muted-foreground">No dishes match the selected filters.</p>
+            </div>
+          )}
+          {filteredDishes.map((dish) => (
+          <Card key={dish.id} className="p-6 relative">
+            <div className="absolute top-4 left-4">
+              <Checkbox
+                checked={selectedIds.includes(dish.id)}
+                onCheckedChange={(checked) => setSelectionState(dish.id, checked === true)}
+                aria-label={`Select ${dish.name}`}
+              />
+            </div>
             {dish.image && (
               <div className="w-full aspect-video rounded-lg overflow-hidden mb-4">
                 <img src={dish.image} alt={dish.name} className="w-full h-full object-cover" />
@@ -190,14 +318,21 @@ export const RecipeBook = ({ dishes, onDelete, onEdit }: RecipeBookProps) => {
                   )}
                 </div>
               </div>
-              
+
               <div className="flex items-center gap-2">
                 {dish.confirmed ? (
-                  <img
-                    src="/logo_with_tick.svg"
-                    alt="Recipe approved"
-                    className="h-6 w-6"
-                  />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <img
+                        src="/logo_with_tick.svg"
+                        alt="Recipe approved"
+                        className="h-6 w-6"
+                      />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Ingredients have been manually confirmed.
+                    </TooltipContent>
+                  </Tooltip>
                 ) : (
                   <Button variant="secondary" size="sm" onClick={() => onEdit(dish.id)}>
                     Review
@@ -250,23 +385,49 @@ export const RecipeBook = ({ dishes, onDelete, onEdit }: RecipeBookProps) => {
               </div>
             )}
 
-            <div>
-              <h4 className="font-semibold text-sm text-foreground mb-2">Dietary Compliance:</h4>
-              <div className="flex gap-2 flex-wrap">
-                {Object.entries(dish.compliance).map(([key, value]) => (
-                  <Badge
-                    key={key}
-                    variant={value ? "default" : "secondary"}
-                    className={value ? "bg-primary" : "bg-muted"}
-                  >
-                    {key.replace("-", " ").toUpperCase()}
-                  </Badge>
-                ))}
+            {showIngredients && (
+              <div>
+                <h4 className="font-semibold text-sm text-foreground mb-2">Dietary Compliance:</h4>
+                <div className="flex gap-2 flex-wrap">
+                  {Object.entries(dish.compliance).map(([key, value]) => (
+                    <Badge
+                      key={key}
+                      variant={value ? "default" : "secondary"}
+                      className={value ? "bg-primary" : "bg-muted"}
+                    >
+                      {key.replace("-", " ").toUpperCase()}
+                    </Badge>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </Card>
         ))}
       </div>
-    </div>
+      </div>
+
+      <AlertDialog open={isBulkDialogOpen} onOpenChange={closeBulkDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm bulk action</AlertDialogTitle>
+            <AlertDialogDescription>
+              {bulkAction
+                ? `Are you sure you want to ${actionLabels[bulkAction].toLowerCase()} ${selectedCount} ${selectedCount === 1 ? "recipe" : "recipes"}?`
+                : "Select an action to continue."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {bulkAction && actionDetails[bulkAction] && (
+            <p className="text-sm text-muted-foreground">{actionDetails[bulkAction]}</p>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isProcessingBulk}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmBulkAction} disabled={isProcessingBulk}>
+              {isProcessingBulk && "Processing..."}
+              {!isProcessingBulk && bulkAction ? actionLabels[bulkAction] : "Confirm"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </TooltipProvider>
   );
 };

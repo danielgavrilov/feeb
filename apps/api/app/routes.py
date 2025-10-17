@@ -296,7 +296,8 @@ async def create_recipe(
         options=recipe_data.options,
         special_notes=recipe_data.special_notes,
         prominence_score=recipe_data.prominence_score,
-        confirmed=recipe_data.confirmed or False
+        confirmed=recipe_data.confirmed or False,
+        is_on_menu=recipe_data.is_on_menu or False
     )
 
     # Add ingredients if provided

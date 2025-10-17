@@ -248,7 +248,7 @@ class Menu(Base):
 class Recipe(Base):
     """Recipe information."""
     __tablename__ = "recipe"
-    
+
     id = mapped_column(Integer, primary_key=True, autoincrement=True)
     restaurant_id = mapped_column(Integer, ForeignKey("restaurant.id"), nullable=False)
     name = mapped_column(Text, nullable=False)
@@ -262,6 +262,7 @@ class Recipe(Base):
     special_notes = mapped_column(Text, nullable=True)
     prominence_score = mapped_column(Float, nullable=True)
     confirmed = mapped_column(Boolean, nullable=False, default=False)
+    is_on_menu = mapped_column(Boolean, nullable=False, default=False)
     created_at = mapped_column(TIMESTAMP, default=func.now())
     
     # Relationships
@@ -471,6 +472,7 @@ class RecipeCreate(BaseModel):
     special_notes: Optional[str] = None
     prominence_score: Optional[float] = None
     confirmed: Optional[bool] = None
+    is_on_menu: Optional[bool] = None
     ingredients: Optional[List[RecipeIngredientRequest]] = []
 
 
@@ -487,6 +489,7 @@ class RecipeUpdate(BaseModel):
     special_notes: Optional[str] = None
     prominence_score: Optional[float] = None
     confirmed: Optional[bool] = None
+    is_on_menu: Optional[bool] = None
 
 
 class RecipeResponse(BaseModel):
@@ -504,6 +507,7 @@ class RecipeResponse(BaseModel):
     special_notes: Optional[str] = None
     prominence_score: Optional[float] = None
     confirmed: bool
+    is_on_menu: bool
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -524,6 +528,7 @@ class RecipeWithIngredients(BaseModel):
     special_notes: Optional[str] = None
     prominence_score: Optional[float] = None
     confirmed: bool
+    is_on_menu: bool
     created_at: datetime
     ingredients: List[RecipeIngredientResponse] = []
 

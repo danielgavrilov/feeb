@@ -3,7 +3,7 @@ import { DishNameInput } from "@/components/DishNameInput";
 import { IngredientsList, IngredientState } from "@/components/IngredientsList";
 import { PrepMethodInput } from "@/components/PrepMethodInput";
 import { ComplianceOverview } from "@/components/ComplianceOverview";
-import { RecipeBook, SavedDish } from "@/components/RecipeBook";
+import { RecipeBook, SavedDish, RecipeBulkAction } from "@/components/RecipeBook";
 import { MenuView } from "@/components/MenuView";
 import { Settings } from "@/components/Settings";
 import { Button } from "@/components/ui/button";
@@ -60,6 +60,7 @@ const Index = () => {
     compliance: {}, // We'll compute this from ingredients
     image: recipe.image || "",
     confirmed: recipe.confirmed,
+    isOnMenu: recipe.is_on_menu,
   }));
 
   const handleRecipeMatch = (recipeKey: string) => {
@@ -227,6 +228,50 @@ const Index = () => {
     } catch (error) {
       toast.error("Failed to delete dish");
       console.error(error);
+    }
+  };
+
+  const handleBulkRecipeAction = async (action: RecipeBulkAction, ids: string[]) => {
+    const recipeIds = ids
+      .map((value) => Number(value))
+      .filter((value) => !Number.isNaN(value));
+
+    if (recipeIds.length === 0) {
+      return;
+    }
+
+    try {
+      switch (action) {
+        case "delete":
+          await Promise.all(recipeIds.map((recipeId) => deleteRecipeAPI(recipeId)));
+          break;
+        case "markForReview":
+          await Promise.all(recipeIds.map((recipeId) => updateRecipeAPI(recipeId, { confirmed: false })));
+          break;
+        case "markAsReviewed":
+          await Promise.all(recipeIds.map((recipeId) => updateRecipeAPI(recipeId, { confirmed: true })));
+          break;
+        case "addToMenu":
+          await Promise.all(recipeIds.map((recipeId) => updateRecipeAPI(recipeId, { is_on_menu: true })));
+          break;
+        case "removeFromMenu":
+          await Promise.all(recipeIds.map((recipeId) => updateRecipeAPI(recipeId, { is_on_menu: false })));
+          break;
+      }
+
+      const successMessages: Record<RecipeBulkAction, string> = {
+        delete: `${recipeIds.length} ${recipeIds.length === 1 ? "recipe" : "recipes"} deleted`,
+        markForReview: `${recipeIds.length} ${recipeIds.length === 1 ? "recipe" : "recipes"} marked for review`,
+        markAsReviewed: `${recipeIds.length} ${recipeIds.length === 1 ? "recipe" : "recipes"} marked as reviewed`,
+        addToMenu: `${recipeIds.length} ${recipeIds.length === 1 ? "recipe" : "recipes"} added to the menu`,
+        removeFromMenu: `${recipeIds.length} ${recipeIds.length === 1 ? "recipe" : "recipes"} removed from the menu`,
+      };
+
+      toast.success(successMessages[action]);
+    } catch (error) {
+      console.error("Failed to apply bulk recipe action", error);
+      toast.error("Unable to update the selected recipes");
+      throw error;
     }
   };
 
@@ -417,10 +462,11 @@ const Index = () => {
 
           <TabsContent value="recipes">
             <div className="bg-card rounded-xl shadow-lg p-8">
-              <RecipeBook 
+              <RecipeBook
                 dishes={savedDishes}
                 onDelete={handleDeleteDish}
                 onEdit={handleEditDish}
+                onBulkAction={handleBulkRecipeAction}
               />
             </div>
           </TabsContent>

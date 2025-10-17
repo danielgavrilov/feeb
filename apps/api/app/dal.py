@@ -693,7 +693,8 @@ async def create_recipe(
     options: Optional[str] = None,
     special_notes: Optional[str] = None,
     prominence_score: Optional[float] = None,
-    confirmed: bool = False
+    confirmed: bool = False,
+    is_on_menu: bool = False
 ) -> int:
     """
     Create a new recipe.
@@ -726,7 +727,8 @@ async def create_recipe(
         options=options,
         special_notes=special_notes,
         prominence_score=prominence_score,
-        confirmed=confirmed
+        confirmed=confirmed,
+        is_on_menu=is_on_menu
     )
     session.add(recipe)
     await session.flush()
@@ -990,6 +992,7 @@ async def get_recipe_with_details(
         "special_notes": recipe.special_notes,
         "prominence_score": recipe.prominence_score,
         "confirmed": recipe.confirmed,
+        "is_on_menu": recipe.is_on_menu,
         "ingredients": ingredients
     }
 
