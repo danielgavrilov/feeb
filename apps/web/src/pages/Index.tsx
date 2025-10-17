@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import { DishNameInput } from "@/components/DishNameInput";
 import { IngredientsList, IngredientState } from "@/components/IngredientsList";
 import { PrepMethodInput } from "@/components/PrepMethodInput";
-import { ComplianceOverview } from "@/components/ComplianceOverview";
 import { RecipeBook, SavedDish } from "@/components/RecipeBook";
 import { MenuView } from "@/components/MenuView";
 import { Settings } from "@/components/Settings";
@@ -15,12 +14,15 @@ import { Recipe } from "@/lib/api";
 import { LandingPage } from "@/components/LandingPage";
 import { useSearchParams } from "react-router-dom";
 
-type Step = "details" | "compliance";
-
 const Index = () => {
   const { restaurant, restaurants, createRestaurant: createRestaurantAPI, selectRestaurant } = useRestaurant();
-  const { recipes, createRecipe: createRecipeAPI, updateRecipe: updateRecipeAPI, deleteRecipe: deleteRecipeAPI } = useRecipes(restaurant?.id || null);
-  
+  const {
+    recipes,
+    createRecipe: createRecipeAPI,
+    updateRecipe: updateRecipeAPI,
+    deleteRecipe: deleteRecipeAPI,
+  } = useRecipes(restaurant?.id || null);
+
   const validTabs = ["landing", "add", "recipes", "menu", "settings"] as const;
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTabParam = searchParams.get("tab");
@@ -28,7 +30,6 @@ const Index = () => {
     ? (initialTabParam as typeof validTabs[number])
     : "landing";
   const [activeTab, setActiveTab] = useState(initialTab);
-  const [step, setStep] = useState<Step>("details");
   const [dishName, setDishName] = useState("");
   const [menuCategory, setMenuCategory] = useState("");
   const [description, setDescription] = useState("");
@@ -36,9 +37,9 @@ const Index = () => {
   const [price, setPrice] = useState("");
   const [ingredients, setIngredients] = useState<IngredientState[]>([]);
   const [prepMethod, setPrepMethod] = useState("");
-  const [compliance, setCompliance] = useState<Record<string, boolean>>({});
   const [dishImage, setDishImage] = useState("");
   const [editingDishId, setEditingDishId] = useState<number | null>(null);
+  const [showPrepMethod, setShowPrepMethod] = useState(false);
   const prepInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Convert API recipes to SavedDish format for existing components
@@ -62,6 +63,29 @@ const Index = () => {
     confirmed: recipe.confirmed,
   }));
 
+  const populateFormFromRecipe = (recipe: Recipe) => {
+    setEditingDishId(recipe.id);
+    setDishName(recipe.name);
+    setMenuCategory(recipe.menu_category || "");
+    setDescription(recipe.description || "");
+    setServingSize(recipe.serving_size || "1");
+    setPrice(recipe.price || "");
+    setIngredients(
+      recipe.ingredients.map((ing) => ({
+        name: ing.ingredient_name,
+        quantity: ing.quantity?.toString() || "",
+        unit: ing.unit || "",
+        confirmed: ing.confirmed,
+        allergens: ing.allergens || [],
+        dietaryInfo: [],
+      }))
+    );
+    setPrepMethod(recipe.instructions || "");
+    setShowPrepMethod(Boolean(recipe.instructions));
+    setDishImage(recipe.image || "");
+    handleTabChange("add");
+  };
+
   const handleRecipeMatch = (recipeKey: string) => {
     // For now, recipe matching from hard-coded recipes is removed
     // TODO: Implement recipe template system if needed
@@ -81,10 +105,25 @@ const Index = () => {
   };
 
   const handleConfirmIngredient = (index: number) => {
-    const updated = [...ingredients];
-    updated[index].confirmed = true;
-    setIngredients(updated);
-    toast.success(`${updated[index].name} confirmed`);
+    const ingredientToConfirm = ingredients[index];
+    if (!ingredientToConfirm) return;
+
+    setIngredients((current) =>
+      current.map((ingredient, i) =>
+        i === index
+          ? {
+              ...ingredient,
+              confirmed: true,
+              allergens: (ingredient.allergens ?? []).map((allergen) => ({
+                ...allergen,
+                certainty: "confirmed",
+              })),
+            }
+          : ingredient
+      )
+    );
+
+    toast.success(`${ingredientToConfirm.name} confirmed`);
   };
 
   const handleDeleteIngredient = (index: number) => {
@@ -98,7 +137,7 @@ const Index = () => {
       name,
       quantity,
       unit,
-      confirmed: true,
+      confirmed: false,
       allergens: [],
       dietaryInfo: [],
     };
@@ -106,32 +145,20 @@ const Index = () => {
     toast.success(`${name} added`);
   };
 
-  const handleNext = () => {
-    if (step === "details") {
-      if (!dishName.trim()) {
-        toast.error("Please enter a dish name");
-        return;
-      }
-      if (ingredients.length === 0) {
-        toast.error("Add at least one ingredient");
-        return;
-      }
-      const hasIncompleteIngredient = ingredients.some(
-        (ingredient) => !ingredient.quantity.trim() || !ingredient.unit.trim()
-      );
-      if (hasIncompleteIngredient) {
-        toast.error("Please confirm quantity");
-        return;
-      }
-      calculateCompliance();
-      setStep("compliance");
-    }
-  };
-
-  const handleBack = () => {
-    if (step === "compliance") {
-      setStep("details");
-    }
+  const handleUpdateIngredientAllergens = (
+    index: number,
+    allergens: Array<{ code: string; name: string; certainty?: string }>
+  ) => {
+    setIngredients((current) =>
+      current.map((ingredient, i) =>
+        i === index
+          ? {
+              ...ingredient,
+              allergens,
+            }
+          : ingredient
+      )
+    );
   };
 
   const handleAddPhoto = () => {
@@ -139,39 +166,59 @@ const Index = () => {
   };
 
   const handleAddPreparation = () => {
-    if (prepInputRef.current) {
-      prepInputRef.current.focus();
-      prepInputRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (showPrepMethod) {
+      setShowPrepMethod(false);
+      return;
     }
-  };
 
-  const calculateCompliance = () => {
-    const complianceResult: Record<string, boolean> = {};
-    
-    // Check each dietary category
-    ["vegan", "vegetarian", "gluten-free", "nut-free", "dairy-free", "halal", "kosher", "low-fodmap"].forEach((diet) => {
-      complianceResult[diet] = ingredients.every((ing) => 
-        ing.dietaryInfo?.includes(diet) ?? false
-      );
-    });
-
-    setCompliance(complianceResult);
+    setShowPrepMethod(true);
+    setTimeout(() => {
+      if (prepInputRef.current) {
+        prepInputRef.current.focus();
+        prepInputRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 0);
   };
 
   const handleSaveDish = async () => {
+    if (!dishName.trim()) {
+      toast.error("Please enter a dish name");
+      return;
+    }
+    if (ingredients.length === 0) {
+      toast.error("Add at least one ingredient");
+      return;
+    }
+    const hasIncompleteIngredient = ingredients.some(
+      (ingredient) => !ingredient.quantity.trim() || !ingredient.unit.trim()
+    );
+    if (hasIncompleteIngredient) {
+      toast.error("Please confirm quantity");
+      return;
+    }
+
     if (!restaurant) {
       toast.error("Please create a restaurant first");
       return;
     }
 
     try {
-      // Check if all ingredients are confirmed
-      const allIngredientsConfirmed = ingredients.length > 0 && ingredients.every(ing => ing.confirmed);
-      
+      const confirmedIngredients = ingredients.map((ingredient) => ({
+        ...ingredient,
+        confirmed: true,
+        allergens: (ingredient.allergens ?? []).map((allergen) => ({
+          ...allergen,
+          certainty: "confirmed",
+        })),
+      }));
+      setIngredients(confirmedIngredients);
+
       // For now, we're saving recipes without ingredient links
       // TODO: Implement ingredient search and linking
+      let updatedRecipesList: Recipe[] = recipes;
+      let savedRecipe: Recipe;
       if (editingDishId) {
-        await updateRecipeAPI(editingDishId, {
+        savedRecipe = await updateRecipeAPI(editingDishId, {
           name: dishName,
           description,
           instructions: prepMethod,
@@ -179,11 +226,13 @@ const Index = () => {
           serving_size: servingSize,
           price,
           image: dishImage,
-          confirmed: allIngredientsConfirmed,
+          confirmed: true,
         });
-        toast.success(allIngredientsConfirmed ? "Dish reviewed and confirmed" : "Dish updated");
+        updatedRecipesList = recipes.map((recipe) =>
+          recipe.id === savedRecipe.id ? savedRecipe : recipe
+        );
       } else {
-        await createRecipeAPI({
+        savedRecipe = await createRecipeAPI({
           restaurant_id: restaurant.id,
           name: dishName,
           description,
@@ -193,13 +242,23 @@ const Index = () => {
           price,
           image: dishImage,
           ingredients: [], // TODO: Map ingredients to ingredient IDs
-          confirmed: allIngredientsConfirmed,
+          confirmed: true,
         });
-        toast.success(allIngredientsConfirmed ? "Dish saved and confirmed" : "Dish saved");
+        updatedRecipesList = [...recipes, savedRecipe];
       }
 
-      handleStartNew();
-      setActiveTab("recipes");
+      const nextUnconfirmedRecipe = updatedRecipesList.find(
+        (recipe) => !recipe.confirmed && recipe.id !== savedRecipe.id
+      );
+
+      toast.success("Dish saved and confirmed");
+
+      if (nextUnconfirmedRecipe) {
+        populateFormFromRecipe(nextUnconfirmedRecipe);
+      } else {
+        handleStartNew();
+        setActiveTab("recipes");
+      }
     } catch (error) {
       toast.error("Failed to save dish");
       console.error(error);
@@ -207,7 +266,6 @@ const Index = () => {
   };
 
   const handleStartNew = () => {
-    setStep("details");
     setDishName("");
     setMenuCategory("");
     setDescription("");
@@ -215,9 +273,9 @@ const Index = () => {
     setPrice("");
     setIngredients([]);
     setPrepMethod("");
-    setCompliance({});
     setDishImage("");
     setEditingDishId(null);
+    setShowPrepMethod(false);
   };
 
   const handleDeleteDish = async (id: string) => {
@@ -231,26 +289,10 @@ const Index = () => {
   };
 
   const handleEditDish = (id: string) => {
-    const dish = savedDishes.find(d => d.id === id);
-    if (!dish) return;
+    const recipe = recipes.find((item) => item.id.toString() === id);
+    if (!recipe) return;
 
-    setEditingDishId(parseInt(id));
-    setDishName(dish.name);
-    setMenuCategory(dish.menuCategory);
-    setDescription(dish.description);
-    setServingSize(dish.servingSize);
-    setPrice(dish.price);
-    setIngredients(dish.ingredients.map(ing => ({
-      ...ing,
-      confirmed: ing.confirmed ?? false,
-      allergens: ing.allergens ?? [],
-      dietaryInfo: [],
-    })));
-    setPrepMethod(dish.prepMethod);
-    setCompliance(dish.compliance);
-    setDishImage(dish.image || "");
-    setStep("details");
-    handleTabChange("add");
+    populateFormFromRecipe(recipe);
   };
 
   useEffect(() => {
@@ -274,10 +316,7 @@ const Index = () => {
     setSearchParams(params, { replace: true });
   };
 
-  const canProceed = () => {
-    if (step === "details") return dishName.trim().length > 0 && ingredients.length > 0;
-    return true;
-  };
+  const canSave = () => dishName.trim().length > 0 && ingredients.length > 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -321,97 +360,63 @@ const Index = () => {
 
           <TabsContent value="add">
             <div className="bg-card rounded-xl shadow-lg p-8 space-y-8">
-              {step === "details" && (
-                <div className="space-y-8">
-                  <DishNameInput
-                    value={dishName}
-                    onChange={setDishName}
-                    onRecipeMatch={handleRecipeMatch}
-                    menuCategory={menuCategory}
-                    onMenuCategoryChange={setMenuCategory}
-                    description={description}
-                    onDescriptionChange={setDescription}
-                    servingSize={servingSize}
-                    onServingSizeChange={setServingSize}
-                    price={price}
-                    onPriceChange={setPrice}
-                    existingDishNames={savedDishes.map((dish) => dish.name)}
-                  />
-
-                  <IngredientsList
-                    ingredients={ingredients}
-                    onUpdateIngredient={handleUpdateIngredient}
-                    onUpdateIngredientUnit={handleUpdateIngredientUnit}
-                    onConfirmIngredient={handleConfirmIngredient}
-                    onDeleteIngredient={handleDeleteIngredient}
-                    onAddIngredient={handleAddIngredient}
-                  />
-
-                  <PrepMethodInput ref={prepInputRef} value={prepMethod} onChange={setPrepMethod} />
-                </div>
-              )}
-
-              {step === "compliance" && (
-                <ComplianceOverview
-                  compliance={compliance}
-                  onStartNew={handleStartNew}
-                  onSave={handleSaveDish}
-                  image={dishImage}
-                  onImageChange={setDishImage}
-                  allIngredientsConfirmed={ingredients.length > 0 && ingredients.every(ing => ing.confirmed)}
+              <div className="space-y-8">
+                <DishNameInput
+                  value={dishName}
+                  onChange={setDishName}
+                  onRecipeMatch={handleRecipeMatch}
+                  menuCategory={menuCategory}
+                  onMenuCategoryChange={setMenuCategory}
+                  description={description}
+                  onDescriptionChange={setDescription}
+                  servingSize={servingSize}
+                  onServingSizeChange={setServingSize}
+                  price={price}
+                  onPriceChange={setPrice}
+                  existingDishNames={savedDishes.map((dish) => dish.name)}
                 />
-              )}
 
-              {step === "compliance" && (
-                <div className="flex flex-wrap gap-3">
-                  <Button
-                    onClick={handleBack}
-                    variant="outline"
-                    className="h-14 px-6 text-lg font-semibold"
-                    size="lg"
-                  >
-                    Back to Edit
-                  </Button>
-                </div>
-              )}
+                <IngredientsList
+                  ingredients={ingredients}
+                  onUpdateIngredient={handleUpdateIngredient}
+                  onUpdateIngredientUnit={handleUpdateIngredientUnit}
+                  onConfirmIngredient={handleConfirmIngredient}
+                  onDeleteIngredient={handleDeleteIngredient}
+                  onAddIngredient={handleAddIngredient}
+                  onUpdateIngredientAllergens={handleUpdateIngredientAllergens}
+                />
 
-              {step === "details" && (
-                <div className="flex flex-wrap gap-3">
-                  <Button
-                    onClick={handleBack}
-                    variant="outline"
-                    className="h-14 px-6 text-lg font-semibold"
-                    size="lg"
-                    disabled
-                  >
-                    Back
-                  </Button>
-                  <Button
-                    onClick={handleAddPhoto}
-                    variant="outline"
-                    className="h-14 px-6 text-lg font-semibold"
-                    size="lg"
-                  >
-                    Add Photo
-                  </Button>
-                  <Button
-                    onClick={handleAddPreparation}
-                    variant="outline"
-                    className="h-14 px-6 text-lg font-semibold"
-                    size="lg"
-                  >
-                    Add Preparation
-                  </Button>
-                  <Button
-                    onClick={handleNext}
-                    disabled={!canProceed()}
-                    className="h-14 px-6 text-lg font-semibold sm:ml-auto"
-                    size="lg"
-                  >
-                    View Compliance
-                  </Button>
-                </div>
-              )}
+                {showPrepMethod && (
+                  <PrepMethodInput ref={prepInputRef} value={prepMethod} onChange={setPrepMethod} />
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  onClick={handleAddPhoto}
+                  variant="outline"
+                  className="h-14 px-6 text-lg font-semibold"
+                  size="lg"
+                >
+                  Add Photo
+                </Button>
+                <Button
+                  onClick={handleAddPreparation}
+                  variant="outline"
+                  className="h-14 px-6 text-lg font-semibold"
+                  size="lg"
+                >
+                  {showPrepMethod ? "Hide Preparation" : "Add Preparation"}
+                </Button>
+                <Button
+                  onClick={handleSaveDish}
+                  disabled={!canSave()}
+                  className="h-14 px-6 text-lg font-semibold sm:ml-auto"
+                  size="lg"
+                >
+                  Save
+                </Button>
+              </div>
             </div>
           </TabsContent>
 
