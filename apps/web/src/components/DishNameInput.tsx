@@ -1,9 +1,17 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
+
+export interface DishSuggestion {
+  id: string;
+  name: string;
+  confirmed: boolean;
+}
 
 interface DishNameInputProps {
   value: string;
@@ -17,7 +25,7 @@ interface DishNameInputProps {
   onServingSizeChange: (value: string) => void;
   price: string;
   onPriceChange: (value: string) => void;
-  existingDishNames: string[];
+  existingDishes: DishSuggestion[];
 }
 
 export const DishNameInput = ({
@@ -32,13 +40,90 @@ export const DishNameInput = ({
   onServingSizeChange,
   price,
   onPriceChange,
-  existingDishNames,
+  existingDishes,
 }: DishNameInputProps) => {
   const [showOptional, setShowOptional] = useState(false);
-  const suggestionOptions = useMemo(
-    () => Array.from(new Set(existingDishNames.filter((name) => name.trim().length > 0))).sort(),
-    [existingDishNames]
-  );
+  const [isSuggestionOpen, setIsSuggestionOpen] = useState(false);
+  const blurTimeoutRef = useRef<number | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (blurTimeoutRef.current) {
+        window.clearTimeout(blurTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const suggestionOptions = useMemo(() => {
+    const uniqueByName = new Map<string, DishSuggestion>();
+
+    existingDishes.forEach((dish) => {
+      const trimmedName = dish.name.trim();
+      if (!trimmedName) {
+        return;
+      }
+
+      const existing = uniqueByName.get(trimmedName);
+      if (!existing) {
+        uniqueByName.set(trimmedName, dish);
+        return;
+      }
+
+      if (!dish.confirmed && existing.confirmed) {
+        uniqueByName.set(trimmedName, dish);
+      }
+    });
+
+    return Array.from(uniqueByName.values()).sort((a, b) => {
+      if (a.confirmed === b.confirmed) {
+        return a.name.localeCompare(b.name);
+      }
+
+      return a.confirmed ? 1 : -1;
+    });
+  }, [existingDishes]);
+
+  useEffect(() => {
+    if (suggestionOptions.length === 0) {
+      setIsSuggestionOpen(false);
+    }
+  }, [suggestionOptions.length]);
+
+  const filteredSuggestions = useMemo(() => {
+    const query = value.trim().toLowerCase();
+    if (!query) {
+      return suggestionOptions;
+    }
+
+    return suggestionOptions.filter((option) => option.name.toLowerCase().includes(query));
+  }, [suggestionOptions, value]);
+
+  const handleOptionSelect = (option: DishSuggestion) => {
+    onChange(option.name);
+    onRecipeMatch(option.name);
+    setIsSuggestionOpen(false);
+    window.setTimeout(() => {
+      inputRef.current?.focus();
+    }, 0);
+  };
+
+  const handleInputFocus = () => {
+    if (blurTimeoutRef.current) {
+      window.clearTimeout(blurTimeoutRef.current);
+      blurTimeoutRef.current = null;
+    }
+
+    if (suggestionOptions.length > 0) {
+      setIsSuggestionOpen(true);
+    }
+  };
+
+  const handleInputBlur = () => {
+    blurTimeoutRef.current = window.setTimeout(() => {
+      setIsSuggestionOpen(false);
+    }, 120);
+  };
 
   const menuCategoryLabelMap: Record<string, string> = {
     appetizer: "Appetizer",
@@ -67,21 +152,57 @@ export const DishNameInput = ({
         <Label htmlFor="dish-name" className="text-xl font-semibold text-foreground">
           Dish Name
         </Label>
-        <Input
-          id="dish-name"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Enter dish name..."
-          className="h-16 text-2xl font-medium border-2"
-          list={suggestionOptions.length > 0 ? "dish-name-suggestions" : undefined}
-        />
-        {suggestionOptions.length > 0 && (
-          <datalist id="dish-name-suggestions">
-            {suggestionOptions.map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
-        )}
+        <Popover open={isSuggestionOpen && suggestionOptions.length > 0} onOpenChange={setIsSuggestionOpen}>
+          <PopoverTrigger asChild>
+            <Input
+              ref={inputRef}
+              id="dish-name"
+              value={value}
+              onChange={(e) => {
+                onChange(e.target.value);
+                if (suggestionOptions.length > 0) {
+                  setIsSuggestionOpen(true);
+                }
+              }}
+              onFocus={handleInputFocus}
+              onBlur={handleInputBlur}
+              placeholder="Enter dish name..."
+              className="h-16 text-2xl font-medium border-2"
+              autoComplete="off"
+            />
+          </PopoverTrigger>
+          {suggestionOptions.length > 0 && (
+            <PopoverContent
+              align="start"
+              className="w-[var(--radix-popover-trigger-width)] p-0"
+              sideOffset={4}
+            >
+              <div className="max-h-60 overflow-y-auto py-2">
+                {filteredSuggestions.length === 0 ? (
+                  <p className="px-3 py-2 text-sm text-muted-foreground">No matching dishes found.</p>
+                ) : (
+                  filteredSuggestions.map((option) => (
+                    <button
+                      key={`${option.id}-${option.name}`}
+                      type="button"
+                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-muted focus:bg-muted"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => handleOptionSelect(option)}
+                    >
+                      <span className="font-medium text-foreground">{option.name}</span>
+                      <Badge
+                        variant={option.confirmed ? "secondary" : "destructive"}
+                        className="pointer-events-none"
+                      >
+                        {option.confirmed ? "Feeb Check" : "Review"}
+                      </Badge>
+                    </button>
+                  ))
+                )}
+              </div>
+            </PopoverContent>
+          )}
+        </Popover>
       </div>
 
       {hasOptionalSummary && (

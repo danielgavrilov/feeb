@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { DishNameInput } from "@/components/DishNameInput";
 import { IngredientsList, IngredientState } from "@/components/IngredientsList";
 import { PrepMethodInput } from "@/components/PrepMethodInput";
@@ -42,6 +42,7 @@ const Index = () => {
   const [editingDishId, setEditingDishId] = useState<number | null>(null);
   const [showPrepMethod, setShowPrepMethod] = useState(false);
   const prepInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const manualAddTabSelectionRef = useRef(false);
 
   // Convert API recipes to SavedDish format for existing components
   const savedDishes: SavedDish[] = recipes.map((recipe: Recipe) => ({
@@ -70,6 +71,27 @@ const Index = () => {
   const hasRecipeImages = recipes.some(recipe => Boolean(recipe.image));
   const menuUploadComplete = totalRecipes > 0 || hasRecipeImages;
   const firstUnconfirmedRecipe = recipes.find(recipe => !recipe.confirmed);
+  const lastUnconfirmedRecipe = [...recipes].reverse().find(recipe => !recipe.confirmed);
+
+  const reviewNoticeMessage =
+    unconfirmedRecipeCount > 0
+      ? `${unconfirmedRecipeCount} ${
+          unconfirmedRecipeCount === 1 ? "menu item" : "menu items"
+        } still need confirmation`
+      : null;
+
+  const handleStartNew = useCallback(() => {
+    setDishName("");
+    setMenuCategory("");
+    setDescription("");
+    setServingSize("1");
+    setPrice("");
+    setIngredients([]);
+    setPrepMethod("");
+    setDishImage("");
+    setEditingDishId(null);
+    setShowPrepMethod(false);
+  }, []);
 
   const populateFormFromRecipe = (recipe: Recipe) => {
     setEditingDishId(recipe.id);
@@ -269,25 +291,12 @@ const Index = () => {
         }
       } else {
         handleStartNew();
-        setActiveTab("recipes");
+        handleTabChange("recipes");
       }
     } catch (error) {
       toast.error("Failed to save dish");
       console.error(error);
     }
-  };
-
-  const handleStartNew = () => {
-    setDishName("");
-    setMenuCategory("");
-    setDescription("");
-    setServingSize("1");
-    setPrice("");
-    setIngredients([]);
-    setPrepMethod("");
-    setDishImage("");
-    setEditingDishId(null);
-    setShowPrepMethod(false);
   };
 
   const handleDeleteDish = async (id: string) => {
@@ -361,7 +370,14 @@ const Index = () => {
     }
   }, [searchParams, activeTab]);
 
-  const handleTabChange = (value: string) => {
+  const handleTabChange = (
+    value: (typeof validTabs)[number],
+    options?: { resetAddForm?: boolean },
+  ) => {
+    if (value === "add" && options?.resetAddForm) {
+      handleStartNew();
+    }
+
     setActiveTab(value);
     const params = new URLSearchParams(searchParams);
     if (value === "landing") {
@@ -370,6 +386,25 @@ const Index = () => {
       params.set("tab", value);
     }
     setSearchParams(params, { replace: true });
+  };
+
+  const handleTabsValueChange = (value: string) => {
+    const nextTab = validTabs.includes(value as (typeof validTabs)[number])
+      ? (value as (typeof validTabs)[number])
+      : "landing";
+    const shouldResetAddForm = nextTab === "add" && manualAddTabSelectionRef.current;
+    handleTabChange(nextTab, { resetAddForm: shouldResetAddForm });
+    manualAddTabSelectionRef.current = false;
+  };
+
+  const handleReviewLastUnconfirmed = () => {
+    if (lastUnconfirmedRecipe) {
+      populateFormFromRecipe(lastUnconfirmedRecipe);
+      if (typeof window !== "undefined") {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+      return;
+    }
   };
 
   const handleReviewFirstUnconfirmed = () => {
@@ -405,12 +440,18 @@ const Index = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8 max-w-4xl">
-        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+        <Tabs value={activeTab} onValueChange={handleTabsValueChange} className="w-full">
           <TabsList className="mb-6 flex w-full flex-wrap gap-2 sm:gap-3 sm:h-14">
             <TabsTrigger value="landing" className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base">
               Landing
             </TabsTrigger>
-            <TabsTrigger value="add" className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base">
+            <TabsTrigger
+              value="add"
+              className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base"
+              onClick={() => {
+                manualAddTabSelectionRef.current = true;
+              }}
+            >
               Add/Edit Dish
             </TabsTrigger>
             <TabsTrigger value="recipes" className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base">
@@ -439,6 +480,24 @@ const Index = () => {
           <TabsContent value="add">
             <div className="bg-card rounded-xl shadow-lg p-8 space-y-8">
               <div className="space-y-8">
+                {reviewNoticeMessage && (
+                  <button
+                    type="button"
+                    onClick={handleReviewLastUnconfirmed}
+                    className={
+                      "w-full rounded-lg border border-border/60 bg-muted/40 px-4 py-3 text-left transition-colors " +
+                      "hover:bg-muted/60 focus:outline-none focus:ring-2 focus:ring-brand-primary/40"
+                    }
+                  >
+                    <span className="block text-sm font-semibold text-foreground">
+                      {reviewNoticeMessage}
+                    </span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      Click to open the most recent dish awaiting review
+                    </span>
+                  </button>
+                )}
+
                 <DishNameInput
                   value={dishName}
                   onChange={setDishName}
@@ -451,7 +510,11 @@ const Index = () => {
                   onServingSizeChange={setServingSize}
                   price={price}
                   onPriceChange={setPrice}
-                  existingDishNames={savedDishes.map((dish) => dish.name)}
+                  existingDishes={savedDishes.map((dish) => ({
+                    id: dish.id,
+                    name: dish.name,
+                    confirmed: dish.confirmed,
+                  }))}
                 />
 
                 <IngredientsList
