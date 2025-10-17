@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type MouseEvent, useEffect, useMemo, useState } from "react";
 
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -493,23 +493,81 @@ export const RecipeBook = ({
               : dish.confirmed
                 ? "reviewed"
                 : "needs_review";
-            const statusLabel =
-              statusKey === "live"
-                ? "Live"
-                : statusKey === "reviewed"
-                  ? "Reviewed"
-                  : "Needs Review";
-            const statusClassName = cn(
-              "rounded-full px-3 py-1 text-xs font-semibold",
-              statusKey === "live"
-                ? "border-transparent bg-[color:var(--color-primary)] text-white"
-                : statusKey === "reviewed"
-                  ? "border-emerald-200 bg-emerald-100 text-emerald-800"
-                  : "border-amber-200 bg-amber-100 text-amber-900",
-            );
             const displayCategory = dish.menuCategory
               ? sectionLabelMap.get(dish.menuCategory) ?? dish.menuCategory
               : undefined;
+
+            const statusButtonBaseClass =
+              "inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
+
+            const statusButtonProps = (() => {
+              if (statusKey === "needs_review") {
+                return {
+                  label: "Review",
+                  className: cn(
+                    statusButtonBaseClass,
+                    "border-amber-200 bg-amber-100 text-amber-900 hover:bg-amber-100/80 focus-visible:ring-amber-500",
+                  ),
+                  onClick: (event: MouseEvent<HTMLButtonElement>) => {
+                    event.stopPropagation();
+                    onEdit(dish.id);
+                  },
+                  ariaLabel: `Review ${dish.name}`,
+                  disabled: false,
+                };
+              }
+
+              if (statusKey === "reviewed") {
+                return {
+                  label: isMenuUpdating ? "Adding..." : "Add to menu",
+                  className: cn(
+                    statusButtonBaseClass,
+                    "border-emerald-200 bg-emerald-100 text-emerald-800 hover:bg-emerald-100/80 focus-visible:ring-emerald-500",
+                  ),
+                  onClick: (event: MouseEvent<HTMLButtonElement>) => {
+                    event.stopPropagation();
+
+                    if (isMenuUpdating) {
+                      return;
+                    }
+
+                    if (!dish.confirmed) {
+                      setUnconfirmedDialogDishId(dish.id);
+                      return;
+                    }
+
+                    setMenuUpdatingIds((prev) => [...prev, dish.id]);
+
+                    Promise.resolve(onToggleMenuStatus(dish.id, true))
+                      .catch(() => null)
+                      .finally(() => {
+                        setMenuUpdatingIds((prev) => prev.filter((id) => id !== dish.id));
+                      });
+                  },
+                  ariaLabel: `Add ${dish.name} to the menu`,
+                  disabled: isMenuUpdating,
+                };
+              }
+
+              return {
+                label: isMenuUpdating ? "Updating..." : "Live",
+                className: cn(
+                  statusButtonBaseClass,
+                  "border-transparent bg-[color:var(--color-primary)] text-white hover:bg-[color:var(--color-secondary)] focus-visible:ring-[color:var(--color-secondary)]",
+                ),
+                onClick: (event: MouseEvent<HTMLButtonElement>) => {
+                  event.stopPropagation();
+
+                  if (isMenuUpdating) {
+                    return;
+                  }
+
+                  setRemovalDialogDishId(dish.id);
+                },
+                ariaLabel: `Remove ${dish.name} from the menu`,
+                disabled: isMenuUpdating,
+              };
+            })();
 
             return (
               <Card
@@ -560,112 +618,56 @@ export const RecipeBook = ({
                     </div>
                   </div>
 
-                  <div className="flex flex-col items-end gap-3">
-                    <div className="flex flex-wrap items-center justify-end gap-2">
-                      <Badge variant="outline" className={statusClassName}>
-                        {statusLabel}
-                      </Badge>
-                      {isOnMenu ? (
-                        <button
-                          type="button"
-                          aria-label={`Remove ${dish.name} from the menu`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            if (isMenuUpdating) {
-                              return;
-                            }
-
-                            setRemovalDialogDishId(dish.id);
-                          }}
-                          disabled={isMenuUpdating}
-                          className="inline-flex items-center rounded-full border border-transparent bg-[color:var(--color-primary)] px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-[color:var(--color-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[color:var(--color-secondary)] disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isMenuUpdating ? "Updating..." : "Live"}
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          aria-label={`Add ${dish.name} to the menu`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            if (isMenuUpdating) {
-                              return;
-                            }
-
-                            if (!dish.confirmed) {
-                              setUnconfirmedDialogDishId(dish.id);
-                              return;
-                            }
-
-                            setMenuUpdatingIds((prev) => [...prev, dish.id]);
-
-                            Promise.resolve(onToggleMenuStatus(dish.id, true))
-                              .catch(() => null)
-                              .finally(() =>
-                                setMenuUpdatingIds((prev) => prev.filter((id) => id !== dish.id))
-                              );
-                          }}
-                          disabled={isMenuUpdating}
-                          className="inline-flex items-center rounded-full border border-border bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted/80 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isMenuUpdating ? "Adding..." : "Add to menu"}
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {!dish.confirmed && (
+                  <div className="flex items-center gap-2 self-end">
+                    <button
+                      type="button"
+                      aria-label={statusButtonProps.ariaLabel}
+                      onClick={statusButtonProps.onClick}
+                      disabled={statusButtonProps.disabled}
+                      className={statusButtonProps.className}
+                    >
+                      {statusButtonProps.label}
+                    </button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onEdit(dish.id);
+                      }}
+                      aria-label={`Edit ${dish.name}`}
+                    >
+                      <Edit className="w-5 h-5" />
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
                         <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            onEdit(dish.id);
-                          }}
+                          variant="ghost"
+                          size="icon"
+                          onClick={(event) => event.stopPropagation()}
+                          aria-label={`Delete ${dish.name}`}
                         >
-                          Review
+                          <Trash2 className="w-5 h-5 text-destructive" />
                         </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onEdit(dish.id);
-                        }}
-                        aria-label={`Edit ${dish.name}`}
-                      >
-                        <Edit className="w-5 h-5" />
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(event) => event.stopPropagation()}
-                            aria-label={`Delete ${dish.name}`}
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete recipe</AlertDialogTitle>
+                        </AlertDialogHeader>
+                        <AlertDialogDescription>
+                          Are you sure you want to delete this item?
+                        </AlertDialogDescription>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => onDelete(dish.id)}
+                            className="bg-destructive hover:bg-destructive/90"
                           >
-                            <Trash2 className="w-5 h-5 text-destructive" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete recipe</AlertDialogTitle>
-                          </AlertDialogHeader>
-                          <AlertDialogDescription>
-                            Are you sure you want to delete this item?
-                          </AlertDialogDescription>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => onDelete(dish.id)}
-                              className="bg-destructive hover:bg-destructive/90"
-                            >
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 </div>
 
