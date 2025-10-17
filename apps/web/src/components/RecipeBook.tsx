@@ -92,6 +92,13 @@ export const RecipeBook = ({
   const [isBulkDialogOpen, setIsBulkDialogOpen] = useState(false);
   const [isProcessingBulk, setIsProcessingBulk] = useState(false);
   const [menuUpdatingIds, setMenuUpdatingIds] = useState<string[]>([]);
+  const [showLiveOnly, setShowLiveOnly] = useState(false);
+  const [removalDialogDishId, setRemovalDialogDishId] = useState<string | null>(null);
+  const [unconfirmedDialogDishId, setUnconfirmedDialogDishId] = useState<string | null>(null);
+
+  const isRemovalUpdating = removalDialogDishId
+    ? menuUpdatingIds.includes(removalDialogDishId)
+    : false;
 
   const categories = useMemo(
     () =>
@@ -119,8 +126,9 @@ export const RecipeBook = ({
           }
 
           return true;
-        }),
-    [dishes, selectedCategory, reviewFilter],
+        })
+        .filter((dish) => (showLiveOnly ? Boolean(dish.isOnMenu) : true)),
+    [dishes, selectedCategory, reviewFilter, showLiveOnly],
   );
 
   useEffect(() => {
@@ -138,6 +146,11 @@ export const RecipeBook = ({
   };
 
   const handleSelectAll = () => {
+    if (selectedIds.length === filteredDishes.length) {
+      setSelectedIds([]);
+      return;
+    }
+
     setSelectedIds(filteredDishes.map((dish) => dish.id));
   };
 
@@ -201,36 +214,46 @@ export const RecipeBook = ({
         <div className="flex flex-col gap-4 mb-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <h2 className="text-2xl font-bold text-foreground">Recipe Book</h2>
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="show-ingredients"
-                  checked={showIngredients}
-                  onCheckedChange={setShowIngredients}
-                />
-                <Label htmlFor="show-ingredients" className="text-sm font-medium text-foreground">
-                  Show ingredients
-                </Label>
-              </div>
-              <Select
-                value={reviewFilter}
-                onValueChange={(value: "all" | "reviewed" | "needs_review") => setReviewFilter(value)}
-              >
-                <SelectTrigger id="review-filter" className="w-[180px]" aria-label="Review status">
-                  <SelectValue>
-                    {reviewFilter === "all"
-                      ? "Review status"
-                      : reviewFilter === "reviewed"
-                        ? "Reviewed"
-                        : "Needs review"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="reviewed">Reviewed</SelectItem>
-                  <SelectItem value="needs_review">Needs review</SelectItem>
-                </SelectContent>
-              </Select>
+            <Select
+              value={reviewFilter}
+              onValueChange={(value: "all" | "reviewed" | "needs_review") => setReviewFilter(value)}
+            >
+              <SelectTrigger id="review-filter" className="w-[180px]" aria-label="Review status">
+                <SelectValue>
+                  {reviewFilter === "all"
+                    ? "Review status"
+                    : reviewFilter === "reviewed"
+                      ? "Reviewed"
+                      : "Needs review"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="reviewed">Reviewed</SelectItem>
+                <SelectItem value="needs_review">Needs review</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Switch id="show-ingredients" checked={showIngredients} onCheckedChange={setShowIngredients} />
+              <Label htmlFor="show-ingredients" className="text-sm font-medium text-foreground">
+                Show ingredients
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch id="show-live-only" checked={showLiveOnly} onCheckedChange={setShowLiveOnly} />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Label htmlFor="show-live-only" className="text-sm font-medium text-foreground cursor-help">
+                    Only show live menu items
+                  </Label>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs text-sm">
+                  Live menu items are items that customers can see and order on your menu.
+                </TooltipContent>
+              </Tooltip>
             </div>
           </div>
 
@@ -328,7 +351,7 @@ export const RecipeBook = ({
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex-1">
                     <div className="flex flex-col gap-2">
-                      <h3 className="text-xl font-bold text-foreground break-words md:max-w-[66%]">
+                      <h3 className="text-lg font-semibold text-foreground break-words md:max-w-[66%]">
                         {dish.name}
                       </h3>
                       {dish.description && (
@@ -349,37 +372,6 @@ export const RecipeBook = ({
                   </div>
 
                   <div className="flex flex-col items-end gap-3">
-                    {isOnMenu ? (
-                      <Badge
-                        aria-label="Recipe is live on the menu"
-                        className="border-purple-200 bg-purple-100 text-purple-700"
-                      >
-                        Live
-                      </Badge>
-                    ) : (
-                      <button
-                        type="button"
-                        aria-label={`Add ${dish.name} to the menu`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          if (isMenuUpdating) {
-                            return;
-                          }
-
-                          setMenuUpdatingIds((prev) => [...prev, dish.id]);
-
-                          Promise.resolve(onToggleMenuStatus(dish.id, true))
-                            .catch(() => null)
-                            .finally(() =>
-                              setMenuUpdatingIds((prev) => prev.filter((id) => id !== dish.id))
-                            );
-                        }}
-                        disabled={isMenuUpdating}
-                        className="inline-flex items-center rounded-full border border-border bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted/80 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {isMenuUpdating ? "Adding..." : "Add to Menu"}
-                      </button>
-                    )}
                     <div className="flex items-center gap-2">
                       {dish.confirmed ? (
                         <Tooltip>
@@ -445,6 +437,52 @@ export const RecipeBook = ({
                         </AlertDialogContent>
                       </AlertDialog>
                     </div>
+                    {isOnMenu ? (
+                      <button
+                        type="button"
+                        aria-label={`Remove ${dish.name} from the menu`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (isMenuUpdating) {
+                            return;
+                          }
+
+                          setRemovalDialogDishId(dish.id);
+                        }}
+                        disabled={isMenuUpdating}
+                        className="inline-flex items-center rounded-full border border-transparent bg-[color:var(--color-primary)] px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-[color:var(--color-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[color:var(--color-secondary)] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isMenuUpdating ? "Updating..." : "Live"}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        aria-label={`Add ${dish.name} to the menu`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (isMenuUpdating) {
+                            return;
+                          }
+
+                          if (!dish.confirmed) {
+                            setUnconfirmedDialogDishId(dish.id);
+                            return;
+                          }
+
+                          setMenuUpdatingIds((prev) => [...prev, dish.id]);
+
+                          Promise.resolve(onToggleMenuStatus(dish.id, true))
+                            .catch(() => null)
+                            .finally(() =>
+                              setMenuUpdatingIds((prev) => prev.filter((id) => id !== dish.id))
+                            );
+                        }}
+                        disabled={isMenuUpdating}
+                        className="inline-flex items-center rounded-full border border-border bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted/80 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isMenuUpdating ? "Adding..." : "Add to menu"}
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -489,6 +527,63 @@ export const RecipeBook = ({
           })}
       </div>
       </div>
+
+      <AlertDialog open={Boolean(unconfirmedDialogDishId)} onOpenChange={(open) => !open && setUnconfirmedDialogDishId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Review required</AlertDialogTitle>
+            <AlertDialogDescription>
+              Please confirm the ingredients before adding dishes to your live menu.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setUnconfirmedDialogDishId(null)}>Got it</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={Boolean(removalDialogDishId)}
+        onOpenChange={(open) => {
+          if (!open && !isRemovalUpdating) {
+            setRemovalDialogDishId(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove from live menu</AlertDialogTitle>
+            <AlertDialogDescription>
+              Do you want to remove this dish from the menu? Customers will no longer be able to order it but you can still put it
+              back at a later stage.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setRemovalDialogDishId(null)} disabled={isRemovalUpdating}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (!removalDialogDishId) {
+                  return;
+                }
+
+                setMenuUpdatingIds((prev) => [...prev, removalDialogDishId]);
+
+                Promise.resolve(onToggleMenuStatus(removalDialogDishId, false))
+                  .catch(() => null)
+                  .finally(() => {
+                    setMenuUpdatingIds((prev) => prev.filter((id) => id !== removalDialogDishId));
+                    setRemovalDialogDishId(null);
+                  });
+              }}
+              disabled={isRemovalUpdating}
+            >
+              {isRemovalUpdating ? "Removing..." : "Confirm"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={isBulkDialogOpen} onOpenChange={closeBulkDialog}>
         <AlertDialogContent>
