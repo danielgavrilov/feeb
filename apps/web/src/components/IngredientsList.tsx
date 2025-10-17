@@ -68,7 +68,7 @@ export const IngredientsList = ({
           const selectedAllergens = ingredient.allergens ?? [];
           const handleConfirmClick = () => {
             if (!ingredient.quantity.trim() || !ingredient.unit.trim()) {
-              toast.error("Please confirm quantity");
+              toast.error("Please specify the quantity and unit for this ingredient");
               return;
             }
             onConfirmIngredient(index);

@@ -105,8 +105,8 @@ const Index = () => {
       recipe.ingredients.map((ing) => ({
         name: ing.ingredient_name,
         quantity: ing.quantity?.toString() || "",
-        unit: ing.unit || "",
-        confirmed: ing.confirmed,
+        unit: ing.unit || (ing.confirmed ? "" : "pcs"), // Default to "pcs" for unconfirmed ingredients with missing units
+        confirmed: ing.confirmed && !!(ing.quantity?.toString().trim() && (ing.unit?.trim() || "pcs")), // Only keep confirmed if valid
         allergens: ing.allergens || [],
         dietaryInfo: [],
       }))
@@ -138,6 +138,12 @@ const Index = () => {
   const handleConfirmIngredient = (index: number) => {
     const ingredientToConfirm = ingredients[index];
     if (!ingredientToConfirm) return;
+
+    // Validate that ingredient has both quantity and unit
+    if (!ingredientToConfirm.quantity.trim() || !ingredientToConfirm.unit.trim()) {
+      toast.error("Please specify the quantity and unit for this ingredient");
+      return;
+    }
 
     setIngredients((current) =>
       current.map((ingredient, i) =>
@@ -220,12 +226,22 @@ const Index = () => {
       toast.error("Add at least one ingredient");
       return;
     }
+    
+    // Check for incomplete ingredients (missing quantity or unit)
     const incompleteIngredient = ingredients.find(
       (ingredient) => !ingredient.quantity.trim() || !ingredient.unit.trim()
     );
     if (incompleteIngredient) {
       const ingredientName = incompleteIngredient.name?.trim() || "this ingredient";
-      toast.error(`Please specify the quantity of ${ingredientName}`);
+      const missingValue = !incompleteIngredient.quantity.trim() ? "quantity" : "unit";
+      toast.error(`Please specify the ${missingValue} for ${ingredientName}.`);
+      return;
+    }
+    
+    // Check for unconfirmed ingredients
+    const unconfirmedIngredients = ingredients.filter(ingredient => !ingredient.confirmed);
+    if (unconfirmedIngredients.length > 0) {
+      toast.error("Please confirm or delete all ingredients before saving.");
       return;
     }
 
@@ -235,16 +251,6 @@ const Index = () => {
     }
 
     try {
-      const confirmedIngredients = ingredients.map((ingredient) => ({
-        ...ingredient,
-        confirmed: true,
-        allergens: (ingredient.allergens ?? []).map((allergen) => ({
-          ...allergen,
-          certainty: "confirmed",
-        })),
-      }));
-      setIngredients(confirmedIngredients);
-
       // For now, we're saving recipes without ingredient links
       // TODO: Implement ingredient search and linking
       let updatedRecipesList: Recipe[] = recipes;
@@ -447,7 +453,27 @@ const Index = () => {
     handleTabChange("recipes");
   };
 
-  const canSave = () => dishName.trim().length > 0 && ingredients.length > 0;
+  const canSave = () => {
+    if (dishName.trim().length === 0 || ingredients.length === 0) {
+      return false;
+    }
+    
+    // Check for incomplete ingredients
+    const hasIncompleteIngredients = ingredients.some(
+      (ingredient) => !ingredient.quantity.trim() || !ingredient.unit.trim()
+    );
+    if (hasIncompleteIngredients) {
+      return false;
+    }
+    
+    // Check for unconfirmed ingredients
+    const hasUnconfirmedIngredients = ingredients.some(ingredient => !ingredient.confirmed);
+    if (hasUnconfirmedIngredients) {
+      return false;
+    }
+    
+    return true;
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -478,7 +504,7 @@ const Index = () => {
                 manualAddTabSelectionRef.current = true;
               }}
             >
-              Add/Edit Dish
+              Ingredients
             </TabsTrigger>
             <TabsTrigger value="recipes" className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base">
               Recipe Book

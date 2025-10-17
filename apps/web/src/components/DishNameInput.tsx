@@ -46,6 +46,7 @@ export const DishNameInput = ({
   const [isSuggestionOpen, setIsSuggestionOpen] = useState(false);
   const blurTimeoutRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const isMouseOverPopover = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -121,8 +122,23 @@ export const DishNameInput = ({
 
   const handleInputBlur = () => {
     blurTimeoutRef.current = window.setTimeout(() => {
-      setIsSuggestionOpen(false);
-    }, 120);
+      if (!isMouseOverPopover.current) {
+        setIsSuggestionOpen(false);
+      }
+    }, 150);
+  };
+
+  const handlePopoverMouseEnter = () => {
+    isMouseOverPopover.current = true;
+    if (blurTimeoutRef.current) {
+      window.clearTimeout(blurTimeoutRef.current);
+      blurTimeoutRef.current = null;
+    }
+  };
+
+  const handlePopoverMouseLeave = () => {
+    isMouseOverPopover.current = false;
+    setIsSuggestionOpen(false);
   };
 
   const menuCategoryLabelMap: Record<string, string> = {
@@ -166,6 +182,11 @@ export const DishNameInput = ({
               }}
               onFocus={handleInputFocus}
               onBlur={handleInputBlur}
+              onClick={() => {
+                if (suggestionOptions.length > 0) {
+                  setIsSuggestionOpen(true);
+                }
+              }}
               placeholder="Enter dish name..."
               className="h-16 text-2xl font-medium border-2"
               autoComplete="off"
@@ -176,8 +197,26 @@ export const DishNameInput = ({
               align="start"
               className="w-[var(--radix-popover-trigger-width)] p-0"
               sideOffset={4}
+              onMouseEnter={handlePopoverMouseEnter}
+              onMouseLeave={handlePopoverMouseLeave}
             >
               <div className="max-h-60 overflow-y-auto py-2">
+                {/* Add a new dish option */}
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-muted focus:bg-muted border-b border-border/50"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    onChange("");
+                    setIsSuggestionOpen(false);
+                    window.setTimeout(() => {
+                      inputRef.current?.focus();
+                    }, 0);
+                  }}
+                >
+                  <span className="font-medium text-primary">Add a new dish</span>
+                </button>
+                
                 {filteredSuggestions.length === 0 ? (
                   <p className="px-3 py-2 text-sm text-muted-foreground">No matching dishes found.</p>
                 ) : (
