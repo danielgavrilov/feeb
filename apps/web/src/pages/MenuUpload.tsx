@@ -192,9 +192,16 @@ const MenuUploadPage = () => {
         file: methodRequiresFile(selectedMethod) ? file ?? undefined : undefined,
       });
       setResult(response);
-      toast.success("Menu uploaded successfully. We’ve added the dishes to your recipe book.");
+      
+      // Check if any recipes were actually created
+      if (response.created_recipe_ids && response.created_recipe_ids.length > 0) {
+        toast.success(`Menu uploaded successfully! ${response.created_recipe_ids.length} dish${response.created_recipe_ids.length === 1 ? '' : 'es'} added to your recipe book.`);
+      } else {
+        toast.warning("Menu processed but no dishes could be extracted. Try uploading a different format or add dishes manually.");
+        setError("No dishes were extracted from the menu. The content might be too complex or in an unsupported format.");
+      }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "We couldn’t process the menu.";
+      const message = err instanceof Error ? err.message : "We couldn't process the menu.";
       setError(message);
       toast.error(message);
     } finally {

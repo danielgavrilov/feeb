@@ -514,9 +514,16 @@ async def extract_menu_items(
 
     # Build prompt from stage.plan.md (compressed to single instruction)
     prompt = (
-        "Extract all menu items from the attached PDF or provided URL and output them as a JSON array. "
-        "Each item must include: title, price (float if present), currency (if available otherwise €), description, "
-        "category, options (list), notes (list). Do not infer missing info. Return only a valid JSON array with no prose."
+        "Extract menu items (dishes, drinks, meals) from the provided content and output them as a JSON array. "
+        "IMPORTANT RULES:\n"
+        "- ONLY extract actual menu items that a customer would order (e.g., 'Cappuccino', 'Caesar Salad', 'Burger')\n"
+        "- DO NOT extract ingredient lists, allergen lists, or lists of spices/herbs\n"
+        "- DO NOT extract items that are just lists of ingredients without being an actual dish\n"
+        "- DO NOT include duplicate items\n"
+        "- Each item must be a complete menu offering with a name/title\n\n"
+        "Output format: [{\"title\": \"Dish Name\", \"price\": 10.50, \"currency\": \"€\", \"description\": \"...\", "
+        "\"category\": \"Appetizers\", \"options\": [], \"notes\": []}]\n\n"
+        "Return ONLY valid JSON with no markdown, no prose. If unsure about a field, use null or empty string/array."
     )
 
     client = GeminiClient()

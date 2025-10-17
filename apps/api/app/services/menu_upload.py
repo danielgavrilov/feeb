@@ -196,26 +196,60 @@ class MenuUploadService:
             await session.flush()
 
             try:
-                # Call Stage 2 endpoint
-                recipes_for_deduction = [
-                    {"name": name, "recipe_id": recipe_id}
-                    for recipe_id, name in created_recipes
-                ]
+                # Smart approach: test with small batch first, then process all if successful
+                # This saves tokens while still being safe
+                test_batch_size = 5
                 
-                ingredient_payload = await self._call_recipe_deduction(recipes_for_deduction)
+                if len(created_recipes) <= test_batch_size:
+                    # Small enough, just process all
+                    recipes_for_deduction = [
+                        {"name": name, "recipe_id": recipe_id}
+                        for recipe_id, name in created_recipes
+                    ]
+                    ingredient_payload = await self._call_recipe_deduction(recipes_for_deduction)
+                    added_count = await self._store_deduced_ingredients(
+                        session,
+                        created_recipes,
+                        ingredient_payload,
+                    )
+                else:
+                    # Test with first 5 recipes
+                    test_batch = created_recipes[:test_batch_size]
+                    test_recipes = [
+                        {"name": name, "recipe_id": recipe_id}
+                        for recipe_id, name in test_batch
+                    ]
+                    
+                    # If test succeeds, process all remaining recipes
+                    test_payload = await self._call_recipe_deduction(test_recipes)
+                    test_added = await self._store_deduced_ingredients(
+                        session,
+                        test_batch,
+                        test_payload,
+                    )
+                    
+                    # Test passed, now process all remaining recipes in one call
+                    remaining_recipes = created_recipes[test_batch_size:]
+                    remaining_for_deduction = [
+                        {"name": name, "recipe_id": recipe_id}
+                        for recipe_id, name in remaining_recipes
+                    ]
+                    
+                    remaining_payload = await self._call_recipe_deduction(remaining_for_deduction)
+                    remaining_added = await self._store_deduced_ingredients(
+                        session,
+                        remaining_recipes,
+                        remaining_payload,
+                    )
+                    
+                    added_count = test_added + remaining_added
+                    
             except Exception as exc:
                 self._update_stage_record(stage2, MenuUploadStageStatus.FAILED, error=str(exc))
                 upload.status = MenuUploadStatus.FAILED.value
                 upload.error_message = f"Stage 2 failed: {exc}"
                 await session.flush()
                 raise
-
-            # Save ingredients to database
-            added_count = await self._store_deduced_ingredients(
-                session,
-                created_recipes,
-                ingredient_payload,
-            )
 
             upload.stage2_completed_at = datetime.utcnow()
             self._update_stage_record(
