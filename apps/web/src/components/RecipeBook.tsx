@@ -131,6 +131,7 @@ export const RecipeBook = ({
   const [sections, setSections] = useState<SectionDefinition[]>(() => loadSavedMenuSections());
   const [isManageSectionsOpen, setIsManageSectionsOpen] = useState(false);
   const [editingSections, setEditingSections] = useState<SectionDefinition[]>([]);
+  const [newSectionLabel, setNewSectionLabel] = useState("");
   const [sectionOrders, setSectionOrders] = useState<Record<string, string[]>>({});
   const [sectionOrderEditing, setSectionOrderEditing] = useState<{
     sectionId: string;
@@ -156,35 +157,31 @@ export const RecipeBook = ({
 
   useEffect(() => {
     setSections((prev) => {
-      if (categories.length === 0) {
-        return [];
-      }
-
       if (prev.length === 0) {
+        if (categories.length === 0) {
+          return prev;
+        }
+
         return categories.map((category) => ({ id: category, label: category }));
       }
 
-      const next: SectionDefinition[] = [];
-      const seen = new Set<string>();
-
-      prev.forEach((section) => {
-        if (categories.includes(section.id)) {
-          next.push(section);
-          seen.add(section.id);
-        }
-      });
-
-      categories.forEach((category) => {
-        if (!seen.has(category)) {
-          next.push({ id: category, label: category });
-        }
-      });
-
-      if (next.length === prev.length && next.every((section, index) => section === prev[index])) {
+      if (categories.length === 0) {
         return prev;
       }
 
-      return next;
+      const next = [...prev];
+      const existingIds = new Set(next.map((section) => section.id));
+      let changed = false;
+
+      categories.forEach((category) => {
+        if (!existingIds.has(category)) {
+          next.push({ id: category, label: category });
+          existingIds.add(category);
+          changed = true;
+        }
+      });
+
+      return changed ? next : prev;
     });
   }, [categories]);
 
@@ -416,12 +413,41 @@ export const RecipeBook = ({
 
   const selectedCount = selectedIds.length;
 
+  const generateSectionId = (
+    label: string,
+    existingSections: SectionDefinition[],
+  ): string => {
+    const normalized = label
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+    const fallbackBase = `section-${Date.now()}`;
+    const baseId = normalized.length > 0 ? normalized : fallbackBase;
+    const usedIds = new Set(existingSections.map((section) => section.id));
+
+    if (!usedIds.has(baseId)) {
+      return baseId;
+    }
+
+    let suffix = 2;
+    let candidate = `${baseId}-${suffix}`;
+    while (usedIds.has(candidate)) {
+      suffix += 1;
+      candidate = `${baseId}-${suffix}`;
+    }
+
+    return candidate;
+  };
+
   const handleManageSectionsOpenChange = (open: boolean) => {
     setIsManageSectionsOpen(open);
     if (open) {
       setEditingSections(sections.map((section) => ({ ...section })));
+      setNewSectionLabel("");
     } else {
       setEditingSections([]);
+      setNewSectionLabel("");
     }
   };
 
@@ -431,6 +457,19 @@ export const RecipeBook = ({
       next[index] = { ...next[index], label };
       return next;
     });
+  };
+
+  const handleAddNewSection = () => {
+    const trimmedLabel = newSectionLabel.trim();
+    if (!trimmedLabel) {
+      return;
+    }
+
+    setEditingSections((prev) => {
+      const id = generateSectionId(trimmedLabel, prev);
+      return [...prev, { id, label: trimmedLabel }];
+    });
+    setNewSectionLabel("");
   };
 
   const moveEditingSection = (fromIndex: number, toIndex: number) => {
@@ -654,7 +693,9 @@ export const RecipeBook = ({
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Manage sections</DialogTitle>
-                    <DialogDescription>Rename or reorder how sections appear in your recipe book.</DialogDescription>
+                    <DialogDescription>
+                      Rename, reorder, or add sections to organize your recipe book.
+                    </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-3">
                     {editingSections.length === 0 && (
@@ -693,6 +734,34 @@ export const RecipeBook = ({
                         </div>
                       </div>
                     ))}
+                    <div className="space-y-2 pt-3 border-t">
+                      <Label htmlFor="new-section-label" className="text-sm font-medium">
+                        Add a section
+                      </Label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Input
+                          id="new-section-label"
+                          value={newSectionLabel}
+                          onChange={(event) => setNewSectionLabel(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              handleAddNewSection();
+                            }
+                          }}
+                          placeholder="e.g. Seasonal Specials"
+                          aria-label="New section name"
+                          className="flex-1 min-w-[180px]"
+                        />
+                        <Button
+                          type="button"
+                          onClick={handleAddNewSection}
+                          disabled={!newSectionLabel.trim()}
+                        >
+                          Add
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                   <DialogFooter className="pt-2">
                     <Button variant="outline" onClick={() => handleManageSectionsOpenChange(false)}>
