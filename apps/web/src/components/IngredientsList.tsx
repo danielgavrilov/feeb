@@ -16,6 +16,7 @@ import {
 import { ALLERGEN_CATEGORIES } from "@/data/recipes";
 import { Check, Trash2, Plus, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
+import { parsePriceInput } from "@/lib/price-format";
 
 export interface IngredientState {
   name: string;
@@ -53,6 +54,7 @@ interface IngredientsListProps {
     index: number,
     substitution?: IngredientState["substitution"],
   ) => void;
+  formatPrice: (value: string | number | null | undefined) => string;
 }
 
 export const IngredientsList = ({
@@ -64,6 +66,7 @@ export const IngredientsList = ({
   onAddIngredient,
   onUpdateIngredientAllergens,
   onUpdateIngredientSubstitution,
+  formatPrice,
 }: IngredientsListProps) => {
   const [newName, setNewName] = useState("");
   const [newQuantity, setNewQuantity] = useState("");
@@ -108,16 +111,23 @@ export const IngredientsList = ({
     if (!value) {
       return "";
     }
+
     const trimmed = value.trim();
     if (!trimmed) {
       return "";
     }
 
-    const numeric = Number(trimmed);
-    if (Number.isFinite(numeric)) {
-      return numeric >= 0 ? `+$${numeric.toFixed(2)}` : `$${numeric.toFixed(2)}`;
+    const formatted = formatPrice(trimmed);
+    if (!formatted) {
+      return "";
     }
-    return trimmed;
+
+    const numeric = parsePriceInput(trimmed);
+    if (numeric !== null && numeric > 0) {
+      return `+${formatted}`;
+    }
+
+    return formatted;
   };
 
   const handleAdd = () => {

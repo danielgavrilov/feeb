@@ -67,9 +67,10 @@ interface MenuViewProps {
   dishes: SavedDish[];
   restaurantName: string;
   showImages: boolean;
+  formatPrice: (value: string | number | null | undefined) => string;
 }
 
-export const MenuView = ({ dishes, restaurantName, showImages }: MenuViewProps) => {
+export const MenuView = ({ dishes, restaurantName, showImages, formatPrice }: MenuViewProps) => {
   const [filterMode, setFilterMode] = useState<"highlight" | "exclude">("highlight");
   const [selectedAllergens, setSelectedAllergens] = useState<string[]>([]);
   const [ingredientInputValue, setIngredientInputValue] = useState("");
@@ -596,6 +597,7 @@ export const MenuView = ({ dishes, restaurantName, showImages }: MenuViewProps) 
                         showIngredients={showIngredients}
                         highlightedAllergens={highlightedAllergens}
                         highlightedIngredientTerms={highlightedIngredientTerms}
+                        formatPrice={formatPrice}
                       />
                     );
                   })}

@@ -14,6 +14,13 @@ import { useRecipes } from "@/hooks/useRecipes";
 import { Recipe } from "@/lib/api";
 import { LandingPage } from "@/components/LandingPage";
 import { useSearchParams } from "react-router-dom";
+import {
+  CurrencyOption,
+  PriceDisplayFormat,
+  DEFAULT_CURRENCY,
+  DEFAULT_PRICE_FORMAT,
+  formatPriceDisplay,
+} from "@/lib/price-format";
 
 const Index = () => {
   const { restaurant, restaurants, createRestaurant: createRestaurantAPI, selectRestaurant } = useRestaurant();
@@ -42,8 +49,16 @@ const Index = () => {
   const [editingDishId, setEditingDishId] = useState<number | null>(null);
   const [showPrepMethod, setShowPrepMethod] = useState(false);
   const [showMenuImages, setShowMenuImages] = useState(false);
+  const [currency, setCurrency] = useState<CurrencyOption>(DEFAULT_CURRENCY);
+  const [priceFormat, setPriceFormat] = useState<PriceDisplayFormat>(DEFAULT_PRICE_FORMAT);
   const prepInputRef = useRef<HTMLTextAreaElement | null>(null);
   const manualAddTabSelectionRef = useRef(false);
+
+  const formatPrice = useCallback(
+    (value: string | number | null | undefined) =>
+      formatPriceDisplay(value, { currency, format: priceFormat }),
+    [currency, priceFormat],
+  );
 
   // Convert API recipes to SavedDish format for existing components
   const savedDishes: SavedDish[] = recipes.map((recipe: Recipe) => ({
@@ -599,6 +614,7 @@ const Index = () => {
                   onServingSizeChange={setServingSize}
                   price={price}
                   onPriceChange={setPrice}
+                  formatPrice={formatPrice}
                   existingDishes={savedDishes.map((dish) => ({
                     id: dish.id,
                     name: dish.name,
@@ -617,6 +633,7 @@ const Index = () => {
                   onAddIngredient={handleAddIngredient}
                   onUpdateIngredientAllergens={handleUpdateIngredientAllergens}
                   onUpdateIngredientSubstitution={handleUpdateIngredientSubstitution}
+                  formatPrice={formatPrice}
                 />
 
                 {showPrepMethod && (
@@ -661,6 +678,7 @@ const Index = () => {
                 onEdit={handleEditDish}
                 onBulkAction={handleBulkRecipeAction}
                 onToggleMenuStatus={handleToggleMenuStatus}
+                formatPrice={formatPrice}
               />
             </div>
           </TabsContent>
@@ -670,6 +688,7 @@ const Index = () => {
               dishes={savedDishes}
               restaurantName={restaurant?.name || "My Restaurant"}
               showImages={showMenuImages}
+              formatPrice={formatPrice}
             />
           </TabsContent>
 
@@ -682,6 +701,10 @@ const Index = () => {
                 onSelectRestaurant={selectRestaurant}
                 showMenuImages={showMenuImages}
                 onToggleMenuImages={setShowMenuImages}
+                currency={currency}
+                onCurrencyChange={setCurrency}
+                priceFormat={priceFormat}
+                onPriceFormatChange={setPriceFormat}
               />
             </div>
           </TabsContent>
