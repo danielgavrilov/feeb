@@ -61,6 +61,7 @@ export const DishNameInput = ({
   const blurTimeoutRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const isMouseOverPopover = useRef(false);
+  const pendingOpenRef = useRef(false);
   const hasSelectedDish = Boolean(selectedDishId);
   const [menuSections, setMenuSections] = useState<StoredMenuSection[]>(() => {
     const savedSections = loadSavedMenuSections();
@@ -165,18 +166,6 @@ export const DishNameInput = ({
     });
   }, [existingDishes]);
 
-  useEffect(() => {
-    if (suggestionOptions.length === 0) {
-      setIsSuggestionOpen(false);
-    }
-  }, [suggestionOptions.length]);
-
-  useEffect(() => {
-    if (hasSelectedDish) {
-      setIsSuggestionOpen(false);
-    }
-  }, [hasSelectedDish]);
-
   const filteredSuggestions = useMemo(() => {
     const query = value.trim().toLowerCase();
     if (!query) {
@@ -186,10 +175,47 @@ export const DishNameInput = ({
     return suggestionOptions.filter((option) => option.name.toLowerCase().includes(query));
   }, [suggestionOptions, value]);
 
+  const closeSuggestions = () => {
+    setIsSuggestionOpen(false);
+  };
+
+  const scheduleOpenReset = () => {
+    if (typeof window === "undefined") {
+      pendingOpenRef.current = false;
+      return;
+    }
+
+    window.setTimeout(() => {
+      pendingOpenRef.current = false;
+    }, 0);
+  };
+
+  const openSuggestions = () => {
+    if (hasSelectedDish || suggestionOptions.length === 0 || isSuggestionOpen) {
+      return;
+    }
+
+    pendingOpenRef.current = true;
+    setIsSuggestionOpen(true);
+    scheduleOpenReset();
+  };
+
+  useEffect(() => {
+    if (suggestionOptions.length === 0) {
+      closeSuggestions();
+    }
+  }, [suggestionOptions.length]);
+
+  useEffect(() => {
+    if (hasSelectedDish) {
+      closeSuggestions();
+    }
+  }, [hasSelectedDish]);
+
   const handleOptionSelect = (option: DishSuggestion) => {
     onChange(option.name);
     onRecipeMatch(option.id);
-    setIsSuggestionOpen(false);
+    closeSuggestions();
     window.setTimeout(() => {
       inputRef.current?.focus();
     }, 0);
@@ -201,15 +227,13 @@ export const DishNameInput = ({
       blurTimeoutRef.current = null;
     }
 
-    if (!hasSelectedDish && suggestionOptions.length > 0) {
-      setIsSuggestionOpen(true);
-    }
+    openSuggestions();
   };
 
   const handleInputBlur = () => {
     blurTimeoutRef.current = window.setTimeout(() => {
       if (!isMouseOverPopover.current) {
-        setIsSuggestionOpen(false);
+        closeSuggestions();
       }
     }, 150);
   };
@@ -224,10 +248,6 @@ export const DishNameInput = ({
 
   const handlePopoverMouseLeave = () => {
     isMouseOverPopover.current = false;
-    if (typeof document !== "undefined" && inputRef.current === document.activeElement) {
-      return;
-    }
-    setIsSuggestionOpen(false);
   };
 
   const optionalSummaryItems: string[] = [];
@@ -251,7 +271,11 @@ export const DishNameInput = ({
         </Label>
         <Popover
           open={!hasSelectedDish && isSuggestionOpen && suggestionOptions.length > 0}
-          onOpenChange={setIsSuggestionOpen}
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen && !pendingOpenRef.current) {
+              closeSuggestions();
+            }
+          }}
         >
           <PopoverTrigger asChild>
             <div className="relative">
@@ -261,17 +285,11 @@ export const DishNameInput = ({
                 value={value}
                 onChange={(e) => {
                   onChange(e.target.value);
-                  if (!hasSelectedDish && suggestionOptions.length > 0) {
-                    setIsSuggestionOpen(true);
-                  }
+                  openSuggestions();
                 }}
                 onFocus={handleInputFocus}
                 onBlur={handleInputBlur}
-                onClick={() => {
-                  if (!hasSelectedDish && suggestionOptions.length > 0) {
-                    setIsSuggestionOpen(true);
-                  }
-                }}
+                onClick={openSuggestions}
                 placeholder="Enter dish name..."
                 className="h-16 text-2xl font-medium border-2 pr-14"
                 autoComplete="off"
@@ -280,7 +298,7 @@ export const DishNameInput = ({
                 <button
                   type="button"
                   onClick={() => {
-                    setIsSuggestionOpen(false);
+                    closeSuggestions();
                     onClearSelectedDish();
                     inputRef.current?.focus();
                   }}
