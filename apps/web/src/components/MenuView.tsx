@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { Search, X } from "lucide-react";
 
@@ -7,6 +7,15 @@ import { DishCard } from "./menu/DishCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ALLERGEN_FILTERS, allergenFilterMap } from "@/data/allergen-filters";
 import { expandIngredientSearchTerms } from "@/data/ingredient-search";
 import { loadSavedMenuSections, MENU_SECTIONS_EVENT, StoredMenuSection } from "@/lib/menu-sections";
@@ -60,11 +69,10 @@ interface MenuViewProps {
 }
 
 export const MenuView = ({ dishes, restaurantName, showImages }: MenuViewProps) => {
-  const [allergenQuery, setAllergenQuery] = useState("");
+  const [filterMode, setFilterMode] = useState<"highlight" | "exclude">("highlight");
   const [selectedAllergens, setSelectedAllergens] = useState<string[]>([]);
-  const [ingredientQuery, setIngredientQuery] = useState("");
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const filterContainerRef = useRef<HTMLDivElement | null>(null);
+  const [ingredientInputValue, setIngredientInputValue] = useState("");
+  const [ingredientSearchTerms, setIngredientSearchTerms] = useState<string[]>([]);
   const [savedSections, setSavedSections] = useState<StoredMenuSection[]>(() => loadSavedMenuSections());
   const sectionLabelMap = useMemo(() => {
     const entries = new Map<string, string>();
@@ -73,19 +81,6 @@ export const MenuView = ({ dishes, restaurantName, showImages }: MenuViewProps) 
     });
     return entries;
   }, [savedSections]);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (filterContainerRef.current && !filterContainerRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
 
   useEffect(() => {
     const handleSectionsUpdated: EventListener = (event) => {
@@ -116,47 +111,30 @@ export const MenuView = ({ dishes, restaurantName, showImages }: MenuViewProps) 
     return entries;
   }, [menuDishes]);
 
-  const allergenFilteredMenuDishes = useMemo(
+  const ingredientMatchers = useMemo(
     () =>
-      menuDishes.filter((dish) =>
-        selectedAllergens.every((allergenId) => !dishContainsAllergen(dish, allergenId)),
-      ),
-    [menuDishes, selectedAllergens],
+      ingredientSearchTerms
+        .map((term) => {
+          const normalized = term.trim().toLowerCase();
+          if (!normalized) {
+            return null;
+          }
+
+          return {
+            raw: term,
+            normalized,
+            expansion: expandIngredientSearchTerms(normalized),
+          };
+        })
+        .filter((entry): entry is {
+          raw: string;
+          normalized: string;
+          expansion: ReturnType<typeof expandIngredientSearchTerms>;
+        } => Boolean(entry)),
+    [ingredientSearchTerms],
   );
 
-  const allergenQueryValue = allergenQuery.trim().toLowerCase();
-  const ingredientQueryValue = ingredientQuery.trim().toLowerCase();
-
-  const allergenSuggestions = useMemo(() => {
-    const available = ALLERGEN_FILTERS.filter((definition) => !selectedAllergens.includes(definition.id));
-
-    if (!allergenQueryValue) {
-      return available.slice(0, 6);
-    }
-
-    return available.filter(
-      (definition) =>
-        definition.name.toLowerCase().includes(allergenQueryValue) ||
-        definition.keywords.some((keyword) => keyword.toLowerCase().includes(allergenQueryValue)),
-    );
-  }, [allergenQueryValue, selectedAllergens]);
-
-  const handleSelectAllergen = (allergenId: string) => {
-    setSelectedAllergens((prev) => (prev.includes(allergenId) ? prev : [...prev, allergenId]));
-    setAllergenQuery("");
-    setIsDropdownOpen(false);
-  };
-
-  const handleRemoveAllergen = (allergenId: string) => {
-    setSelectedAllergens((prev) => prev.filter((id) => id !== allergenId));
-  };
-
-  const expandedIngredientQuery = useMemo(
-    () => expandIngredientSearchTerms(ingredientQueryValue),
-    [ingredientQueryValue],
-  );
-
-  const ingredientMatchScore = useMemo(() => {
+  const ingredientMatchEvaluator = useMemo(() => {
     // Lightweight scoring keeps the search client-side. When we outgrow this,
     // consider wiring up the API-backed trigram/taxonomy approaches captured in
     // the ingredient-search data helpers.
@@ -237,52 +215,147 @@ export const MenuView = ({ dishes, restaurantName, showImages }: MenuViewProps) 
 
     const computeScore = (dishId: string) => {
       const ingredients = normalizedIngredientMap.get(dishId) ?? [];
-
-      if (!expandedIngredientQuery.terms.length && !expandedIngredientQuery.phrase) {
-        return 1;
+      if (!ingredients.length || ingredientMatchers.length === 0) {
+        return { score: 0, matches: [] as string[] };
       }
 
-      if (!ingredients.length) {
-        return 0;
-      }
+      let bestOverallScore = 0;
+      const matches = new Set<string>();
 
-      let bestScore = 0;
+      ingredientMatchers.forEach((matcher) => {
+        let bestScoreForMatcher = 0;
+        const { expansion } = matcher;
 
-      if (expandedIngredientQuery.phrase) {
-        ingredients.forEach((ingredient) => {
-          if (ingredient.includes(expandedIngredientQuery.phrase!)) {
-            const coverage = expandedIngredientQuery.phrase!.length / ingredient.length;
-            bestScore = Math.max(bestScore, 1 + coverage * 0.3);
-          }
+        if (expansion.phrase) {
+          ingredients.forEach((ingredient) => {
+            if (ingredient.includes(expansion.phrase!)) {
+              const coverage = expansion.phrase!.length / ingredient.length;
+              bestScoreForMatcher = Math.max(bestScoreForMatcher, 1 + coverage * 0.3);
+            }
+          });
+        }
+
+        expansion.terms.forEach((term) => {
+          ingredients.forEach((ingredient) => {
+            const score = computeTermScore(ingredient, term);
+            if (score > bestScoreForMatcher) {
+              bestScoreForMatcher = score;
+            }
+          });
         });
-      }
 
-      expandedIngredientQuery.terms.forEach((term) => {
-        ingredients.forEach((ingredient) => {
-          const score = computeTermScore(ingredient, term);
-          if (score > bestScore) {
-            bestScore = score;
+        if (bestScoreForMatcher > 0) {
+          matches.add(matcher.raw);
+          if (bestScoreForMatcher > bestOverallScore) {
+            bestOverallScore = bestScoreForMatcher;
           }
-        });
+        }
       });
 
-      return bestScore;
+      return {
+        score: bestOverallScore,
+        matches: Array.from(matches),
+      };
     };
-
     return computeScore;
-  }, [expandedIngredientQuery, normalizedIngredientMap]);
+  }, [ingredientMatchers, normalizedIngredientMap]);
 
-  const visibleMenuDishes = useMemo(() => {
-    if (!ingredientQueryValue) {
-      return allergenFilteredMenuDishes;
+  const ingredientMatchResults = useMemo(() => {
+    const results = new Map<string, { score: number; matches: string[] }>();
+    menuDishes.forEach((dish) => {
+      results.set(dish.id, ingredientMatchEvaluator(dish.id));
+    });
+    return results;
+  }, [ingredientMatchEvaluator, menuDishes]);
+
+  const allergenProcessedMenuDishes = useMemo(() => {
+    if (filterMode === "exclude") {
+      return menuDishes.filter((dish) =>
+        selectedAllergens.every((allergenId) => !dishContainsAllergen(dish, allergenId)),
+      );
     }
 
-    return allergenFilteredMenuDishes
-      .map((dish) => ({ dish, score: ingredientMatchScore(dish.id) }))
-      .filter((entry) => entry.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .map((entry) => entry.dish);
-  }, [allergenFilteredMenuDishes, ingredientMatchScore, ingredientQueryValue]);
+    return menuDishes;
+  }, [filterMode, menuDishes, selectedAllergens]);
+
+  const visibleMenuDishes = useMemo(() => {
+    const hasIngredientTerms = ingredientMatchers.length > 0;
+
+    if (filterMode === "exclude") {
+      if (!hasIngredientTerms) {
+        return allergenProcessedMenuDishes;
+      }
+
+      return allergenProcessedMenuDishes
+        .map((dish) => ({ dish, match: ingredientMatchResults.get(dish.id) }))
+        .filter((entry) => (entry.match?.score ?? 0) > 0)
+        .sort((a, b) => (b.match?.score ?? 0) - (a.match?.score ?? 0))
+        .map((entry) => entry.dish);
+    }
+
+    if (!hasIngredientTerms) {
+      return allergenProcessedMenuDishes;
+    }
+
+    const matching: SavedDish[] = [];
+    const nonMatching: SavedDish[] = [];
+
+    allergenProcessedMenuDishes.forEach((dish) => {
+      const match = ingredientMatchResults.get(dish.id);
+      if (match && match.score > 0) {
+        matching.push(dish);
+      } else {
+        nonMatching.push(dish);
+      }
+    });
+
+    return [...matching, ...nonMatching];
+  }, [allergenProcessedMenuDishes, filterMode, ingredientMatchResults, ingredientMatchers.length]);
+
+  const handleSelectAllergen = (allergenId: string) => {
+    setSelectedAllergens((prev) => (prev.includes(allergenId) ? prev : [...prev, allergenId]));
+  };
+
+  const handleRemoveAllergen = (allergenId: string) => {
+    setSelectedAllergens((prev) => prev.filter((id) => id !== allergenId));
+  };
+
+  const handleAddIngredientTerm = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    setIngredientSearchTerms((prev) => {
+      const exists = prev.some((term) => term.toLowerCase() === trimmed.toLowerCase());
+      if (exists) {
+        return prev;
+      }
+      return [...prev, trimmed];
+    });
+    setIngredientInputValue("");
+  };
+
+  const handleRemoveIngredientTerm = (term: string) => {
+    setIngredientSearchTerms((prev) => prev.filter((existing) => existing !== term));
+  };
+
+  const handleIngredientSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    handleAddIngredientTerm(ingredientInputValue);
+  };
+
+  const handleFilterModeChange = (value: string) => {
+    if (value === "highlight" || value === "exclude") {
+      setFilterMode(value);
+    }
+  };
+
+  const handleClearAll = () => {
+    setSelectedAllergens([]);
+    setIngredientSearchTerms([]);
+    setIngredientInputValue("");
+  };
 
   const categoryOrder = useMemo(() => {
     const uniqueCategories = new Set<string>();
@@ -320,127 +393,156 @@ export const MenuView = ({ dishes, restaurantName, showImages }: MenuViewProps) 
       </header>
 
       <main className="container mx-auto px-4 py-8 space-y-10">
-        <section className="bg-card border border-border/60 rounded-xl p-6 shadow-sm" ref={filterContainerRef}>
-          <div className="flex flex-col gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">Allergen filters</h2>
-              <p className="text-sm text-muted-foreground">
-                Search for allergens or dietary preferences to hide dishes that contain them.
-              </p>
+        <section className="bg-card border border-border/60 rounded-xl p-6 shadow-sm">
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div className="space-y-1">
+                <h2 className="text-lg font-semibold text-foreground">Ingredients & allergens</h2>
+                <p className="text-sm text-muted-foreground max-w-2xl">
+                  Choose allergens to highlight or hide dishes, or search for ingredients to surface potential
+                  concerns.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Mode</span>
+                <ToggleGroup
+                  type="single"
+                  value={filterMode}
+                  onValueChange={handleFilterModeChange}
+                  className="bg-muted/60 rounded-full p-1"
+                >
+                  <ToggleGroupItem
+                    value="highlight"
+                    className="rounded-full px-3 py-1 text-sm"
+                    aria-label="Highlight selected allergens and ingredients"
+                  >
+                    Highlight
+                  </ToggleGroupItem>
+                  <ToggleGroupItem
+                    value="exclude"
+                    className="rounded-full px-3 py-1 text-sm"
+                    aria-label="Exclude dishes containing selected allergens and ingredients"
+                  >
+                    Exclude
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              </div>
             </div>
 
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-              <Input
-                value={allergenQuery}
-                onChange={(event) => {
-                  setAllergenQuery(event.target.value);
-                  setIsDropdownOpen(true);
-                }}
-                onFocus={() => {
-                  setIsDropdownOpen(true);
-                }}
-                placeholder="Filter allergens, e.g. gluten, milk, vegan..."
-                className="pl-10 pr-10"
-              />
-              {allergenQuery && (
-                <button
-                  type="button"
-                  aria-label="Clear allergen search"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  onClick={() => setAllergenQuery("")}
-                >
-                  <X size={16} />
-                </button>
-              )}
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-4 md:flex-row md:items-end">
+                <div className="space-y-2 md:w-1/2">
+                  <Label htmlFor="allergen-select" className="text-sm font-medium text-foreground">
+                    Pick an allergen
+                  </Label>
+                  <Select onValueChange={handleSelectAllergen}>
+                    <SelectTrigger id="allergen-select">
+                      <SelectValue placeholder="Select an allergen or dietary tag" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ALLERGEN_FILTERS.map((definition) => (
+                        <SelectItem
+                          key={definition.id}
+                          value={definition.id}
+                          disabled={selectedAllergens.includes(definition.id)}
+                          className="flex items-center gap-2"
+                        >
+                          {definition.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              {isDropdownOpen && allergenSuggestions.length > 0 && (
-                <div className="absolute z-20 mt-2 w-full rounded-lg border border-border bg-popover shadow-lg">
-                  <ul className="max-h-80 overflow-y-auto py-2">
-                    {allergenSuggestions.map((definition) => (
-                      <li key={definition.id}>
+                <div className="space-y-2 md:w-1/2">
+                  <Label htmlFor="ingredient-search" className="text-sm font-medium text-foreground">
+                    Or search an ingredient
+                  </Label>
+                  <form onSubmit={handleIngredientSubmit} className="w-full">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
+                      <Input
+                        id="ingredient-search"
+                        value={ingredientInputValue}
+                        onChange={(event) => setIngredientInputValue(event.target.value)}
+                        placeholder="Add an ingredient, e.g. mushroom, soy, cilantro..."
+                        className="pl-10 pr-10"
+                        autoComplete="off"
+                      />
+                      {ingredientInputValue && (
                         <button
                           type="button"
-                          onClick={() => handleSelectAllergen(definition.id)}
-                          className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none"
+                          aria-label="Clear ingredient input"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          onClick={() => setIngredientInputValue("")}
                         >
-                          <definition.Icon className="h-10 w-10" />
-                          <div>
-                            <div className="text-sm font-medium text-foreground">{definition.name}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {definition.category === "diet" ? "Diet" : "Allergen"}
-                            </div>
-                          </div>
+                          <X size={16} />
                         </button>
-                      </li>
-                    ))}
-                  </ul>
+                      )}
+                    </div>
+                  </form>
+                  <p className="text-xs text-muted-foreground">
+                    Press Enter to add the ingredient to your list.
+                  </p>
                 </div>
-              )}
-            </div>
+              </div>
 
-            {selectedAllergens.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2">
-                {selectedAllergens.map((allergenId) => {
-                  const definition = allergenFilterMap.get(allergenId);
-                  if (!definition) {
-                    return null;
-                  }
+              {(selectedAllergens.length > 0 || ingredientSearchTerms.length > 0) && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {selectedAllergens.map((allergenId) => {
+                    const definition = allergenFilterMap.get(allergenId);
+                    if (!definition) {
+                      return null;
+                    }
 
-                  const Icon = definition.Icon;
-                  return (
-                    <Badge key={allergenId} variant="secondary" className="flex items-center gap-2 pr-2">
-                      <Icon className="h-6 w-6" />
-                      <span>{definition.name}</span>
+                    const Icon = definition.Icon;
+                    return (
+                      <Badge
+                        key={allergenId}
+                        className="flex items-center gap-2 rounded-full bg-muted text-foreground border border-border/60 px-3 py-1 h-auto"
+                      >
+                        <Icon className="h-4 w-4" />
+                        <span className="text-sm">{definition.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAllergen(allergenId)}
+                          className="text-muted-foreground transition hover:text-foreground"
+                          aria-label={`Remove ${definition.name} filter`}
+                        >
+                          <X size={14} />
+                        </button>
+                      </Badge>
+                    );
+                  })}
+
+                  {ingredientSearchTerms.map((term) => (
+                    <Badge
+                      key={term}
+                      className="flex items-center gap-2 rounded-full bg-muted text-foreground border border-border/60 px-3 py-1 h-auto"
+                    >
+                      <span className="text-sm">{term}</span>
                       <button
                         type="button"
-                        onClick={() => handleRemoveAllergen(allergenId)}
+                        onClick={() => handleRemoveIngredientTerm(term)}
                         className="text-muted-foreground transition hover:text-foreground"
-                        aria-label={`Remove ${definition.name} filter`}
+                        aria-label={`Remove ${term} search`}
                       >
                         <X size={14} />
                       </button>
                     </Badge>
-                  );
-                })}
+                  ))}
 
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => setSelectedAllergens([])}
-                >
-                  Clear filters
-                </Button>
-              </div>
-            )}
-
-            <div className="pt-6 border-t border-border/60">
-              <h2 className="text-lg font-semibold text-foreground">Ingredient search</h2>
-              <p className="text-sm text-muted-foreground">
-                Highlight dishes whose ingredient lists match your query or common synonyms.
-              </p>
-
-              <div className="relative mt-3">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-                <Input
-                  value={ingredientQuery}
-                  onChange={(event) => setIngredientQuery(event.target.value)}
-                  placeholder="Search ingredients, e.g. mushroom, shiitake, cilantro..."
-                  className="pl-10 pr-10"
-                />
-                {ingredientQuery && (
-                  <button
+                  <Button
                     type="button"
-                    aria-label="Clear ingredient search"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    onClick={() => setIngredientQuery("")}
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-3 text-xs"
+                    onClick={handleClearAll}
                   >
-                    <X size={16} />
-                  </button>
-                )}
-              </div>
+                    Clear all
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -480,9 +582,28 @@ export const MenuView = ({ dishes, restaurantName, showImages }: MenuViewProps) 
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {dishesInCategory.map((dish) => (
-                    <DishCard key={dish.id} dish={dish} showImage={showImages} />
-                  ))}
+                  {dishesInCategory.map((dish) => {
+                    const ingredientMatch = ingredientMatchResults.get(dish.id);
+                    const highlightedAllergenNames =
+                      filterMode === "highlight"
+                        ? selectedAllergens
+                            .filter((allergenId) => dishContainsAllergen(dish, allergenId))
+                            .map((allergenId) => allergenFilterMap.get(allergenId)?.name)
+                            .filter((name): name is string => Boolean(name))
+                        : [];
+                    const highlightedIngredientTerms =
+                      filterMode === "highlight" ? ingredientMatch?.matches ?? [] : [];
+
+                    return (
+                      <DishCard
+                        key={dish.id}
+                        dish={dish}
+                        showImage={showImages}
+                        highlightedAllergens={highlightedAllergenNames}
+                        highlightedIngredientTerms={highlightedIngredientTerms}
+                      />
+                    );
+                  })}
                 </div>
               </section>
             );
