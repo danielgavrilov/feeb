@@ -747,7 +747,7 @@ export const RecipeBook = ({
                   >
                     <DialogTrigger asChild>
                       <Button variant="outline" size="sm">
-                        Edit order
+                        Edit
                       </Button>
                     </DialogTrigger>
                     <DialogContent>
