@@ -476,9 +476,6 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice }: Me
                       )}
                     </div>
                   </form>
-                  <p className="text-xs text-muted-foreground">
-                    Press Enter to add the ingredient to your list.
-                  </p>
                 </div>
               </div>
 
