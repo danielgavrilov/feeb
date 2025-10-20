@@ -6,6 +6,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { loadSavedMenuSections, MENU_SECTIONS_EVENT, saveMenuSections, StoredMenuSection } from "@/lib/menu-sections";
+
+const FALLBACK_MENU_SECTIONS: StoredMenuSection[] = [
+  { id: "appetizer", label: "Appetizer" },
+  { id: "main", label: "Main" },
+  { id: "side", label: "Side" },
+  { id: "dessert", label: "Dessert" },
+  { id: "beverage", label: "Beverage" },
+];
 
 export interface DishSuggestion {
   id: string;
@@ -52,6 +62,71 @@ export const DishNameInput = ({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const isMouseOverPopover = useRef(false);
   const hasSelectedDish = Boolean(selectedDishId);
+  const [menuSections, setMenuSections] = useState<StoredMenuSection[]>(() => {
+    const savedSections = loadSavedMenuSections();
+    return savedSections.length > 0 ? savedSections : [...FALLBACK_MENU_SECTIONS];
+  });
+  const [newSectionLabel, setNewSectionLabel] = useState("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleSectionsUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<StoredMenuSection[]>;
+      const updatedSections =
+        Array.isArray(customEvent.detail) && customEvent.detail.length > 0
+          ? customEvent.detail
+          : loadSavedMenuSections();
+      setMenuSections(updatedSections.length > 0 ? updatedSections : [...FALLBACK_MENU_SECTIONS]);
+    };
+
+    window.addEventListener(MENU_SECTIONS_EVENT, handleSectionsUpdated);
+    return () => {
+      window.removeEventListener(MENU_SECTIONS_EVENT, handleSectionsUpdated);
+    };
+  }, []);
+
+  const sectionLabelMap = useMemo(() => {
+    const entries = new Map<string, string>();
+    FALLBACK_MENU_SECTIONS.forEach((section) => {
+      entries.set(section.id, section.label);
+    });
+    menuSections.forEach((section) => {
+      entries.set(section.id, section.label);
+    });
+    return entries;
+  }, [menuSections]);
+
+  const sectionOptions = menuSections.length > 0 ? menuSections : FALLBACK_MENU_SECTIONS;
+
+  const handleAddSection = () => {
+    const trimmedLabel = newSectionLabel.trim();
+    if (!trimmedLabel) {
+      return;
+    }
+
+    const baseId = trimmedLabel
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    const existingIds = new Set(sectionOptions.map((section) => section.id));
+    let candidateId = baseId.length > 0 ? baseId : `section-${Date.now()}`;
+    let suffix = 1;
+    while (existingIds.has(candidateId)) {
+      candidateId = baseId.length > 0 ? `${baseId}-${suffix}` : `section-${Date.now()}-${suffix}`;
+      suffix += 1;
+    }
+
+    const nextSections = [...sectionOptions, { id: candidateId, label: trimmedLabel }];
+    setMenuSections(nextSections);
+    saveMenuSections(nextSections);
+    onMenuCategoryChange(candidateId);
+    setNewSectionLabel("");
+  };
+
+  const canAddSection = newSectionLabel.trim().length > 0;
 
   useEffect(() => {
     return () => {
@@ -155,17 +230,9 @@ export const DishNameInput = ({
     setIsSuggestionOpen(false);
   };
 
-  const menuCategoryLabelMap: Record<string, string> = {
-    appetizer: "Appetizer",
-    main: "Main",
-    side: "Side",
-    dessert: "Dessert",
-    beverage: "Beverage",
-  };
-
   const optionalSummaryItems: string[] = [];
   if (menuCategory) {
-    optionalSummaryItems.push(menuCategoryLabelMap[menuCategory] ?? menuCategory);
+    optionalSummaryItems.push(sectionLabelMap.get(menuCategory) ?? menuCategory);
   }
   if (servingSize && servingSize !== "1") {
     optionalSummaryItems.push(`Serves ${servingSize}`);
@@ -295,11 +362,38 @@ export const DishNameInput = ({
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="appetizer">Appetizer</SelectItem>
-                  <SelectItem value="main">Main</SelectItem>
-                  <SelectItem value="side">Side</SelectItem>
-                  <SelectItem value="dessert">Dessert</SelectItem>
-                  <SelectItem value="beverage">Beverage</SelectItem>
+                  {sectionOptions.map((section) => (
+                    <SelectItem key={section.id} value={section.id}>
+                      {section.label}
+                    </SelectItem>
+                  ))}
+                  <div className="border-t border-border/60 px-3 py-2">
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">Add section</p>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={newSectionLabel}
+                        onChange={(event) => setNewSectionLabel(event.target.value)}
+                        placeholder="e.g. Brunch"
+                        className="h-9"
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            handleAddSection();
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleAddSection}
+                        disabled={!canAddSection}
+                        onPointerDown={(event) => event.stopPropagation()}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                  </div>
                 </SelectContent>
               </Select>
             </div>
