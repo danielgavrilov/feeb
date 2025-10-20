@@ -54,6 +54,10 @@ export interface SavedDish {
       name: string;
       certainty?: string;
     }>;
+    substitution?: {
+      alternative: string;
+      surcharge?: string;
+    };
   }>;
   prepMethod: string;
   compliance: Record<string, boolean>;
