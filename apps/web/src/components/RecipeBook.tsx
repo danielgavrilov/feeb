@@ -25,7 +25,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Trash2, Edit, AlertTriangle, ArrowDown, ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -68,6 +67,37 @@ type SectionDefinition = {
   label: string;
 };
 
+const RECIPE_STATUS_OPTIONS: Array<{
+  value: "all" | "reviewed" | "needs_review" | "live";
+  label: string;
+  pillClassName: string;
+}> = [
+  {
+    value: "all",
+    label: "All",
+    pillClassName:
+      "bg-muted text-foreground border-muted-foreground/30 dark:bg-muted dark:text-foreground dark:border-muted-foreground/30",
+  },
+  {
+    value: "needs_review",
+    label: "Needs Review",
+    pillClassName:
+      "bg-amber-100 text-amber-900 border-amber-200 dark:bg-amber-500/15 dark:text-amber-100 dark:border-amber-300/40",
+  },
+  {
+    value: "reviewed",
+    label: "Reviewed",
+    pillClassName:
+      "bg-emerald-100 text-emerald-900 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-100 dark:border-emerald-300/40",
+  },
+  {
+    value: "live",
+    label: "Live",
+    pillClassName:
+      "bg-sky-100 text-sky-900 border-sky-200 dark:bg-sky-500/15 dark:text-sky-100 dark:border-sky-300/40",
+  },
+];
+
 interface RecipeBookProps {
   dishes: SavedDish[];
   onDelete: (id: string) => void;
@@ -92,7 +122,6 @@ export const RecipeBook = ({
   const [isBulkDialogOpen, setIsBulkDialogOpen] = useState(false);
   const [isProcessingBulk, setIsProcessingBulk] = useState(false);
   const [menuUpdatingIds, setMenuUpdatingIds] = useState<string[]>([]);
-  const [showLiveOnly, setShowLiveOnly] = useState(false);
   const [removalDialogDishId, setRemovalDialogDishId] = useState<string | null>(null);
   const [unconfirmedDialogDishId, setUnconfirmedDialogDishId] = useState<string | null>(null);
   const [sections, setSections] = useState<SectionDefinition[]>(() => loadSavedMenuSections());
@@ -183,24 +212,22 @@ export const RecipeBook = ({
 
   const statusFilteredDishes = useMemo(
     () =>
-      dishes
-        .filter((dish) => {
-          if (recipeStatusFilter === "live") {
-            return Boolean(dish.isOnMenu);
-          }
+      dishes.filter((dish) => {
+        if (recipeStatusFilter === "live") {
+          return Boolean(dish.isOnMenu);
+        }
 
-          if (recipeStatusFilter === "reviewed") {
-            return dish.confirmed && !dish.isOnMenu;
-          }
+        if (recipeStatusFilter === "reviewed") {
+          return dish.confirmed && !dish.isOnMenu;
+        }
 
-          if (recipeStatusFilter === "needs_review") {
-            return !dish.confirmed;
-          }
+        if (recipeStatusFilter === "needs_review") {
+          return !dish.confirmed;
+        }
 
-          return true;
-        })
-        .filter((dish) => (showLiveOnly ? Boolean(dish.isOnMenu) : true)),
-    [dishes, recipeStatusFilter, showLiveOnly],
+        return true;
+      }),
+    [dishes, recipeStatusFilter],
   );
 
   useEffect(() => {
@@ -553,8 +580,11 @@ export const RecipeBook = ({
     );
   }
 
+  const selectedStatusLabel =
+    RECIPE_STATUS_OPTIONS.find((option) => option.value === recipeStatusFilter)?.label ?? "Recipe status";
+
   return (
-    <TooltipProvider delayDuration={0}>
+    <>
       <div className="space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <h2 className="text-2xl font-bold text-foreground">Recipe Book</h2>
@@ -565,43 +595,44 @@ export const RecipeBook = ({
                 Show ingredients
               </Label>
             </div>
-            <div className="flex items-center gap-2">
-              <Switch id="show-live-only" checked={showLiveOnly} onCheckedChange={setShowLiveOnly} />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Label htmlFor="show-live-only" className="text-sm font-medium text-foreground cursor-help">
-                    Only show live menu items
-                  </Label>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs text-sm">
-                  Live menu items are items that customers can see and order on your menu.
-                </TooltipContent>
-              </Tooltip>
-            </div>
+            <div className="space-y-2">
             <Select
               value={recipeStatusFilter}
               onValueChange={(value: "all" | "reviewed" | "needs_review" | "live") => setRecipeStatusFilter(value)}
             >
               <SelectTrigger id="recipe-status-filter" className="w-[200px]" aria-label="Recipe status">
                 <SelectValue>
-                  {recipeStatusFilter === "all"
-                    ? "Recipe status"
-                    : recipeStatusFilter === "reviewed"
-                      ? "Reviewed"
-                      : recipeStatusFilter === "needs_review"
-                        ? "Needs Review"
-                        : "Live"}
+                  {recipeStatusFilter === "all" ? "Recipe status" : selectedStatusLabel}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="needs_review">Needs Review</SelectItem>
-                <SelectItem value="reviewed">Reviewed</SelectItem>
-                <SelectItem value="live">Live</SelectItem>
+                {RECIPE_STATUS_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
+            <div className="flex flex-wrap gap-2">
+              {RECIPE_STATUS_OPTIONS.map((option) => (
+                <Badge
+                  key={option.value}
+                  variant="outline"
+                  className={cn(
+                    "border text-xs font-medium transition-shadow",
+                    option.pillClassName,
+                    recipeStatusFilter === option.value
+                      ? "ring-2 ring-offset-2 ring-offset-background ring-[color:var(--color-primary)]"
+                      : ""
+                  )}
+                >
+                  {option.label}
+                </Badge>
+              ))}
+            </div>
           </div>
         </div>
+      </div>
 
         {sections.length > 0 && (
           <Card className="p-4">
@@ -1013,7 +1044,7 @@ export const RecipeBook = ({
                         </div>
                       )}
 
-                      {dish.prepMethod && (
+                      {showIngredients && dish.prepMethod && (
                         <div className="mb-4">
                           <h4 className="font-semibold text-sm text-foreground mb-2">Preparation:</h4>
                           <p className="text-sm text-muted-foreground whitespace-pre-wrap">{dish.prepMethod}</p>
@@ -1181,6 +1212,6 @@ export const RecipeBook = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </TooltipProvider>
+    </>
   );
 };
