@@ -25,6 +25,7 @@ from .models import (
     MenuUploadCreateResponse,
     MenuUploadResponse,
     MenuUploadSourceType,
+    AllergenBadgeResponse,
 )
 from . import dal
 from .services.menu_upload import menu_upload_service
@@ -79,22 +80,29 @@ async def get_product(
 async def health_check(session: AsyncSession = Depends(get_db)):
     """
     Health check endpoint.
-    
+
     Returns API status and database connectivity.
     """
     db_connected = False
-    
+
     try:
         # Simple query to test DB connection
         await session.execute(text("SELECT 1"))
         db_connected = True
     except Exception:
         pass
-    
+
     return HealthResponse(
         status="ok" if db_connected else "degraded",
         db_connected=db_connected
     )
+
+
+@router.get("/allergen-badges", response_model=list[AllergenBadgeResponse])
+async def list_allergen_badges(session: AsyncSession = Depends(get_db)):
+    """Return curated allergen badges with SVG icons for UI use."""
+
+    return await dal.list_allergen_badges(session)
 
 
 # ============================================================================

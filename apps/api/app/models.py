@@ -7,7 +7,7 @@ from typing import List, Optional
 from enum import Enum
 from sqlalchemy import (
     Column, Integer, String, TIMESTAMP, ForeignKey,
-    DECIMAL, UniqueConstraint, Index, func, Boolean, Text, Float
+    DECIMAL, UniqueConstraint, Index, func, Boolean, Text, Float, JSON
 )
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from pydantic import BaseModel, ConfigDict
@@ -42,13 +42,13 @@ class Ingredient(Base):
 class Allergen(Base):
     """Allergen taxonomy from OpenFoodFacts."""
     __tablename__ = "allergen"
-    
+
     id = mapped_column(Integer, primary_key=True, autoincrement=True)
     code = mapped_column(String(255), unique=True, nullable=False, index=True)
     name = mapped_column(String(500), nullable=False, index=True)
     category = mapped_column(String(100), nullable=True)
     severity_level = mapped_column(String(50), nullable=True)
-    
+
     # Relationships
     ingredients: Mapped[List["IngredientAllergen"]] = relationship(
         "IngredientAllergen", back_populates="allergen", cascade="all, delete-orphan"
@@ -56,6 +56,20 @@ class Allergen(Base):
     product_links: Mapped[List["ProductAllergen"]] = relationship(
         "ProductAllergen", back_populates="allergen", cascade="all, delete-orphan"
     )
+
+
+class AllergenBadge(Base):
+    """Curated allergen badges with SVG icons."""
+
+    __tablename__ = "allergen_badge"
+
+    id = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code = mapped_column(String(100), unique=True, nullable=False, index=True)
+    name = mapped_column(String(255), nullable=False)
+    category = mapped_column(String(50), nullable=False, default="allergen")
+    keywords = mapped_column(JSON, nullable=False, default=list)
+    icon_svg = mapped_column(Text, nullable=False)
+    sort_order = mapped_column(Integer, nullable=False, default=0)
 
 
 class IngredientAllergen(Base):
@@ -319,7 +333,20 @@ class AllergenResponse(BaseModel):
     code: str
     name: str
     certainty: Optional[str] = None
-    
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AllergenBadgeResponse(BaseModel):
+    """Serialized allergen badge with icon metadata."""
+
+    code: str
+    name: str
+    category: str
+    keywords: List[str]
+    icon_svg: str
+    sort_order: int
+
     model_config = ConfigDict(from_attributes=True)
 
 

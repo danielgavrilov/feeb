@@ -29,6 +29,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Trash2, Edit, AlertTriangle, ArrowDown, ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { loadSavedMenuSections, saveMenuSections } from "@/lib/menu-sections";
 
 export type RecipeBulkAction =
   | "delete"
@@ -94,7 +95,7 @@ export const RecipeBook = ({
   const [showLiveOnly, setShowLiveOnly] = useState(false);
   const [removalDialogDishId, setRemovalDialogDishId] = useState<string | null>(null);
   const [unconfirmedDialogDishId, setUnconfirmedDialogDishId] = useState<string | null>(null);
-  const [sections, setSections] = useState<SectionDefinition[]>([]);
+  const [sections, setSections] = useState<SectionDefinition[]>(() => loadSavedMenuSections());
   const [isManageSectionsOpen, setIsManageSectionsOpen] = useState(false);
   const [editingSections, setEditingSections] = useState<SectionDefinition[]>([]);
 
@@ -147,6 +148,10 @@ export const RecipeBook = ({
       return next;
     });
   }, [categories]);
+
+  useEffect(() => {
+    saveMenuSections(sections);
+  }, [sections]);
 
   useEffect(() => {
     if (selectedCategory !== "all" && !categories.includes(selectedCategory)) {
