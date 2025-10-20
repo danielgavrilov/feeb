@@ -97,6 +97,12 @@ export const RecipeBook = ({
   const [sections, setSections] = useState<SectionDefinition[]>([]);
   const [isManageSectionsOpen, setIsManageSectionsOpen] = useState(false);
   const [editingSections, setEditingSections] = useState<SectionDefinition[]>([]);
+  const [sectionOrders, setSectionOrders] = useState<Record<string, string[]>>({});
+  const [sectionOrderEditing, setSectionOrderEditing] = useState<{
+    sectionId: string;
+    order: string[];
+  } | null>(null);
+  const [bulkActionError, setBulkActionError] = useState<string | null>(null);
 
   const isRemovalUpdating = removalDialogDishId
     ? menuUpdatingIds.includes(removalDialogDishId)
@@ -162,10 +168,17 @@ export const RecipeBook = ({
     return map;
   }, [sections]);
 
-  const filteredDishes = useMemo(
+  const dishMap = useMemo(() => {
+    const map = new Map<string, SavedDish>();
+    dishes.forEach((dish) => {
+      map.set(dish.id, dish);
+    });
+    return map;
+  }, [dishes]);
+
+  const statusFilteredDishes = useMemo(
     () =>
       dishes
-        .filter((dish) => selectedCategory === "all" || dish.menuCategory === selectedCategory)
         .filter((dish) => {
           if (recipeStatusFilter === "live") {
             return Boolean(dish.isOnMenu);
@@ -182,12 +195,161 @@ export const RecipeBook = ({
           return true;
         })
         .filter((dish) => (showLiveOnly ? Boolean(dish.isOnMenu) : true)),
-    [dishes, selectedCategory, recipeStatusFilter, showLiveOnly],
+    [dishes, recipeStatusFilter, showLiveOnly],
   );
 
   useEffect(() => {
-    setSelectedIds((prev) => prev.filter((id) => filteredDishes.some((dish) => dish.id === id)));
-  }, [filteredDishes]);
+    setSectionOrders((prev) => {
+      if (sections.length === 0) {
+        return Object.keys(prev).length === 0 ? prev : {};
+      }
+
+      const next: Record<string, string[]> = {};
+      let changed = false;
+
+      sections.forEach((section) => {
+        const dishIds = dishes
+          .filter((dish) => dish.menuCategory === section.id)
+          .map((dish) => dish.id);
+
+        if (dishIds.length === 0) {
+          if (prev[section.id]) {
+            changed = true;
+          }
+          return;
+        }
+
+        const existingOrder = prev[section.id] ?? [];
+        const updatedOrder = [
+          ...existingOrder.filter((id) => dishIds.includes(id)),
+          ...dishIds.filter((id) => !existingOrder.includes(id)),
+        ];
+
+        next[section.id] = updatedOrder;
+
+        if (
+          existingOrder.length !== updatedOrder.length ||
+          updatedOrder.some((id, index) => existingOrder[index] !== id)
+        ) {
+          changed = true;
+        }
+      });
+
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next);
+      if (
+        prevKeys.length !== nextKeys.length ||
+        prevKeys.some((key) => !nextKeys.includes(key))
+      ) {
+        changed = true;
+      }
+
+      return changed ? next : prev;
+    });
+  }, [dishes, sections]);
+
+  const filteredSections = useMemo(() => {
+    if (sections.length === 0) {
+      const availableDishes = statusFilteredDishes.filter((dish) =>
+        selectedCategory === "all" ? true : dish.menuCategory === selectedCategory,
+      );
+
+      if (availableDishes.length === 0) {
+        return [];
+      }
+
+      return [
+        {
+          sectionId: "__all__",
+          sectionLabel: "Dishes",
+          dishes: availableDishes,
+        },
+      ];
+    }
+
+    const orderedSectionIds =
+      selectedCategory === "all"
+        ? sections.map((section) => section.id)
+        : sections
+            .filter((section) => section.id === selectedCategory)
+            .map((section) => section.id);
+
+    return orderedSectionIds
+      .map((sectionId) => {
+        const dishesInSection = statusFilteredDishes.filter(
+          (dish) => dish.menuCategory === sectionId,
+        );
+
+        if (dishesInSection.length === 0) {
+          return null;
+        }
+
+        const order = sectionOrders[sectionId] ?? [];
+        const orderedDishes: SavedDish[] = [];
+        const seen = new Set<string>();
+
+        order.forEach((dishId) => {
+          const dish = dishMap.get(dishId);
+          if (dish && dish.menuCategory === sectionId && !seen.has(dish.id)) {
+            orderedDishes.push(dish);
+            seen.add(dish.id);
+          }
+        });
+
+        dishesInSection.forEach((dish) => {
+          if (!seen.has(dish.id)) {
+            orderedDishes.push(dish);
+            seen.add(dish.id);
+          }
+        });
+
+        return {
+          sectionId,
+          sectionLabel: sectionLabelMap.get(sectionId) ?? sectionId,
+          dishes: orderedDishes,
+        };
+      })
+      .filter((value): value is { sectionId: string; sectionLabel: string; dishes: SavedDish[] } =>
+        value !== null,
+      );
+  }, [
+    sections,
+    selectedCategory,
+    sectionOrders,
+    statusFilteredDishes,
+    sectionLabelMap,
+    dishMap,
+  ]);
+
+  const visibleDishes = useMemo(
+    () => filteredSections.flatMap((section) => section.dishes),
+    [filteredSections],
+  );
+
+  useEffect(() => {
+    if (visibleDishes.length === 0) {
+      setSelectedIds([]);
+      return;
+    }
+
+    const visibleIds = new Set(visibleDishes.map((dish) => dish.id));
+    setSelectedIds((prev) => prev.filter((id) => visibleIds.has(id)));
+  }, [visibleDishes]);
+
+  useEffect(() => {
+    if (!bulkActionError) {
+      return;
+    }
+
+    const hasUnconfirmedSelected = selectedIds.some((id) => {
+      const dish = dishMap.get(id);
+      return dish ? !dish.confirmed : false;
+    });
+
+    if (!hasUnconfirmedSelected) {
+      setBulkActionError(null);
+    }
+  }, [bulkActionError, selectedIds, dishMap]);
 
   const setSelectionState = (id: string, checked: boolean) => {
     setSelectedIds((prev) => {
@@ -200,12 +362,16 @@ export const RecipeBook = ({
   };
 
   const handleSelectAll = () => {
-    if (selectedIds.length === filteredDishes.length) {
+    if (visibleDishes.length === 0) {
+      return;
+    }
+
+    if (selectedIds.length === visibleDishes.length) {
       setSelectedIds([]);
       return;
     }
 
-    setSelectedIds(filteredDishes.map((dish) => dish.id));
+    setSelectedIds(visibleDishes.map((dish) => dish.id));
   };
 
   const handleClearSelection = () => {
@@ -270,6 +436,7 @@ export const RecipeBook = ({
   };
 
   const openBulkDialog = (action: RecipeBulkAction) => {
+    setBulkActionError(null);
     setBulkAction(action);
     setIsBulkDialogOpen(true);
   };
@@ -279,12 +446,29 @@ export const RecipeBook = ({
       return;
     }
 
+    if (bulkAction === "addToMenu") {
+      const unconfirmedCount = selectedIds.reduce((count, id) => {
+        const dish = dishMap.get(id);
+        return !dish?.confirmed ? count + 1 : count;
+      }, 0);
+
+      if (unconfirmedCount > 0) {
+        setBulkActionError(
+          `You have tried to add ${unconfirmedCount} item(s) that has unconfirmed ingredients. Please check the ingredient list before adding this to your guest-facing menu.`,
+        );
+        setIsBulkDialogOpen(false);
+        setBulkAction(null);
+        return;
+      }
+    }
+
     try {
       setIsProcessingBulk(true);
       await onBulkAction(bulkAction, selectedIds);
       setSelectedIds([]);
       setIsBulkDialogOpen(false);
       setBulkAction(null);
+      setBulkActionError(null);
     } catch (error) {
       console.error("Bulk action failed", error);
     } finally {
@@ -296,7 +480,63 @@ export const RecipeBook = ({
     setIsBulkDialogOpen(open);
     if (!open) {
       setBulkAction(null);
+      setIsProcessingBulk(false);
     }
+  };
+
+  const handleSectionOrderDialogOpenChange = (sectionId: string, open: boolean) => {
+    if (!open) {
+      setSectionOrderEditing(null);
+      return;
+    }
+
+    const dishesInSection = dishes
+      .filter((dish) => dish.menuCategory === sectionId)
+      .map((dish) => dish.id);
+
+    const existingOrder = sectionOrders[sectionId] ?? [];
+    const combinedOrder = [
+      ...existingOrder.filter((id) => dishesInSection.includes(id)),
+      ...dishesInSection.filter((id) => !existingOrder.includes(id)),
+    ];
+
+    setSectionOrderEditing({
+      sectionId,
+      order: combinedOrder,
+    });
+  };
+
+  const moveEditingDish = (fromIndex: number, toIndex: number) => {
+    setSectionOrderEditing((current) => {
+      if (!current) {
+        return current;
+      }
+
+      if (toIndex < 0 || toIndex >= current.order.length) {
+        return current;
+      }
+
+      const nextOrder = [...current.order];
+      const [moved] = nextOrder.splice(fromIndex, 1);
+      nextOrder.splice(toIndex, 0, moved);
+
+      return {
+        ...current,
+        order: nextOrder,
+      };
+    });
+  };
+
+  const handleSaveSectionOrder = () => {
+    if (!sectionOrderEditing) {
+      return;
+    }
+
+    setSectionOrders((prev) => ({
+      ...prev,
+      [sectionOrderEditing.sectionId]: sectionOrderEditing.order,
+    }));
+    setSectionOrderEditing(null);
   };
 
   if (dishes.length === 0) {
@@ -447,7 +687,14 @@ export const RecipeBook = ({
           </Card>
         )}
 
-        {selectedCount > 0 && (
+        {bulkActionError && (
+          <Alert variant="destructive" className="flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>{bulkActionError}</AlertDescription>
+          </Alert>
+        )}
+
+        {selectedCount > 0 && visibleDishes.length > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 p-4">
             <div className="text-sm font-medium text-foreground">
               {selectedCount} {selectedCount === 1 ? "recipe" : "recipes"} selected
@@ -478,238 +725,318 @@ export const RecipeBook = ({
           </div>
         )}
 
-        <div className="grid gap-4">
-          {filteredDishes.length === 0 && (
+        <div className="grid gap-6">
+          {visibleDishes.length === 0 && (
             <div className="text-center py-10">
               <p className="text-muted-foreground">No dishes match the selected filters.</p>
             </div>
           )}
-          {filteredDishes.map((dish) => {
-            const isSelected = selectedIds.includes(dish.id);
-            const isOnMenu = Boolean(dish.isOnMenu);
-            const isMenuUpdating = menuUpdatingIds.includes(dish.id);
-            const statusKey: "live" | "reviewed" | "needs_review" = isOnMenu
-              ? "live"
-              : dish.confirmed
-                ? "reviewed"
-                : "needs_review";
-            const displayCategory = dish.menuCategory
-              ? sectionLabelMap.get(dish.menuCategory) ?? dish.menuCategory
-              : undefined;
+          {filteredSections.map(({ sectionId, sectionLabel, dishes: sectionDishes }) => (
+            <div key={sectionId} className="space-y-4">
+              {sections.length > 0 && (
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-xl font-semibold text-foreground">{sectionLabel}</h3>
+                  <Dialog
+                    open={sectionOrderEditing?.sectionId === sectionId}
+                    onOpenChange={(open) => handleSectionOrderDialogOpenChange(sectionId, open)}
+                  >
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        Edit order
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Arrange dishes in {sectionLabel}</DialogTitle>
+                        <DialogDescription>
+                          Reorder how dishes appear within this section.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-3">
+                        {sectionOrderEditing?.order.length === 0 && (
+                          <p className="text-sm text-muted-foreground">
+                            There are no dishes in this section yet.
+                          </p>
+                        )}
+                        {sectionOrderEditing?.order.map((dishId, index) => {
+                          const dish = dishMap.get(dishId);
+                          if (!dish) {
+                            return null;
+                          }
 
-            const statusButtonBaseClass =
-              "inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
-
-            const statusButtonProps = (() => {
-              if (statusKey === "needs_review") {
-                return {
-                  label: "Review",
-                  className: cn(
-                    statusButtonBaseClass,
-                    "border-amber-200 bg-amber-100 text-amber-900 hover:bg-amber-100/80 focus-visible:ring-amber-500",
-                  ),
-                  onClick: (event: MouseEvent<HTMLButtonElement>) => {
-                    event.stopPropagation();
-                    onEdit(dish.id);
-                  },
-                  ariaLabel: `Review ${dish.name}`,
-                  disabled: false,
-                };
-              }
-
-              if (statusKey === "reviewed") {
-                return {
-                  label: isMenuUpdating ? "Adding..." : "Add to menu",
-                  className: cn(
-                    statusButtonBaseClass,
-                    "border-emerald-200 bg-emerald-100 text-emerald-800 hover:bg-emerald-100/80 focus-visible:ring-emerald-500",
-                  ),
-                  onClick: (event: MouseEvent<HTMLButtonElement>) => {
-                    event.stopPropagation();
-
-                    if (isMenuUpdating) {
-                      return;
-                    }
-
-                    if (!dish.confirmed) {
-                      setUnconfirmedDialogDishId(dish.id);
-                      return;
-                    }
-
-                    setMenuUpdatingIds((prev) => [...prev, dish.id]);
-
-                    Promise.resolve(onToggleMenuStatus(dish.id, true))
-                      .catch(() => null)
-                      .finally(() => {
-                        setMenuUpdatingIds((prev) => prev.filter((id) => id !== dish.id));
-                      });
-                  },
-                  ariaLabel: `Add ${dish.name} to the menu`,
-                  disabled: isMenuUpdating,
-                };
-              }
-
-              return {
-                label: isMenuUpdating ? "Updating..." : "Live",
-                className: cn(
-                  statusButtonBaseClass,
-                  "border-transparent bg-[color:var(--color-primary)] text-white hover:bg-[color:var(--color-secondary)] focus-visible:ring-[color:var(--color-secondary)]",
-                ),
-                onClick: (event: MouseEvent<HTMLButtonElement>) => {
-                  event.stopPropagation();
-
-                  if (isMenuUpdating) {
-                    return;
-                  }
-
-                  setRemovalDialogDishId(dish.id);
-                },
-                ariaLabel: `Remove ${dish.name} from the menu`,
-                disabled: isMenuUpdating,
-              };
-            })();
-
-            return (
-              <Card
-                key={dish.id}
-                role="checkbox"
-                aria-checked={isSelected}
-                aria-label={`Select ${dish.name}`}
-                tabIndex={0}
-                onClick={() => setSelectionState(dish.id, !isSelected)}
-                onKeyDown={(event) => {
-                  if (event.key === " " || event.key === "Enter") {
-                    event.preventDefault();
-                    setSelectionState(dish.id, !isSelected);
-                  }
-                }}
-                className={cn(
-                  "p-6 relative border-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                  isSelected
-                    ? "border-[3px] border-orange-500 bg-amber-50 shadow-sm"
-                    : "border-border hover:border-primary/50",
-                )}
-              >
-                {dish.image && (
-                  <div className="w-full aspect-video rounded-lg overflow-hidden mb-4">
-                    <img src={dish.image} alt={dish.name} className="w-full h-full object-cover" />
-                  </div>
-                )}
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex-1">
-                    <div className="flex flex-col gap-2">
-                      <h3 className="text-lg font-semibold text-foreground break-words md:max-w-[66%]">
-                        {dish.name}
-                      </h3>
-                      {dish.description && (
-                        <p className="text-sm text-muted-foreground md:max-w-[66%]">{dish.description}</p>
-                      )}
-                    </div>
-                    <div className="mt-3 flex gap-2 flex-wrap">
-                      {displayCategory && (
-                        <Badge variant="outline">{displayCategory}</Badge>
-                      )}
-                      {dish.servingSize !== "1" && (
-                        <Badge variant="outline">Serves {dish.servingSize}</Badge>
-                      )}
-                      {dish.price && (
-                        <Badge variant="outline">${dish.price}</Badge>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 self-end">
-                    <button
-                      type="button"
-                      aria-label={statusButtonProps.ariaLabel}
-                      onClick={statusButtonProps.onClick}
-                      disabled={statusButtonProps.disabled}
-                      className={statusButtonProps.className}
-                    >
-                      {statusButtonProps.label}
-                    </button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onEdit(dish.id);
-                      }}
-                      aria-label={`Edit ${dish.name}`}
-                    >
-                      <Edit className="w-5 h-5" />
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(event) => event.stopPropagation()}
-                          aria-label={`Delete ${dish.name}`}
-                        >
-                          <Trash2 className="w-5 h-5 text-destructive" />
+                          return (
+                            <div key={dishId} className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm text-muted-foreground w-6 text-right">
+                                {index + 1}.
+                              </span>
+                              <span className="flex-1 min-w-[180px] text-sm font-medium text-foreground">
+                                {dish.name}
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() => moveEditingDish(index, index - 1)}
+                                  disabled={index === 0}
+                                  aria-label={`Move ${dish.name} up`}
+                                >
+                                  <ArrowUp className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() => moveEditingDish(index, index + 1)}
+                                  disabled={
+                                    sectionOrderEditing?.order.length
+                                      ? index === sectionOrderEditing.order.length - 1
+                                      : false
+                                  }
+                                  aria-label={`Move ${dish.name} down`}
+                                >
+                                  <ArrowDown className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <DialogFooter className="pt-2">
+                        <Button variant="outline" onClick={() => setSectionOrderEditing(null)}>
+                          Cancel
                         </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Delete recipe</AlertDialogTitle>
-                        </AlertDialogHeader>
-                        <AlertDialogDescription>
-                          Are you sure you want to delete this item?
-                        </AlertDialogDescription>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => onDelete(dish.id)}
-                            className="bg-destructive hover:bg-destructive/90"
-                          >
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
+                        <Button onClick={handleSaveSectionOrder} disabled={!sectionOrderEditing?.order.length}>
+                          Save changes
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
                 </div>
+              )}
 
-                {showIngredients && (
-                  <div className="mb-4">
-                    <h4 className="font-semibold text-sm text-foreground mb-2">Ingredients:</h4>
-                    <div className="grid grid-cols-2 gap-2">
-                      {dish.ingredients.map((ing, idx) => (
-                        <p key={idx} className="text-sm text-muted-foreground">
-                          {ing.quantity} {ing.unit} {ing.name}
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              <div className="grid gap-4">
+                {sectionDishes.map((dish) => {
+                  const isSelected = selectedIds.includes(dish.id);
+                  const isOnMenu = Boolean(dish.isOnMenu);
+                  const isMenuUpdating = menuUpdatingIds.includes(dish.id);
+                  const statusKey: "live" | "reviewed" | "needs_review" = isOnMenu
+                    ? "live"
+                    : dish.confirmed
+                      ? "reviewed"
+                      : "needs_review";
 
-                {dish.prepMethod && (
-                  <div className="mb-4">
-                    <h4 className="font-semibold text-sm text-foreground mb-2">Preparation:</h4>
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{dish.prepMethod}</p>
-                  </div>
-                )}
+                  const statusButtonBaseClass =
+                    "inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
 
-                {showIngredients && (
-                  <div>
-                    <h4 className="font-semibold text-sm text-foreground mb-2">Dietary Compliance:</h4>
-                    <div className="flex gap-2 flex-wrap">
-                      {Object.entries(dish.compliance).map(([key, value]) => (
-                        <Badge
-                          key={key}
-                          variant={value ? "default" : "secondary"}
-                          className={value ? "bg-primary" : "bg-muted"}
-                        >
-                          {key.replace("-", " ").toUpperCase()}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </Card>
-            );
-          })}
+                  const statusButtonProps = (() => {
+                    if (statusKey === "needs_review") {
+                      return {
+                        label: "Review",
+                        className: cn(
+                          statusButtonBaseClass,
+                          "border-[color:var(--color-secondary)] bg-[rgba(254,127,45,0.12)] text-[color:var(--color-secondary)] hover:bg-[rgba(254,127,45,0.2)] focus-visible:ring-[color:var(--color-secondary)]",
+                        ),
+                        onClick: (event: MouseEvent<HTMLButtonElement>) => {
+                          event.stopPropagation();
+                          onEdit(dish.id);
+                        },
+                        ariaLabel: `Review ${dish.name}`,
+                        disabled: false,
+                      };
+                    }
+
+                    if (statusKey === "reviewed") {
+                      return {
+                        label: isMenuUpdating ? "Adding..." : "Add to menu",
+                        className: cn(
+                          statusButtonBaseClass,
+                          "border-emerald-200 bg-emerald-100 text-emerald-800 hover:bg-emerald-100/80 focus-visible:ring-emerald-500",
+                        ),
+                        onClick: (event: MouseEvent<HTMLButtonElement>) => {
+                          event.stopPropagation();
+
+                          if (isMenuUpdating) {
+                            return;
+                          }
+
+                          if (!dish.confirmed) {
+                            setUnconfirmedDialogDishId(dish.id);
+                            return;
+                          }
+
+                          setMenuUpdatingIds((prev) => [...prev, dish.id]);
+
+                          Promise.resolve(onToggleMenuStatus(dish.id, true))
+                            .catch(() => null)
+                            .finally(() => {
+                              setMenuUpdatingIds((prev) => prev.filter((id) => id !== dish.id));
+                            });
+                        },
+                        ariaLabel: `Add ${dish.name} to the menu`,
+                        disabled: isMenuUpdating,
+                      };
+                    }
+
+                    return {
+                      label: isMenuUpdating ? "Updating..." : "Live",
+                      className: cn(
+                        statusButtonBaseClass,
+                        "border-transparent bg-[color:var(--color-primary)] text-white hover:bg-[color:var(--color-secondary)] focus-visible:ring-[color:var(--color-secondary)]",
+                      ),
+                      onClick: (event: MouseEvent<HTMLButtonElement>) => {
+                        event.stopPropagation();
+
+                        if (isMenuUpdating) {
+                          return;
+                        }
+
+                        setRemovalDialogDishId(dish.id);
+                      },
+                      ariaLabel: `Remove ${dish.name} from the menu`,
+                      disabled: isMenuUpdating,
+                    };
+                  })();
+
+                  return (
+                    <Card
+                      key={dish.id}
+                      role="checkbox"
+                      aria-checked={isSelected}
+                      aria-label={`Select ${dish.name}`}
+                      tabIndex={0}
+                      onClick={() => setSelectionState(dish.id, !isSelected)}
+                      onKeyDown={(event) => {
+                        if (event.key === " " || event.key === "Enter") {
+                          event.preventDefault();
+                          setSelectionState(dish.id, !isSelected);
+                        }
+                      }}
+                      className={cn(
+                        "p-6 relative border-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                        isSelected
+                          ? "border-[3px] border-orange-500 bg-amber-50 shadow-sm"
+                          : "border-border hover:border-primary/50",
+                      )}
+                    >
+                      {dish.image && (
+                        <div className="w-full aspect-video rounded-lg overflow-hidden mb-4">
+                          <img src={dish.image} alt={dish.name} className="w-full h-full object-cover" />
+                        </div>
+                      )}
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex-1">
+                          <div className="flex flex-col gap-2">
+                            <h3 className="text-lg font-semibold text-foreground break-words md:max-w-[66%]">
+                              {dish.name}
+                            </h3>
+                            {dish.description && (
+                              <p className="text-sm text-muted-foreground md:max-w-[66%]">{dish.description}</p>
+                            )}
+                          </div>
+                          <div className="mt-3 flex gap-2 flex-wrap">
+                            {dish.servingSize !== "1" && (
+                              <Badge variant="outline">Serves {dish.servingSize}</Badge>
+                            )}
+                            {dish.price && <Badge variant="outline">${dish.price}</Badge>}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 self-end">
+                          <button
+                            type="button"
+                            aria-label={statusButtonProps.ariaLabel}
+                            onClick={statusButtonProps.onClick}
+                            disabled={statusButtonProps.disabled}
+                            className={statusButtonProps.className}
+                          >
+                            {statusButtonProps.label}
+                          </button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onEdit(dish.id);
+                            }}
+                            aria-label={`Edit ${dish.name}`}
+                          >
+                            <Edit className="w-5 h-5" />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={(event) => event.stopPropagation()}
+                                aria-label={`Delete ${dish.name}`}
+                              >
+                                <Trash2 className="w-5 h-5 text-destructive" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete recipe</AlertDialogTitle>
+                              </AlertDialogHeader>
+                              <AlertDialogDescription>
+                                Are you sure you want to delete this item?
+                              </AlertDialogDescription>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => onDelete(dish.id)}
+                                  className="bg-destructive hover:bg-destructive/90"
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </div>
+
+                      {showIngredients && (
+                        <div className="mb-4">
+                          <h4 className="font-semibold text-sm text-foreground mb-2">Ingredients:</h4>
+                          <div className="grid grid-cols-2 gap-2">
+                            {dish.ingredients.map((ing, idx) => (
+                              <p key={idx} className="text-sm text-muted-foreground">
+                                {ing.quantity} {ing.unit} {ing.name}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {dish.prepMethod && (
+                        <div className="mb-4">
+                          <h4 className="font-semibold text-sm text-foreground mb-2">Preparation:</h4>
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{dish.prepMethod}</p>
+                        </div>
+                      )}
+
+                      {showIngredients && (
+                        <div>
+                          <h4 className="font-semibold text-sm text-foreground mb-2">Dietary Compliance:</h4>
+                          <div className="flex gap-2 flex-wrap">
+                            {Object.entries(dish.compliance).map(([key, value]) => (
+                              <Badge
+                                key={key}
+                                variant={value ? "default" : "secondary"}
+                                className={value ? "bg-primary" : "bg-muted"}
+                              >
+                                {key.replace("-", " ").toUpperCase()}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
       </div>
       </div>
 
