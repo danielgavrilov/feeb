@@ -15,8 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Switch } from "@/components/ui/switch";
 import { ALLERGEN_FILTERS, allergenFilterMap } from "@/data/allergen-filters";
+import type { AllergenFilterDefinition } from "@/data/allergen-filters";
 import { expandIngredientSearchTerms } from "@/data/ingredient-search";
 import { loadSavedMenuSections, MENU_SECTIONS_EVENT, StoredMenuSection } from "@/lib/menu-sections";
 
@@ -73,6 +74,7 @@ export const MenuView = ({ dishes, restaurantName, showImages }: MenuViewProps) 
   const [selectedAllergens, setSelectedAllergens] = useState<string[]>([]);
   const [ingredientInputValue, setIngredientInputValue] = useState("");
   const [ingredientSearchTerms, setIngredientSearchTerms] = useState<string[]>([]);
+  const [showIngredients, setShowIngredients] = useState(false);
   const [savedSections, setSavedSections] = useState<StoredMenuSection[]>(() => loadSavedMenuSections());
   const sectionLabelMap = useMemo(() => {
     const entries = new Map<string, string>();
@@ -345,12 +347,6 @@ export const MenuView = ({ dishes, restaurantName, showImages }: MenuViewProps) 
     handleAddIngredientTerm(ingredientInputValue);
   };
 
-  const handleFilterModeChange = (value: string) => {
-    if (value === "highlight" || value === "exclude") {
-      setFilterMode(value);
-    }
-  };
-
   const handleClearAll = () => {
     setSelectedAllergens([]);
     setIngredientSearchTerms([]);
@@ -403,29 +399,27 @@ export const MenuView = ({ dishes, restaurantName, showImages }: MenuViewProps) 
                   concerns.
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Mode</span>
-                <ToggleGroup
-                  type="single"
-                  value={filterMode}
-                  onValueChange={handleFilterModeChange}
-                  className="bg-muted/60 rounded-full p-1"
-                >
-                  <ToggleGroupItem
-                    value="highlight"
-                    className="rounded-full px-3 py-1 text-sm"
-                    aria-label="Highlight selected allergens and ingredients"
-                  >
-                    Highlight
-                  </ToggleGroupItem>
-                  <ToggleGroupItem
-                    value="exclude"
-                    className="rounded-full px-3 py-1 text-sm"
-                    aria-label="Exclude dishes containing selected allergens and ingredients"
-                  >
-                    Exclude
-                  </ToggleGroupItem>
-                </ToggleGroup>
+              <div className="flex flex-col items-start gap-3 md:items-end">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="menu-show-ingredients"
+                    checked={showIngredients}
+                    onCheckedChange={setShowIngredients}
+                  />
+                  <Label htmlFor="menu-show-ingredients" className="text-sm font-medium text-foreground">
+                    Show ingredients
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="exclude-selection"
+                    checked={filterMode === "exclude"}
+                    onCheckedChange={(checked) => setFilterMode(checked ? "exclude" : "highlight")}
+                  />
+                  <Label htmlFor="exclude-selection" className="text-sm font-medium text-foreground">
+                    Exclude selection
+                  </Label>
+                </div>
               </div>
             </div>
 
@@ -584,12 +578,12 @@ export const MenuView = ({ dishes, restaurantName, showImages }: MenuViewProps) 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {dishesInCategory.map((dish) => {
                     const ingredientMatch = ingredientMatchResults.get(dish.id);
-                    const highlightedAllergenNames =
+                    const highlightedAllergens =
                       filterMode === "highlight"
                         ? selectedAllergens
                             .filter((allergenId) => dishContainsAllergen(dish, allergenId))
-                            .map((allergenId) => allergenFilterMap.get(allergenId)?.name)
-                            .filter((name): name is string => Boolean(name))
+                            .map((allergenId) => allergenFilterMap.get(allergenId) ?? null)
+                            .filter((definition): definition is AllergenFilterDefinition => Boolean(definition))
                         : [];
                     const highlightedIngredientTerms =
                       filterMode === "highlight" ? ingredientMatch?.matches ?? [] : [];
@@ -599,7 +593,8 @@ export const MenuView = ({ dishes, restaurantName, showImages }: MenuViewProps) 
                         key={dish.id}
                         dish={dish}
                         showImage={showImages}
-                        highlightedAllergens={highlightedAllergenNames}
+                        showIngredients={showIngredients}
+                        highlightedAllergens={highlightedAllergens}
                         highlightedIngredientTerms={highlightedIngredientTerms}
                       />
                     );
