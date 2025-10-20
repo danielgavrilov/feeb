@@ -44,6 +44,10 @@ export interface RecipeIngredient {
     certainty?: string;
   }>;
   confirmed: boolean;
+  substitution?: {
+    alternative: string;
+    surcharge?: string;
+  };
 }
 
 export interface Recipe {
@@ -71,6 +75,10 @@ export interface CreateRecipeIngredient {
   unit?: string;
   notes?: string;
   confirmed?: boolean;
+  substitution?: {
+    alternative: string;
+    surcharge?: string;
+  };
 }
 
 export interface CreateRecipeRequest {

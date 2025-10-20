@@ -5,6 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { ALLERGEN_CATEGORIES } from "@/data/recipes";
 import { Check, Trash2, Plus, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
@@ -20,6 +28,10 @@ export interface IngredientState {
     certainty?: string;
   }>;
   dietaryInfo?: string[];
+  substitution?: {
+    alternative: string;
+    surcharge?: string;
+  };
 }
 
 interface IngredientsListProps {
@@ -37,6 +49,10 @@ interface IngredientsListProps {
       certainty?: string;
     }>
   ) => void;
+  onUpdateIngredientSubstitution: (
+    index: number,
+    substitution?: IngredientState["substitution"],
+  ) => void;
 }
 
 export const IngredientsList = ({
@@ -47,10 +63,62 @@ export const IngredientsList = ({
   onDeleteIngredient,
   onAddIngredient,
   onUpdateIngredientAllergens,
+  onUpdateIngredientSubstitution,
 }: IngredientsListProps) => {
   const [newName, setNewName] = useState("");
   const [newQuantity, setNewQuantity] = useState("");
   const [newUnit, setNewUnit] = useState("g");
+  const [activeSubstitutionIndex, setActiveSubstitutionIndex] = useState<number | null>(null);
+  const [substitutionDraft, setSubstitutionDraft] = useState({ alternative: "", surcharge: "" });
+
+  const handleCloseSubstitutionDialog = () => {
+    setActiveSubstitutionIndex(null);
+    setSubstitutionDraft({ alternative: "", surcharge: "" });
+  };
+
+  const handleSaveSubstitution = () => {
+    if (activeSubstitutionIndex === null) {
+      return;
+    }
+
+    const alternative = substitutionDraft.alternative.trim();
+    const surcharge = substitutionDraft.surcharge.trim();
+
+    if (!alternative) {
+      toast.error("Please provide an alternative ingredient");
+      return;
+    }
+
+    onUpdateIngredientSubstitution(activeSubstitutionIndex, {
+      alternative,
+      surcharge: surcharge || undefined,
+    });
+    handleCloseSubstitutionDialog();
+  };
+
+  const handleRemoveSubstitution = () => {
+    if (activeSubstitutionIndex === null) {
+      return;
+    }
+    onUpdateIngredientSubstitution(activeSubstitutionIndex, undefined);
+    handleCloseSubstitutionDialog();
+  };
+
+  const formatSurchargeLabel = (value?: string) => {
+    if (!value) {
+      return "";
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return "";
+    }
+
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric)) {
+      return numeric >= 0 ? `+$${numeric.toFixed(2)}` : `$${numeric.toFixed(2)}`;
+    }
+    return trimmed;
+  };
 
   const handleAdd = () => {
     if (newName.trim() && newQuantity.trim()) {
@@ -66,6 +134,9 @@ export const IngredientsList = ({
       <div className="space-y-3">
         {ingredients.map((ingredient, index) => {
           const selectedAllergens = ingredient.allergens ?? [];
+          const substitution = ingredient.substitution;
+          const isSubstitutionDialogOpen = activeSubstitutionIndex === index;
+          const substitutionSurchargeLabel = formatSurchargeLabel(substitution?.surcharge);
           const handleConfirmClick = () => {
             if (!ingredient.quantity.trim() || !ingredient.unit.trim()) {
               toast.error("Please specify the quantity and unit for this ingredient");
@@ -96,6 +167,9 @@ export const IngredientsList = ({
                 ];
 
             onUpdateIngredientAllergens(index, updatedAllergens);
+            if (updatedAllergens.length === 0 && ingredient.substitution) {
+              onUpdateIngredientSubstitution(index, undefined);
+            }
           };
 
           return (
@@ -226,6 +300,96 @@ export const IngredientsList = ({
                     </div>
                   </PopoverContent>
                 </Popover>
+
+                <div className="flex flex-col gap-3">
+                  {substitution && (
+                    <div className="rounded-lg border border-secondary/40 bg-secondary/10 p-3 text-sm">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-secondary">
+                        Listed substitution
+                      </p>
+                      <p className="mt-1 font-medium text-foreground">{substitution.alternative}</p>
+                      {substitutionSurchargeLabel && (
+                        <p className="text-xs text-muted-foreground">Surcharge: {substitutionSurchargeLabel}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {(selectedAllergens.length > 0 || substitution) && (
+                    <Dialog
+                      open={isSubstitutionDialogOpen}
+                      onOpenChange={(open) => {
+                        if (open) {
+                          setActiveSubstitutionIndex(index);
+                          setSubstitutionDraft({
+                            alternative: substitution?.alternative ?? "",
+                            surcharge: substitution?.surcharge ?? "",
+                          });
+                        } else if (isSubstitutionDialogOpen) {
+                          handleCloseSubstitutionDialog();
+                        }
+                      }}
+                    >
+                      <DialogTrigger asChild>
+                        <Button variant="outline" size="sm" className="w-fit">
+                          {substitution ? "Edit substitution" : "List substitution"}
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>List substitution</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4 py-2">
+                          <div className="space-y-2">
+                            <Label htmlFor={`ingredient-${index}-substitution-name`}>
+                              Alternative ingredient
+                            </Label>
+                            <Input
+                              id={`ingredient-${index}-substitution-name`}
+                              value={substitutionDraft.alternative}
+                              onChange={(event) =>
+                                setSubstitutionDraft((current) => ({
+                                  ...current,
+                                  alternative: event.target.value,
+                                }))
+                              }
+                              placeholder="e.g. Gluten-free bun"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor={`ingredient-${index}-substitution-surcharge`}>
+                              Optional surcharge
+                            </Label>
+                            <Input
+                              id={`ingredient-${index}-substitution-surcharge`}
+                              value={substitutionDraft.surcharge}
+                              onChange={(event) =>
+                                setSubstitutionDraft((current) => ({
+                                  ...current,
+                                  surcharge: event.target.value,
+                                }))
+                              }
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              placeholder="0.50"
+                            />
+                          </div>
+                        </div>
+                        <DialogFooter className="gap-2 pt-2">
+                          <Button variant="ghost" onClick={handleCloseSubstitutionDialog}>
+                            Cancel
+                          </Button>
+                          {substitution && (
+                            <Button variant="secondary" onClick={handleRemoveSubstitution}>
+                              Remove substitution
+                            </Button>
+                          )}
+                          <Button onClick={handleSaveSubstitution}>Save substitution</Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  )}
+                </div>
 
                 <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-start md:flex-col md:items-end">
                   {!ingredient.confirmed && (

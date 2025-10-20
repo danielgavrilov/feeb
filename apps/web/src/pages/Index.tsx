@@ -59,6 +59,7 @@ const Index = () => {
       unit: ing.unit || "",
       confirmed: ing.confirmed,
       allergens: ing.allergens || [],
+      substitution: ing.substitution,
     })),
     prepMethod: recipe.instructions || "",
     compliance: {}, // We'll compute this from ingredients
@@ -109,6 +110,7 @@ const Index = () => {
         confirmed: ing.confirmed && !!(ing.quantity?.toString().trim() && (ing.unit?.trim() || "pcs")), // Only keep confirmed if valid
         allergens: ing.allergens || [],
         dietaryInfo: [],
+        substitution: ing.substitution,
       }))
     );
     setPrepMethod(recipe.instructions || "");
@@ -188,6 +190,7 @@ const Index = () => {
       confirmed: false,
       allergens: [],
       dietaryInfo: [],
+      substitution: undefined,
     };
     setIngredients([...ingredients, newIngredient]);
   };
@@ -197,11 +200,35 @@ const Index = () => {
     allergens: Array<{ code: string; name: string; certainty?: string }>
   ) => {
     setIngredients((current) =>
+      current.map((ingredient, i) => {
+        if (i !== index) {
+          return ingredient;
+        }
+
+        const next: IngredientState = {
+          ...ingredient,
+          allergens,
+        };
+
+        if (allergens.length === 0) {
+          next.substitution = undefined;
+        }
+
+        return next;
+      })
+    );
+  };
+
+  const handleUpdateIngredientSubstitution = (
+    index: number,
+    substitution?: IngredientState["substitution"],
+  ) => {
+    setIngredients((current) =>
       current.map((ingredient, i) =>
         i === index
           ? {
               ...ingredient,
-              allergens,
+              substitution,
             }
           : ingredient
       )
@@ -589,6 +616,7 @@ const Index = () => {
                   onDeleteIngredient={handleDeleteIngredient}
                   onAddIngredient={handleAddIngredient}
                   onUpdateIngredientAllergens={handleUpdateIngredientAllergens}
+                  onUpdateIngredientSubstitution={handleUpdateIngredientSubstitution}
                 />
 
                 {showPrepMethod && (
