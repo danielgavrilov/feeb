@@ -5,15 +5,15 @@ All functions use SQLAlchemy async sessions and return Pydantic models.
 
 
 from datetime import datetime
-from typing import Optional, Optional as _Optional, Dict
+from typing import Optional, Optional as _Optional, Dict, List
 
 from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from .models import (
-    Ingredient, Allergen, IngredientAllergen, Product, ProductIngredient, ProductAllergen,
+    Ingredient, Allergen, AllergenBadge, IngredientAllergen, Product, ProductIngredient, ProductAllergen,
     ProductNutrition,
-    IngredientWithAllergens, IngredientResponse, AllergenResponse,
+    IngredientWithAllergens, IngredientResponse, AllergenResponse, AllergenBadgeResponse,
     ProductWithDetails, ProductResponse, ProductIngredientResponse, ProductAllergenResponse
 )
 
@@ -471,11 +471,11 @@ async def link_product_allergen(
 async def get_allergen_by_code(session: AsyncSession, code: str) -> Optional[Allergen]:
     """
     Get allergen by code.
-    
+
     Args:
         session: Database session
         code: Allergen code
-    
+
     Returns:
         Allergen object or None
     """
@@ -483,6 +483,27 @@ async def get_allergen_by_code(session: AsyncSession, code: str) -> Optional[All
         select(Allergen).where(Allergen.code == code)
     )
     return result.scalar_one_or_none()
+
+
+async def list_allergen_badges(session: AsyncSession) -> List[AllergenBadgeResponse]:
+    """Return curated allergen badges with their SVG icons."""
+
+    result = await session.execute(
+        select(AllergenBadge).order_by(AllergenBadge.sort_order, AllergenBadge.id)
+    )
+    badges = result.scalars().all()
+
+    return [
+        AllergenBadgeResponse(
+            code=badge.code,
+            name=badge.name,
+            category=badge.category,
+            keywords=list(badge.keywords or []),
+            icon_svg=badge.icon_svg,
+            sort_order=badge.sort_order,
+        )
+        for badge in badges
+    ]
 
 
 async def get_ingredient_by_code(session: AsyncSession, code: str) -> Optional[Ingredient]:
