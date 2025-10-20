@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ALLERGEN_FILTERS, allergenFilterMap } from "@/data/allergen-filters";
+import { expandIngredientSearchTerms } from "@/data/ingredient-search";
 import { loadSavedMenuSections, MENU_SECTIONS_EVENT, StoredMenuSection } from "@/lib/menu-sections";
 
 const UNCATEGORIZED_ID = "__uncategorized__";
@@ -61,6 +62,7 @@ interface MenuViewProps {
 export const MenuView = ({ dishes, restaurantName, showImages }: MenuViewProps) => {
   const [allergenQuery, setAllergenQuery] = useState("");
   const [selectedAllergens, setSelectedAllergens] = useState<string[]>([]);
+  const [ingredientQuery, setIngredientQuery] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const filterContainerRef = useRef<HTMLDivElement | null>(null);
   const [savedSections, setSavedSections] = useState<StoredMenuSection[]>(() => loadSavedMenuSections());
@@ -103,7 +105,18 @@ export const MenuView = ({ dishes, restaurantName, showImages }: MenuViewProps) 
 
   const menuDishes = useMemo(() => dishes.filter((dish) => dish.isOnMenu), [dishes]);
 
-  const filteredMenuDishes = useMemo(
+  const normalizedIngredientMap = useMemo(() => {
+    const entries = new Map<string, string[]>();
+    menuDishes.forEach((dish) => {
+      const ingredients = dish.ingredients
+        .map((ingredient) => ingredient.name?.toLowerCase().trim())
+        .filter((name): name is string => Boolean(name && name.length > 0));
+      entries.set(dish.id, ingredients);
+    });
+    return entries;
+  }, [menuDishes]);
+
+  const allergenFilteredMenuDishes = useMemo(
     () =>
       menuDishes.filter((dish) =>
         selectedAllergens.every((allergenId) => !dishContainsAllergen(dish, allergenId)),
@@ -111,31 +124,8 @@ export const MenuView = ({ dishes, restaurantName, showImages }: MenuViewProps) 
     [menuDishes, selectedAllergens],
   );
 
-  const categoryOrder = useMemo(() => {
-    const uniqueCategories = new Set<string>();
-
-    filteredMenuDishes.forEach((dish) => {
-      uniqueCategories.add(normalizeCategoryId(dish.menuCategory));
-    });
-
-    const sectionOrder = savedSections
-      .map((section) => section.id)
-      .filter((sectionId) => uniqueCategories.has(sectionId));
-
-    const remaining = Array.from(uniqueCategories).filter(
-      (categoryId) => !sectionOrder.includes(categoryId),
-    );
-
-    const ordered = [...sectionOrder, ...remaining.filter((id) => id !== UNCATEGORIZED_ID)];
-
-    if (uniqueCategories.has(UNCATEGORIZED_ID)) {
-      ordered.push(UNCATEGORIZED_ID);
-    }
-
-    return ordered;
-  }, [filteredMenuDishes, savedSections]);
-
   const allergenQueryValue = allergenQuery.trim().toLowerCase();
+  const ingredientQueryValue = ingredientQuery.trim().toLowerCase();
 
   const allergenSuggestions = useMemo(() => {
     const available = ALLERGEN_FILTERS.filter((definition) => !selectedAllergens.includes(definition.id));
@@ -160,6 +150,163 @@ export const MenuView = ({ dishes, restaurantName, showImages }: MenuViewProps) 
   const handleRemoveAllergen = (allergenId: string) => {
     setSelectedAllergens((prev) => prev.filter((id) => id !== allergenId));
   };
+
+  const expandedIngredientQuery = useMemo(
+    () => expandIngredientSearchTerms(ingredientQueryValue),
+    [ingredientQueryValue],
+  );
+
+  const ingredientMatchScore = useMemo(() => {
+    // Lightweight scoring keeps the search client-side. When we outgrow this,
+    // consider wiring up the API-backed trigram/taxonomy approaches captured in
+    // the ingredient-search data helpers.
+    const computeDiceCoefficient = (a: string, b: string) => {
+      if (a === b) {
+        return 1;
+      }
+      if (a.length < 2 || b.length < 2) {
+        return a[0] === b[0] ? 0.5 : 0;
+      }
+
+      const bigrams = (value: string) => {
+        const grams: string[] = [];
+        for (let index = 0; index < value.length - 1; index += 1) {
+          grams.push(value.slice(index, index + 2));
+        }
+        return grams;
+      };
+
+      const aBigrams = bigrams(a);
+      const bBigrams = bigrams(b);
+      const bGramCounts = new Map<string, number>();
+
+      bBigrams.forEach((gram) => {
+        bGramCounts.set(gram, (bGramCounts.get(gram) ?? 0) + 1);
+      });
+
+      let overlap = 0;
+      aBigrams.forEach((gram) => {
+        const count = bGramCounts.get(gram) ?? 0;
+        if (count > 0) {
+          overlap += 1;
+          bGramCounts.set(gram, count - 1);
+        }
+      });
+
+      return (2 * overlap) / (aBigrams.length + bBigrams.length);
+    };
+
+    const computeTermScore = (ingredientName: string, term: string) => {
+      if (!ingredientName || !term) {
+        return 0;
+      }
+
+      if (ingredientName === term) {
+        return 1.25;
+      }
+
+      if (ingredientName.includes(term)) {
+        const positionBoost = 1 - ingredientName.indexOf(term) / (ingredientName.length + 1);
+        return 1 + positionBoost * 0.25 + (term.length / ingredientName.length) * 0.25;
+      }
+
+      const parts = ingredientName.split(/[\s-]+/);
+      let best = 0;
+
+      parts.forEach((part) => {
+        if (!part) {
+          return;
+        }
+
+        if (part.includes(term)) {
+          const coverage = term.length / part.length;
+          best = Math.max(best, 0.6 + coverage * 0.4);
+          return;
+        }
+
+        if (term.includes(part)) {
+          best = Math.max(best, (part.length / term.length) * 0.5);
+          return;
+        }
+
+        best = Math.max(best, computeDiceCoefficient(part, term) * 0.5);
+      });
+
+      return best;
+    };
+
+    const computeScore = (dishId: string) => {
+      const ingredients = normalizedIngredientMap.get(dishId) ?? [];
+
+      if (!expandedIngredientQuery.terms.length && !expandedIngredientQuery.phrase) {
+        return 1;
+      }
+
+      if (!ingredients.length) {
+        return 0;
+      }
+
+      let bestScore = 0;
+
+      if (expandedIngredientQuery.phrase) {
+        ingredients.forEach((ingredient) => {
+          if (ingredient.includes(expandedIngredientQuery.phrase!)) {
+            const coverage = expandedIngredientQuery.phrase!.length / ingredient.length;
+            bestScore = Math.max(bestScore, 1 + coverage * 0.3);
+          }
+        });
+      }
+
+      expandedIngredientQuery.terms.forEach((term) => {
+        ingredients.forEach((ingredient) => {
+          const score = computeTermScore(ingredient, term);
+          if (score > bestScore) {
+            bestScore = score;
+          }
+        });
+      });
+
+      return bestScore;
+    };
+
+    return computeScore;
+  }, [expandedIngredientQuery, normalizedIngredientMap]);
+
+  const visibleMenuDishes = useMemo(() => {
+    if (!ingredientQueryValue) {
+      return allergenFilteredMenuDishes;
+    }
+
+    return allergenFilteredMenuDishes
+      .map((dish) => ({ dish, score: ingredientMatchScore(dish.id) }))
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map((entry) => entry.dish);
+  }, [allergenFilteredMenuDishes, ingredientMatchScore, ingredientQueryValue]);
+
+  const categoryOrder = useMemo(() => {
+    const uniqueCategories = new Set<string>();
+
+    visibleMenuDishes.forEach((dish) => {
+      uniqueCategories.add(normalizeCategoryId(dish.menuCategory));
+    });
+
+    const sectionOrder = savedSections
+      .map((section) => section.id)
+      .filter((sectionId) => uniqueCategories.has(sectionId));
+
+    const remaining = Array.from(uniqueCategories).filter(
+      (categoryId) => !sectionOrder.includes(categoryId),
+    );
+
+    const ordered = [...sectionOrder, ...remaining.filter((id) => id !== UNCATEGORIZED_ID)];
+
+    if (uniqueCategories.has(UNCATEGORIZED_ID)) {
+      ordered.push(UNCATEGORIZED_ID);
+    }
+
+    return ordered;
+  }, [savedSections, visibleMenuDishes]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -268,25 +415,52 @@ export const MenuView = ({ dishes, restaurantName, showImages }: MenuViewProps) 
                 </Button>
               </div>
             )}
+
+            <div className="pt-6 border-t border-border/60">
+              <h2 className="text-lg font-semibold text-foreground">Ingredient search</h2>
+              <p className="text-sm text-muted-foreground">
+                Highlight dishes whose ingredient lists match your query or common synonyms.
+              </p>
+
+              <div className="relative mt-3">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
+                <Input
+                  value={ingredientQuery}
+                  onChange={(event) => setIngredientQuery(event.target.value)}
+                  placeholder="Search ingredients, e.g. mushroom, shiitake, cilantro..."
+                  className="pl-10 pr-10"
+                />
+                {ingredientQuery && (
+                  <button
+                    type="button"
+                    aria-label="Clear ingredient search"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    onClick={() => setIngredientQuery("")}
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </section>
 
-        {filteredMenuDishes.length === 0 ? (
+        {visibleMenuDishes.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-xl text-muted-foreground">
               {menuDishes.length === 0
                 ? "No dishes have been added to the menu yet."
-                : "No dishes match your current allergen filters."}
+                : "No dishes match your current filters."}
             </p>
             <p className="text-sm text-muted-foreground mt-2">
               {menuDishes.length === 0
                 ? 'Mark dishes as "Added to menu" in the Recipe Book to see them here.'
-                : "Try removing a filter to bring dishes back."}
+                : "Try adjusting your allergen or ingredient filters to bring dishes back."}
             </p>
           </div>
         ) : (
           categoryOrder.map((categoryId) => {
-            const dishesInCategory = filteredMenuDishes.filter(
+            const dishesInCategory = visibleMenuDishes.filter(
               (dish) => normalizeCategoryId(dish.menuCategory) === categoryId,
             );
 
