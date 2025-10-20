@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 
@@ -26,6 +26,8 @@ interface DishNameInputProps {
   price: string;
   onPriceChange: (value: string) => void;
   existingDishes: DishSuggestion[];
+  selectedDishId?: string | null;
+  onClearSelectedDish?: () => void;
 }
 
 export const DishNameInput = ({
@@ -41,12 +43,15 @@ export const DishNameInput = ({
   price,
   onPriceChange,
   existingDishes,
+  selectedDishId,
+  onClearSelectedDish,
 }: DishNameInputProps) => {
   const [showOptional, setShowOptional] = useState(false);
   const [isSuggestionOpen, setIsSuggestionOpen] = useState(false);
   const blurTimeoutRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const isMouseOverPopover = useRef(false);
+  const hasSelectedDish = Boolean(selectedDishId);
 
   useEffect(() => {
     return () => {
@@ -91,6 +96,12 @@ export const DishNameInput = ({
     }
   }, [suggestionOptions.length]);
 
+  useEffect(() => {
+    if (hasSelectedDish) {
+      setIsSuggestionOpen(false);
+    }
+  }, [hasSelectedDish]);
+
   const filteredSuggestions = useMemo(() => {
     const query = value.trim().toLowerCase();
     if (!query) {
@@ -115,7 +126,7 @@ export const DishNameInput = ({
       blurTimeoutRef.current = null;
     }
 
-    if (suggestionOptions.length > 0) {
+    if (!hasSelectedDish && suggestionOptions.length > 0) {
       setIsSuggestionOpen(true);
     }
   };
@@ -171,31 +182,50 @@ export const DishNameInput = ({
         <Label htmlFor="dish-name" className="text-xl font-semibold text-foreground">
           Dish Name
         </Label>
-        <Popover open={isSuggestionOpen && suggestionOptions.length > 0} onOpenChange={setIsSuggestionOpen}>
+        <Popover
+          open={!hasSelectedDish && isSuggestionOpen && suggestionOptions.length > 0}
+          onOpenChange={setIsSuggestionOpen}
+        >
           <PopoverTrigger asChild>
-            <Input
-              ref={inputRef}
-              id="dish-name"
-              value={value}
-              onChange={(e) => {
-                onChange(e.target.value);
-                if (suggestionOptions.length > 0) {
-                  setIsSuggestionOpen(true);
-                }
-              }}
-              onFocus={handleInputFocus}
-              onBlur={handleInputBlur}
-              onClick={() => {
-                if (suggestionOptions.length > 0) {
-                  setIsSuggestionOpen(true);
-                }
-              }}
-              placeholder="Enter dish name..."
-              className="h-16 text-2xl font-medium border-2"
-              autoComplete="off"
-            />
+            <div className="relative">
+              <Input
+                ref={inputRef}
+                id="dish-name"
+                value={value}
+                onChange={(e) => {
+                  onChange(e.target.value);
+                  if (!hasSelectedDish && suggestionOptions.length > 0) {
+                    setIsSuggestionOpen(true);
+                  }
+                }}
+                onFocus={handleInputFocus}
+                onBlur={handleInputBlur}
+                onClick={() => {
+                  if (!hasSelectedDish && suggestionOptions.length > 0) {
+                    setIsSuggestionOpen(true);
+                  }
+                }}
+                placeholder="Enter dish name..."
+                className="h-16 text-2xl font-medium border-2 pr-14"
+                autoComplete="off"
+              />
+              {hasSelectedDish && onClearSelectedDish && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSuggestionOpen(false);
+                    onClearSelectedDish();
+                    inputRef.current?.focus();
+                  }}
+                  className="absolute inset-y-0 right-4 flex items-center text-muted-foreground transition-colors hover:text-foreground"
+                  aria-label="Clear selected dish"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              )}
+            </div>
           </PopoverTrigger>
-          {suggestionOptions.length > 0 && (
+          {!hasSelectedDish && suggestionOptions.length > 0 && (
             <PopoverContent
               align="start"
               className="w-[var(--radix-popover-trigger-width)] p-0"
@@ -204,22 +234,6 @@ export const DishNameInput = ({
               onMouseLeave={handlePopoverMouseLeave}
             >
               <div className="max-h-60 overflow-y-auto py-2">
-                {/* Add a new dish option */}
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-muted focus:bg-muted border-b border-border/50"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => {
-                    onChange("");
-                    setIsSuggestionOpen(false);
-                    window.setTimeout(() => {
-                      inputRef.current?.focus();
-                    }, 0);
-                  }}
-                >
-                  <span className="font-medium text-primary">Add a new dish</span>
-                </button>
-                
                 {filteredSuggestions.length === 0 ? (
                   <p className="px-3 py-2 text-sm text-muted-foreground">No matching dishes found.</p>
                 ) : (
@@ -236,7 +250,7 @@ export const DishNameInput = ({
                         variant={option.confirmed ? "secondary" : "destructive"}
                         className="pointer-events-none"
                       >
-                        {option.confirmed ? "Feeb Check" : "Review"}
+                        {option.confirmed ? "Ingredients confirmed" : "Review"}
                       </Badge>
                     </button>
                   ))

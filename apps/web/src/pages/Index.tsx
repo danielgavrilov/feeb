@@ -133,6 +133,10 @@ const Index = () => {
     populateFormFromRecipe(recipe);
   };
 
+  const handleClearDishSelection = () => {
+    handleStartNew();
+  };
+
   const handleUpdateIngredient = (index: number, quantity: string) => {
     const updated = [...ingredients];
     updated[index].quantity = quantity;
@@ -169,14 +173,11 @@ const Index = () => {
           : ingredient
       )
     );
-
-    toast.success(`${ingredientToConfirm.name} confirmed`);
   };
 
   const handleDeleteIngredient = (index: number) => {
     const updated = ingredients.filter((_, i) => i !== index);
     setIngredients(updated);
-    toast.success("Ingredient removed");
   };
 
   const handleAddIngredient = (name: string, quantity: string, unit: string) => {
@@ -189,7 +190,6 @@ const Index = () => {
       dietaryInfo: [],
     };
     setIngredients([...ingredients, newIngredient]);
-    toast.success(`${name} added`);
   };
 
   const handleUpdateIngredientAllergens = (
@@ -577,6 +577,8 @@ const Index = () => {
                     name: dish.name,
                     confirmed: dish.confirmed,
                   }))}
+                  selectedDishId={editingDishId ? editingDishId.toString() : null}
+                  onClearSelectedDish={handleClearDishSelection}
                 />
 
                 <IngredientsList
