@@ -108,6 +108,7 @@ interface RecipeBookProps {
   onEdit: (id: string) => void;
   onBulkAction: (action: RecipeBulkAction, ids: string[]) => Promise<void> | void;
   onToggleMenuStatus: (id: string, nextStatus: boolean) => Promise<void> | void;
+  formatPrice: (value: string | number | null | undefined) => string;
 }
 
 export const RecipeBook = ({
@@ -116,6 +117,7 @@ export const RecipeBook = ({
   onEdit,
   onBulkAction,
   onToggleMenuStatus,
+  formatPrice,
 }: RecipeBookProps) => {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [recipeStatusFilter, setRecipeStatusFilter] =
@@ -1007,6 +1009,8 @@ export const RecipeBook = ({
                     };
                   })();
 
+                  const priceLabel = dish.price ? formatPrice(dish.price) : "";
+
                   return (
                     <Card
                       key={dish.id}
@@ -1047,7 +1051,7 @@ export const RecipeBook = ({
                             {dish.servingSize !== "1" && (
                               <Badge variant="outline">Serves {dish.servingSize}</Badge>
                             )}
-                            {dish.price && <Badge variant="outline">${dish.price}</Badge>}
+                            {priceLabel && <Badge variant="outline">{priceLabel}</Badge>}
                           </div>
                         </div>
 

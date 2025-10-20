@@ -35,6 +35,7 @@ interface DishNameInputProps {
   onServingSizeChange: (value: string) => void;
   price: string;
   onPriceChange: (value: string) => void;
+  formatPrice: (value: string | number | null | undefined) => string;
   existingDishes: DishSuggestion[];
   selectedDishId?: string | null;
   onClearSelectedDish?: () => void;
@@ -52,6 +53,7 @@ export const DishNameInput = ({
   onServingSizeChange,
   price,
   onPriceChange,
+  formatPrice,
   existingDishes,
   selectedDishId,
   onClearSelectedDish,
@@ -258,7 +260,10 @@ export const DishNameInput = ({
     optionalSummaryItems.push(`Serves ${servingSize}`);
   }
   if (price.trim()) {
-    optionalSummaryItems.push(`Price: ${price}`);
+    const formattedPrice = formatPrice(price);
+    if (formattedPrice) {
+      optionalSummaryItems.push(`Price: ${formattedPrice}`);
+    }
   }
   const hasDescription = description.trim().length > 0;
   const hasOptionalSummary = optionalSummaryItems.length > 0 || hasDescription;

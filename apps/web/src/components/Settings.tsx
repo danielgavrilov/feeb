@@ -7,6 +7,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Restaurant } from "@/lib/api";
+import {
+  CurrencyOption,
+  PriceDisplayFormat,
+  PRICE_FORMAT_OPTIONS,
+  formatPriceDisplay,
+  getCurrencySymbol,
+} from "@/lib/price-format";
 
 interface SettingsProps {
   restaurant: Restaurant | null;
@@ -15,6 +22,10 @@ interface SettingsProps {
   onSelectRestaurant: (restaurantId: number) => void;
   showMenuImages: boolean;
   onToggleMenuImages: (show: boolean) => void;
+  currency: CurrencyOption;
+  onCurrencyChange: (currency: CurrencyOption) => void;
+  priceFormat: PriceDisplayFormat;
+  onPriceFormatChange: (format: PriceDisplayFormat) => void;
 }
 
 export const Settings = ({
@@ -24,6 +35,10 @@ export const Settings = ({
   onSelectRestaurant,
   showMenuImages,
   onToggleMenuImages,
+  currency,
+  onCurrencyChange,
+  priceFormat,
+  onPriceFormatChange,
 }: SettingsProps) => {
   const [newRestaurantName, setNewRestaurantName] = useState("");
   const [newRestaurantDescription, setNewRestaurantDescription] = useState("");
@@ -82,16 +97,64 @@ export const Settings = ({
 
       <Card className="p-6">
         <h3 className="text-lg font-semibold text-foreground mb-4">Menu Preferences</h3>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <Label htmlFor="menu-images" className="text-base font-semibold text-foreground">
-              Show images on menu
+        <div className="space-y-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <Label htmlFor="menu-images" className="text-base font-semibold text-foreground">
+                Show images on menu
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Toggle dish photos on the menu page. Images are hidden by default.
+              </p>
+            </div>
+            <Switch id="menu-images" checked={showMenuImages} onCheckedChange={onToggleMenuImages} />
+          </div>
+
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <Label htmlFor="currency-toggle" className="text-base font-semibold text-foreground">
+                Currency
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Toggle between Euro and US Dollar price displays.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-muted-foreground">
+                {currency === "EUR" ? "Euro (€)" : "US Dollar ($)"}
+              </span>
+              <Switch
+                id="currency-toggle"
+                checked={currency === "EUR"}
+                onCheckedChange={(checked) => onCurrencyChange(checked ? "EUR" : "USD")}
+                aria-label="Toggle currency"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="price-format" className="text-base font-semibold text-foreground">
+              Price format
             </Label>
+            <Select
+              value={priceFormat}
+              onValueChange={(value) => onPriceFormatChange(value as PriceDisplayFormat)}
+            >
+              <SelectTrigger id="price-format" className="h-12">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PRICE_FORMAT_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <p className="text-sm text-muted-foreground">
-              Toggle dish photos on the menu page. Images are hidden by default.
+              Preview: {formatPriceDisplay(7.5, { currency, format: priceFormat }) || `${getCurrencySymbol(currency)}7.50`}
             </p>
           </div>
-          <Switch id="menu-images" checked={showMenuImages} onCheckedChange={onToggleMenuImages} />
         </div>
       </Card>
 

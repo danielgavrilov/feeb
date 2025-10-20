@@ -11,18 +11,8 @@ interface DishCardProps {
   showIngredients: boolean;
   highlightedAllergens?: AllergenFilterDefinition[];
   highlightedIngredientTerms?: string[];
+  formatPrice: (value: string | number | null | undefined) => string;
 }
-
-const formatPrice = (price: string) => {
-  if (!price) return "";
-  const trimmed = price.trim();
-  if (!trimmed) return "";
-  const numeric = Number(trimmed);
-  if (!Number.isFinite(numeric)) {
-    return trimmed;
-  }
-  return `$${numeric.toFixed(2)}`;
-};
 
 export const DishCard = ({
   dish,
@@ -30,6 +20,7 @@ export const DishCard = ({
   showIngredients,
   highlightedAllergens = [],
   highlightedIngredientTerms = [],
+  formatPrice,
 }: DishCardProps) => {
   const shouldShowImage = showImage && Boolean(dish.image);
   const priceLabel = formatPrice(dish.price);
