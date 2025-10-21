@@ -23,7 +23,13 @@ import {
 } from "@/lib/price-format";
 
 const Index = () => {
-  const { restaurant, restaurants, createRestaurant: createRestaurantAPI, selectRestaurant } = useRestaurant();
+  const {
+    restaurant,
+    restaurants,
+    createRestaurant: createRestaurantAPI,
+    selectRestaurant,
+    updateRestaurant,
+  } = useRestaurant();
   const {
     recipes,
     createRecipe: createRecipeAPI,
@@ -699,6 +705,7 @@ const Index = () => {
                 restaurants={restaurants}
                 onCreateRestaurant={createRestaurantAPI}
                 onSelectRestaurant={selectRestaurant}
+                onUpdateRestaurant={updateRestaurant}
                 showMenuImages={showMenuImages}
                 onToggleMenuImages={setShowMenuImages}
                 currency={currency}

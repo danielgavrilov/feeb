@@ -1,12 +1,30 @@
-import { useState } from "react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SelectSeparator,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Restaurant } from "@/lib/api";
+import { RestaurantUpdateInput } from "@/hooks/useRestaurant";
 import {
   CurrencyOption,
   PriceDisplayFormat,
@@ -15,11 +33,199 @@ import {
   getCurrencySymbol,
 } from "@/lib/price-format";
 
+const CREATE_RESTAURANT_VALUE = "__create__";
+const DEFAULT_PICKER_COLOR = "#2563EB";
+
+const clamp = (value: number, min = 0, max = 255) => Math.min(Math.max(value, min), max);
+
+const normalizeHex = (hex: string | null | undefined): string | null => {
+  if (!hex) {
+    return null;
+  }
+
+  const prefixed = hex.startsWith("#") ? hex : `#${hex}`;
+  return /^#[0-9A-Fa-f]{6}$/.test(prefixed) ? prefixed.toUpperCase() : null;
+};
+
+const hexToRgb = (hex: string | null | undefined) => {
+  const normalized = normalizeHex(hex);
+  if (!normalized) {
+    return null;
+  }
+
+  return {
+    r: parseInt(normalized.slice(1, 3), 16),
+    g: parseInt(normalized.slice(3, 5), 16),
+    b: parseInt(normalized.slice(5, 7), 16),
+  };
+};
+
+const rgbToHex = ({ r, g, b }: { r: number; g: number; b: number }) =>
+  `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b
+    .toString(16)
+    .padStart(2, "0")}`.toUpperCase();
+
+interface ColorPickerProps {
+  id: string;
+  label: string;
+  value?: string | null;
+  onChange: (color: string) => void;
+  onClear?: () => void;
+  description?: string;
+}
+
+const ColorPicker = ({ id, label, value, onChange, onClear, description }: ColorPickerProps) => {
+  const normalizedValue = normalizeHex(value);
+  const [internalHex, setInternalHex] = useState<string>(normalizedValue ?? DEFAULT_PICKER_COLOR);
+  const [hexInput, setHexInput] = useState<string>(normalizedValue ?? DEFAULT_PICKER_COLOR);
+  const [rgb, setRgb] = useState(() => hexToRgb(normalizedValue ?? DEFAULT_PICKER_COLOR) ?? { r: 37, g: 99, b: 235 });
+
+  useEffect(() => {
+    const next = normalizeHex(value);
+    if (next) {
+      setInternalHex(next);
+      setHexInput(next);
+      const rgbValue = hexToRgb(next);
+      if (rgbValue) {
+        setRgb(rgbValue);
+      }
+    } else if (!value) {
+      setInternalHex(DEFAULT_PICKER_COLOR);
+      setHexInput(DEFAULT_PICKER_COLOR);
+      const fallbackRgb = hexToRgb(DEFAULT_PICKER_COLOR);
+      if (fallbackRgb) {
+        setRgb(fallbackRgb);
+      }
+    }
+  }, [value]);
+
+  const displayColor = normalizeHex(value) ?? internalHex;
+  const hasSelection = Boolean(normalizeHex(value));
+
+  const handleNativeChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const nextHex = event.target.value.toUpperCase();
+    setInternalHex(nextHex);
+    setHexInput(nextHex);
+    const rgbValue = hexToRgb(nextHex);
+    if (rgbValue) {
+      setRgb(rgbValue);
+    }
+    onChange(nextHex);
+  };
+
+  const handleHexInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const raw = event.target.value.replace(/#/g, "").replace(/[^0-9A-Fa-f]/g, "").slice(0, 6);
+    const formatted = `#${raw}`.toUpperCase();
+    setHexInput(formatted);
+
+    if (formatted.length === 7) {
+      setInternalHex(formatted);
+      const rgbValue = hexToRgb(formatted);
+      if (rgbValue) {
+        setRgb(rgbValue);
+      }
+      onChange(formatted);
+    }
+  };
+
+  const handleRgbInputChange = (channel: keyof typeof rgb) => (event: ChangeEvent<HTMLInputElement>) => {
+    const numericValue = Number(event.target.value);
+    const clampedValue = Number.isNaN(numericValue) ? 0 : clamp(numericValue);
+    const nextRgb = { ...rgb, [channel]: clampedValue };
+    setRgb(nextRgb);
+    const nextHex = rgbToHex(nextRgb);
+    setInternalHex(nextHex);
+    setHexInput(nextHex);
+    onChange(nextHex);
+  };
+
+  const handleClear = () => {
+    setInternalHex(DEFAULT_PICKER_COLOR);
+    setHexInput(DEFAULT_PICKER_COLOR);
+    const fallbackRgb = hexToRgb(DEFAULT_PICKER_COLOR);
+    if (fallbackRgb) {
+      setRgb(fallbackRgb);
+    }
+    if (onClear) {
+      onClear();
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id} className="text-base font-semibold text-foreground">
+        {label}
+      </Label>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button type="button" variant="outline" className="w-full justify-start gap-3 py-6 text-left font-normal">
+            <span
+              aria-hidden
+              className="h-8 w-8 rounded-md border border-border shadow-sm"
+              style={{ backgroundColor: displayColor }}
+            />
+            <span className="font-mono text-sm uppercase tracking-wide">
+              {hasSelection ? displayColor : "Select colour"}
+            </span>
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-80 space-y-4" align="start">
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold" htmlFor={`${id}-native`}>
+              Colour picker
+            </Label>
+            <input
+              id={`${id}-native`}
+              type="color"
+              value={internalHex}
+              onChange={handleNativeChange}
+              className="h-12 w-full cursor-pointer rounded-md border border-input bg-background"
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            {(["r", "g", "b"] as const).map((channel) => (
+              <div key={channel} className="space-y-1">
+                <Label htmlFor={`${id}-${channel}`} className="text-xs font-medium uppercase text-muted-foreground">
+                  {channel}
+                </Label>
+                <Input
+                  id={`${id}-${channel}`}
+                  type="number"
+                  min={0}
+                  max={255}
+                  value={rgb[channel]}
+                  onChange={handleRgbInputChange(channel)}
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor={`${id}-hex`} className="text-xs font-medium uppercase text-muted-foreground">
+              Hex
+            </Label>
+            <Input id={`${id}-hex`} value={hexInput} onChange={handleHexInputChange} maxLength={7} />
+          </div>
+
+          {onClear && hasSelection && (
+            <Button type="button" variant="ghost" className="w-full justify-center" onClick={handleClear}>
+              Clear colour
+            </Button>
+          )}
+        </PopoverContent>
+      </Popover>
+      {description && <p className="text-xs text-muted-foreground">{description}</p>}
+    </div>
+  );
+};
+
 interface SettingsProps {
   restaurant: Restaurant | null;
   restaurants: Restaurant[];
   onCreateRestaurant: (name: string, description?: string) => Promise<Restaurant>;
   onSelectRestaurant: (restaurantId: number) => void;
+  onUpdateRestaurant: (restaurantId: number, updates: RestaurantUpdateInput) => Promise<Restaurant | null> | Restaurant | null;
   showMenuImages: boolean;
   onToggleMenuImages: (show: boolean) => void;
   currency: CurrencyOption;
@@ -33,6 +239,7 @@ export const Settings = ({
   restaurants,
   onCreateRestaurant,
   onSelectRestaurant,
+  onUpdateRestaurant,
   showMenuImages,
   onToggleMenuImages,
   currency,
@@ -40,9 +247,47 @@ export const Settings = ({
   priceFormat,
   onPriceFormatChange,
 }: SettingsProps) => {
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newRestaurantName, setNewRestaurantName] = useState("");
   const [newRestaurantDescription, setNewRestaurantDescription] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+
+  const [restaurantName, setRestaurantName] = useState<string>(restaurant?.name ?? "");
+  const [restaurantDescription, setRestaurantDescription] = useState<string>(restaurant?.description ?? "");
+  const [logoDataUrl, setLogoDataUrl] = useState<string | null>(restaurant?.logoDataUrl ?? null);
+  const [primaryColor, setPrimaryColor] = useState<string | undefined>(restaurant?.primaryColor);
+  const [accentColor, setAccentColor] = useState<string | undefined>(restaurant?.accentColor);
+  const [isSavingDetails, setIsSavingDetails] = useState(false);
+
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setRestaurantName(restaurant?.name ?? "");
+    setRestaurantDescription(restaurant?.description ?? "");
+    setLogoDataUrl(restaurant?.logoDataUrl ?? null);
+    setPrimaryColor(restaurant?.primaryColor);
+    setAccentColor(restaurant?.accentColor);
+  }, [restaurant]);
+
+  useEffect(() => {
+    if (!isCreateDialogOpen) {
+      setNewRestaurantName("");
+      setNewRestaurantDescription("");
+      setIsCreating(false);
+    }
+  }, [isCreateDialogOpen]);
+
+  const handleRestaurantSelection = (value: string) => {
+    if (value === CREATE_RESTAURANT_VALUE) {
+      setIsCreateDialogOpen(true);
+      return;
+    }
+
+    const restaurantId = Number(value);
+    if (!Number.isNaN(restaurantId)) {
+      onSelectRestaurant(restaurantId);
+    }
+  };
 
   const handleCreateRestaurant = async () => {
     if (!newRestaurantName.trim()) {
@@ -52,10 +297,9 @@ export const Settings = ({
 
     try {
       setIsCreating(true);
-      await onCreateRestaurant(newRestaurantName, newRestaurantDescription || undefined);
-      setNewRestaurantName("");
-      setNewRestaurantDescription("");
+      await onCreateRestaurant(newRestaurantName.trim(), newRestaurantDescription.trim() || undefined);
       toast.success("Restaurant created successfully");
+      setIsCreateDialogOpen(false);
     } catch (error) {
       toast.error("Failed to create restaurant");
       console.error(error);
@@ -64,39 +308,207 @@ export const Settings = ({
     }
   };
 
+  const handleLogoChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === "string") {
+        setLogoDataUrl(result);
+      }
+    };
+    reader.onerror = () => {
+      toast.error("Failed to read logo file");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveLogo = () => {
+    setLogoDataUrl(null);
+    if (logoInputRef.current) {
+      logoInputRef.current.value = "";
+    }
+  };
+
+  const handleUpdateRestaurantDetails = async () => {
+    if (!restaurant) {
+      toast.error("Please select a restaurant first");
+      return;
+    }
+
+    const trimmedName = restaurantName.trim();
+    if (!trimmedName) {
+      toast.error("Restaurant name cannot be empty");
+      return;
+    }
+
+    const updates: RestaurantUpdateInput = {};
+
+    if (trimmedName !== restaurant.name) {
+      updates.name = trimmedName;
+    }
+
+    if (restaurantDescription !== (restaurant.description ?? "")) {
+      updates.description = restaurantDescription;
+    }
+
+    if ((logoDataUrl ?? null) !== (restaurant.logoDataUrl ?? null)) {
+      updates.logoDataUrl = logoDataUrl;
+    }
+
+    if ((primaryColor ?? null) !== (restaurant.primaryColor ?? null)) {
+      updates.primaryColor = primaryColor ?? null;
+    }
+
+    if ((accentColor ?? null) !== (restaurant.accentColor ?? null)) {
+      updates.accentColor = accentColor ?? null;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      toast.info("No changes to save");
+      return;
+    }
+
+    try {
+      setIsSavingDetails(true);
+      await onUpdateRestaurant(restaurant.id, updates);
+      toast.success("Restaurant details updated");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to update restaurant details");
+    } finally {
+      setIsSavingDetails(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-foreground mb-6">Settings</h2>
-
-      {restaurants.length > 0 && (
-        <Card className="p-6">
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="select-restaurant" className="text-lg font-semibold mb-2 block">
-                Current Restaurant
-              </Label>
-              <Select
-                value={restaurant?.id.toString()}
-                onValueChange={(value) => onSelectRestaurant(parseInt(value))}
-              >
-                <SelectTrigger className="h-12 text-lg">
-                  <SelectValue placeholder="Select a restaurant" />
-                </SelectTrigger>
-                <SelectContent>
-                  {restaurants.map((r) => (
-                    <SelectItem key={r.id} value={r.id.toString()}>
-                      {r.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </Card>
-      )}
+      <h2 className="mb-6 text-2xl font-bold text-foreground">Settings</h2>
 
       <Card className="p-6">
-        <h3 className="text-lg font-semibold text-foreground mb-4">Menu Preferences</h3>
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="select-restaurant" className="mb-2 block text-lg font-semibold">
+              Restaurant Name
+            </Label>
+            <Select value={restaurant ? restaurant.id.toString() : undefined} onValueChange={handleRestaurantSelection}>
+              <SelectTrigger id="select-restaurant" className="h-12 text-lg">
+                <SelectValue
+                  placeholder={restaurants.length ? "Select a restaurant" : "Create your first restaurant"}
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {restaurants.map((item) => (
+                  <SelectItem key={item.id} value={item.id.toString()}>
+                    {item.name}
+                  </SelectItem>
+                ))}
+                {restaurants.length > 0 && <SelectSeparator />}
+                <SelectItem value={CREATE_RESTAURANT_VALUE} className="font-semibold text-primary">
+                  + Add new restaurant
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="p-6">
+        <h3 className="mb-4 text-lg font-semibold text-foreground">Restaurant Details</h3>
+        {restaurant ? (
+          <div className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="restaurant-name" className="text-base font-semibold text-foreground">
+                  Restaurant name
+                </Label>
+                <Input
+                  id="restaurant-name"
+                  value={restaurantName}
+                  onChange={(event) => setRestaurantName(event.target.value)}
+                  placeholder="Enter restaurant name"
+                  className="h-12 text-lg"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="restaurant-description" className="text-base font-semibold text-foreground">
+                  Description
+                </Label>
+                <Textarea
+                  id="restaurant-description"
+                  value={restaurantDescription}
+                  onChange={(event) => setRestaurantDescription(event.target.value)}
+                  placeholder="Describe your restaurant"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <ColorPicker
+                id="primary-colour"
+                label="Primary theme colour"
+                value={primaryColor}
+                onChange={setPrimaryColor}
+                onClear={() => setPrimaryColor(undefined)}
+                description="Used for prominent accents across your guest menu."
+              />
+              <ColorPicker
+                id="accent-colour"
+                label="Accent colour"
+                value={accentColor}
+                onChange={setAccentColor}
+                onClear={() => setAccentColor(undefined)}
+                description="Secondary highlights such as buttons or badges."
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="restaurant-logo" className="text-base font-semibold text-foreground">
+                Logo
+              </Label>
+              <Input
+                ref={logoInputRef}
+                id="restaurant-logo"
+                type="file"
+                accept="image/*"
+                onChange={handleLogoChange}
+              />
+              {logoDataUrl ? (
+                <div className="flex items-center gap-4">
+                  <img
+                    src={logoDataUrl}
+                    alt={`${restaurantName || "Restaurant"} logo preview`}
+                    className="h-16 w-16 rounded-md border object-cover"
+                  />
+                  <Button type="button" variant="ghost" onClick={handleRemoveLogo}>
+                    Remove logo
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Upload a square image for the best results.</p>
+              )}
+            </div>
+
+            <div className="flex justify-end">
+              <Button type="button" onClick={handleUpdateRestaurantDetails} disabled={isSavingDetails}>
+                {isSavingDetails ? "Saving..." : "Save changes"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-muted-foreground/40 p-6 text-center text-sm text-muted-foreground">
+            Use the selector above to create your first restaurant and unlock its details.
+          </div>
+        )}
+      </Card>
+
+      <Card className="p-6">
+        <h3 className="mb-4 text-lg font-semibold text-foreground">Menu Preferences</h3>
         <div className="space-y-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -136,10 +548,7 @@ export const Settings = ({
             <Label htmlFor="price-format" className="text-base font-semibold text-foreground">
               Price format
             </Label>
-            <Select
-              value={priceFormat}
-              onValueChange={(value) => onPriceFormatChange(value as PriceDisplayFormat)}
-            >
+            <Select value={priceFormat} onValueChange={(value) => onPriceFormatChange(value as PriceDisplayFormat)}>
               <SelectTrigger id="price-format" className="h-12">
                 <SelectValue />
               </SelectTrigger>
@@ -158,54 +567,56 @@ export const Settings = ({
         </div>
       </Card>
 
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold text-foreground mb-4">
-          {restaurants.length === 0 ? "Create Your First Restaurant" : "Add New Restaurant"}
-        </h3>
-        <div className="space-y-4">
-          <div>
-            <Label htmlFor="new-restaurant-name" className="text-base font-semibold mb-2 block">
-              Restaurant Name
-            </Label>
-            <Input
-              id="new-restaurant-name"
-              value={newRestaurantName}
-              onChange={(e) => setNewRestaurantName(e.target.value)}
-              placeholder="Enter restaurant name"
-              className="h-12 text-lg"
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="new-restaurant-desc" className="text-base font-semibold mb-2 block">
-              Description (Optional)
-            </Label>
-            <Input
-              id="new-restaurant-desc"
-              value={newRestaurantDescription}
-              onChange={(e) => setNewRestaurantDescription(e.target.value)}
-              placeholder="Enter restaurant description"
-              className="h-12 text-lg"
-            />
-          </div>
-
-          <Button 
-            onClick={handleCreateRestaurant} 
-            className="h-12 text-lg font-semibold" 
-            size="lg"
-            disabled={isCreating}
-          >
-            {isCreating ? "Creating..." : "Create Restaurant"}
-          </Button>
-        </div>
-      </Card>
-
-      <Card className="p-6 bg-muted/50">
-        <h3 className="font-semibold text-foreground mb-2">About</h3>
+      <Card className="bg-muted/50 p-6">
+        <h3 className="mb-2 font-semibold text-foreground">About</h3>
         <p className="text-sm text-muted-foreground">
           Feeb helps you manage recipes and track dietary compliance for your kitchen.
         </p>
       </Card>
+
+      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create a restaurant</DialogTitle>
+            <DialogDescription>Set up a new location to start managing its menu.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-restaurant-name" className="text-base font-semibold text-foreground">
+                Restaurant name
+              </Label>
+              <Input
+                id="new-restaurant-name"
+                value={newRestaurantName}
+                onChange={(event) => setNewRestaurantName(event.target.value)}
+                placeholder="Enter restaurant name"
+                className="h-12 text-lg"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-restaurant-description" className="text-base font-semibold text-foreground">
+                Description (optional)
+              </Label>
+              <Textarea
+                id="new-restaurant-description"
+                value={newRestaurantDescription}
+                onChange={(event) => setNewRestaurantDescription(event.target.value)}
+                placeholder="Enter restaurant description"
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setIsCreateDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleCreateRestaurant} disabled={isCreating}>
+              {isCreating ? "Creating..." : "Create restaurant"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
+
