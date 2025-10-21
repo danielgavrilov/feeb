@@ -46,7 +46,7 @@ export interface RecipeIngredient {
   confirmed: boolean;
   substitution?: {
     alternative: string;
-    surcharge?: string;
+    surcharge?: string | null;
   };
 }
 
@@ -77,7 +77,7 @@ export interface CreateRecipeIngredient {
   confirmed?: boolean;
   substitution?: {
     alternative: string;
-    surcharge?: string;
+    surcharge?: string | null;
   };
 }
 

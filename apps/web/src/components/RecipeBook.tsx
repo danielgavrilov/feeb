@@ -56,7 +56,7 @@ export interface SavedDish {
     }>;
     substitution?: {
       alternative: string;
-      surcharge?: string;
+      surcharge?: string | null;
     };
   }>;
   prepMethod: string;
@@ -1165,12 +1165,28 @@ export const RecipeBook = ({
                       {showIngredients && (
                         <div className="mb-4">
                           <h4 className="font-semibold text-sm text-foreground mb-2">Ingredients:</h4>
-                          <div className="grid grid-cols-2 gap-2">
-                            {dish.ingredients.map((ing, idx) => (
-                              <p key={idx} className="text-sm text-muted-foreground">
-                                {ing.quantity} {ing.unit} {ing.name}
-                              </p>
-                            ))}
+                          <div className="grid grid-cols-2 gap-3">
+                            {dish.ingredients.map((ing, idx) => {
+                              const substitution = ing.substitution;
+                              const formattedSurcharge = substitution?.surcharge
+                                ? formatPrice(substitution.surcharge)
+                                : "";
+
+                              return (
+                                <div key={idx} className="space-y-1 text-sm text-muted-foreground">
+                                  <p>
+                                    {ing.quantity} {ing.unit} {ing.name}
+                                  </p>
+                                  {substitution && (
+                                    <p className="text-xs text-muted-foreground/80">
+                                      <span className="font-medium text-foreground">Substitution:</span>{" "}
+                                      {substitution.alternative}
+                                      {formattedSurcharge && ` (${formattedSurcharge})`}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       )}

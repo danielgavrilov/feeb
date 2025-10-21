@@ -311,6 +311,15 @@ async def create_recipe(
     # Add ingredients if provided
     if recipe_data.ingredients:
         for ing in recipe_data.ingredients:
+            substitution_provided = "substitution" in ing.model_fields_set
+            if substitution_provided:
+                substitution_payload = (
+                    ing.substitution.model_dump(exclude_none=True)
+                    if ing.substitution
+                    else {}
+                )
+            else:
+                substitution_payload = None
             await dal.add_recipe_ingredient(
                 session,
                 recipe_id=recipe_id,
@@ -318,7 +327,9 @@ async def create_recipe(
                 quantity=ing.quantity,
                 unit=ing.unit,
                 notes=ing.notes,
-                confirmed=ing.confirmed or False
+                confirmed=ing.confirmed or False,
+                substitution=substitution_payload,
+                substitution_provided=substitution_provided,
             )
     
     await session.commit()
@@ -673,6 +684,13 @@ async def add_recipe_ingredient(
     if not recipe:
         raise HTTPException(status_code=404, detail=f"Recipe with ID {recipe_id} not found")
     
+    substitution_provided = "substitution" in ingredient_data.model_fields_set
+    substitution_payload = (
+        ingredient_data.substitution.model_dump(exclude_none=True)
+        if ingredient_data.substitution
+        else {}
+    ) if substitution_provided else None
+
     await dal.add_recipe_ingredient(
         session,
         recipe_id=recipe_id,
@@ -680,7 +698,9 @@ async def add_recipe_ingredient(
         quantity=ingredient_data.quantity,
         unit=ingredient_data.unit,
         notes=ingredient_data.notes,
-        confirmed=ingredient_data.confirmed or False
+        confirmed=ingredient_data.confirmed or False,
+        substitution=substitution_payload,
+        substitution_provided=substitution_provided,
     )
     
     await session.commit()
@@ -713,6 +733,13 @@ async def update_recipe_ingredient(
         raise HTTPException(status_code=404, detail=f"Recipe with ID {recipe_id} not found")
     
     # Update via add_recipe_ingredient (which does upsert)
+    substitution_provided = "substitution" in ingredient_data.model_fields_set
+    substitution_payload = (
+        ingredient_data.substitution.model_dump(exclude_none=True)
+        if ingredient_data.substitution
+        else {}
+    ) if substitution_provided else None
+
     await dal.add_recipe_ingredient(
         session,
         recipe_id=recipe_id,
@@ -720,7 +747,9 @@ async def update_recipe_ingredient(
         quantity=ingredient_data.quantity,
         unit=ingredient_data.unit,
         notes=ingredient_data.notes,
-        confirmed=ingredient_data.confirmed if ingredient_data.confirmed is not None else False
+        confirmed=ingredient_data.confirmed if ingredient_data.confirmed is not None else False,
+        substitution=substitution_payload,
+        substitution_provided=substitution_provided,
     )
     
     await session.commit()

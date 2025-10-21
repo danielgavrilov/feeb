@@ -31,7 +31,7 @@ export interface IngredientState {
   dietaryInfo?: string[];
   substitution?: {
     alternative: string;
-    surcharge?: string;
+    surcharge?: string | null;
   };
 }
 
