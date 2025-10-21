@@ -21,6 +21,9 @@ export interface Restaurant {
   name: string;
   description?: string;
   created_at: string;
+  logoDataUrl?: string;
+  primaryColor?: string;
+  accentColor?: string;
 }
 
 export interface Menu {
