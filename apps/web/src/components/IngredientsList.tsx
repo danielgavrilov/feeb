@@ -8,10 +8,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { ALLERGEN_CATEGORIES } from "@/data/recipes";
 import { Check, Trash2, Plus, ChevronsUpDown } from "lucide-react";
@@ -73,6 +73,17 @@ export const IngredientsList = ({
   const [newUnit, setNewUnit] = useState("g");
   const [activeSubstitutionIndex, setActiveSubstitutionIndex] = useState<number | null>(null);
   const [substitutionDraft, setSubstitutionDraft] = useState({ alternative: "", surcharge: "" });
+
+  const initializeSubstitutionDraft = (
+    ingredientIndex: number,
+    substitution?: IngredientState["substitution"],
+  ) => {
+    setActiveSubstitutionIndex(ingredientIndex);
+    setSubstitutionDraft({
+      alternative: substitution?.alternative ?? "",
+      surcharge: substitution?.surcharge ?? "",
+    });
+  };
 
   const handleCloseSubstitutionDialog = () => {
     setActiveSubstitutionIndex(null);
@@ -182,245 +193,279 @@ export const IngredientsList = ({
             }
           };
 
+          const openSubstitutionDialogForIngredient = () => {
+            initializeSubstitutionDraft(index, substitution);
+          };
+
           return (
-            <div
+            <Dialog
               key={index}
-              className={`p-4 rounded-lg border-2 transition-all ${
-                ingredient.confirmed
-                  ? "bg-confirmed border-confirmed"
-                  : "bg-inferred border-inferred border-dashed"
-              }`}
+              open={isSubstitutionDialogOpen}
+              onOpenChange={(open) => {
+                if (open) {
+                  initializeSubstitutionDraft(index, substitution);
+                } else if (isSubstitutionDialogOpen) {
+                  handleCloseSubstitutionDialog();
+                }
+              }}
             >
-              <div className="grid gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)_auto] md:items-start">
-                <div className="space-y-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`text-lg font-medium ${
-                          ingredient.confirmed ? "text-confirmed-foreground" : "text-inferred-foreground"
-                        }`}
+              <div
+                className={`p-4 rounded-lg border-2 transition-all ${
+                  ingredient.confirmed
+                    ? "bg-confirmed border-confirmed"
+                    : "bg-inferred border-inferred border-dashed"
+                }`}
+              >
+                <div className="grid gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)_auto] md:items-start">
+                  <div className="space-y-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`text-lg font-medium ${
+                            ingredient.confirmed ? "text-confirmed-foreground" : "text-inferred-foreground"
+                          }`}
+                        >
+                          {ingredient.name}
+                        </span>
+                        {ingredient.confirmed && (
+                          <Check className="w-5 h-5 text-confirmed-foreground" />
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Input
+                        type="number"
+                        value={ingredient.quantity}
+                        onChange={(e) => onUpdateIngredient(index, e.target.value)}
+                        className="h-11 w-28 text-lg font-medium"
+                      />
+                      <Select
+                        value={ingredient.unit || undefined}
+                        onValueChange={(value) => onUpdateIngredientUnit(index, value)}
                       >
-                        {ingredient.name}
-                      </span>
-                      {ingredient.confirmed && (
-                        <Check className="w-5 h-5 text-confirmed-foreground" />
-                      )}
+                        <SelectTrigger className="h-11 w-32 text-lg">
+                          <SelectValue placeholder="Unit" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="g">g</SelectItem>
+                          <SelectItem value="kg">kg</SelectItem>
+                          <SelectItem value="ml">ml</SelectItem>
+                          <SelectItem value="l">l</SelectItem>
+                          <SelectItem value="tsp">tsp</SelectItem>
+                          <SelectItem value="tbsp">tbsp</SelectItem>
+                          <SelectItem value="cup">cup</SelectItem>
+                          <SelectItem value="pcs">pcs</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Input
-                      type="number"
-                      value={ingredient.quantity}
-                      onChange={(e) => onUpdateIngredient(index, e.target.value)}
-                      className="h-11 w-28 text-lg font-medium"
-                    />
-                    <Select
-                      value={ingredient.unit || undefined}
-                      onValueChange={(value) => onUpdateIngredientUnit(index, value)}
-                    >
-                      <SelectTrigger className="h-11 w-32 text-lg">
-                        <SelectValue placeholder="Unit" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="g">g</SelectItem>
-                        <SelectItem value="kg">kg</SelectItem>
-                        <SelectItem value="ml">ml</SelectItem>
-                        <SelectItem value="l">l</SelectItem>
-                        <SelectItem value="tsp">tsp</SelectItem>
-                        <SelectItem value="tbsp">tbsp</SelectItem>
-                        <SelectItem value="cup">cup</SelectItem>
-                        <SelectItem value="pcs">pcs</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                  <div className="space-y-4">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className={`rounded-lg border text-left transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary ${
+                            selectedAllergens.length > 0
+                              ? "border-border bg-background"
+                              : "border-border/60 bg-background/60"
+                          } p-4 w-full`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-3">
+                              <div>
+                                <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                                  Allergens
+                                </p>
+                                {selectedAllergens.length > 0 ? (
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {selectedAllergens.map((allergen, allergenIndex) => {
+                                      const certaintyLabel = (
+                                        allergen.certainty || (ingredient.confirmed ? "confirmed" : "predicted")
+                                      ).toLowerCase();
+                                      const displayLabel = `${certaintyLabel.charAt(0).toUpperCase()}${certaintyLabel.slice(1)}`;
+                                      const statusClassName =
+                                        certaintyLabel === "confirmed"
+                                          ? "text-primary"
+                                          : "text-muted-foreground";
 
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className={`rounded-lg border text-left transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary ${
-                        selectedAllergens.length > 0 ? "border-border bg-background" : "border-border/60 bg-background/60"
-                      } p-4 w-full`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Allergens</p>
-                          {selectedAllergens.length > 0 ? (
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {selectedAllergens.map((allergen, allergenIndex) => {
-                                const certaintyLabel = (allergen.certainty || (ingredient.confirmed ? "confirmed" : "predicted"))
-                                  .toLowerCase();
-                                const displayLabel = `${certaintyLabel.charAt(0).toUpperCase()}${certaintyLabel.slice(1)}`;
-                                const statusClassName =
-                                  certaintyLabel === "confirmed"
-                                    ? "text-primary"
-                                    : "text-muted-foreground";
-
+                                      return (
+                                        <span
+                                          key={`${allergen.code ?? "unknown"}-${allergen.name ?? allergenIndex}`}
+                                          className="inline-flex items-center gap-2 rounded-full border border-secondary/40 bg-secondary/15 px-3 py-1 text-xs"
+                                        >
+                                          <span className="text-sm font-semibold text-secondary">
+                                            {allergen.name || allergen.code}
+                                          </span>
+                                          <span className={`text-[10px] uppercase tracking-wide ${statusClassName}`}>
+                                            {displayLabel}
+                                          </span>
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <p className="mt-3 text-sm text-muted-foreground">Click to select allergens</p>
+                                )}
+                              </div>
+                              <p className="text-sm font-semibold text-primary">Add substitution</p>
+                            </div>
+                            <ChevronsUpDown className="mt-1 h-5 w-5 flex-shrink-0 text-muted-foreground" />
+                          </div>
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-72" align="end">
+                        <div className="space-y-3">
+                          <div>
+                            <p className="text-sm font-semibold text-foreground">Select allergens</p>
+                            <div className="mt-2 max-h-56 space-y-2 overflow-y-auto pr-1">
+                              {ALLERGEN_CATEGORIES.map((category) => {
+                                const normalizedId = category.id.toLowerCase();
+                                const isChecked = selectedAllergens.some((existing) => {
+                                  const codeMatch = existing.code?.toLowerCase() === normalizedId;
+                                  const nameMatch = existing.name?.toLowerCase() === normalizedId;
+                                  return codeMatch || nameMatch;
+                                });
                                 return (
-                                  <span
-                                    key={`${allergen.code ?? "unknown"}-${allergen.name ?? allergenIndex}`}
-                                    className="inline-flex items-center gap-2 rounded-full border border-secondary/40 bg-secondary/15 px-3 py-1 text-xs"
+                                  <label
+                                    key={category.id}
+                                    className="flex items-center gap-2 text-sm font-medium text-foreground"
                                   >
-                                    <span className="text-sm font-semibold text-secondary">
-                                      {allergen.name || allergen.code}
-                                    </span>
-                                    <span className={`text-[10px] uppercase tracking-wide ${statusClassName}`}>
-                                      {displayLabel}
-                                    </span>
-                                  </span>
+                                    <Checkbox
+                                      checked={isChecked}
+                                      onCheckedChange={() => toggleAllergen(category.id, category.label)}
+                                      id={`ingredient-${index}-allergen-${category.id}`}
+                                    />
+                                    <span>{category.label}</span>
+                                  </label>
                                 );
                               })}
                             </div>
-                          ) : (
-                            <p className="mt-3 text-sm text-muted-foreground">Click to select allergens</p>
-                          )}
-                        </div>
-                        <ChevronsUpDown className="mt-1 h-5 w-5 flex-shrink-0 text-muted-foreground" />
-                      </div>
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-64" align="end">
-                    <div className="space-y-2">
-                      <p className="text-sm font-semibold text-foreground">Select allergens</p>
-                      <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
-                        {ALLERGEN_CATEGORIES.map((category) => {
-                          const normalizedId = category.id.toLowerCase();
-                          const isChecked = selectedAllergens.some((existing) => {
-                            const codeMatch = existing.code?.toLowerCase() === normalizedId;
-                            const nameMatch = existing.name?.toLowerCase() === normalizedId;
-                            return codeMatch || nameMatch;
-                          });
-                          return (
-                            <label
-                              key={category.id}
-                              className="flex items-center gap-2 text-sm font-medium text-foreground"
+                          </div>
+                          {selectedAllergens.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                openSubstitutionDialogForIngredient();
+                              }}
+                              className="flex items-center gap-2 rounded-md bg-secondary/15 px-3 py-2 text-sm font-semibold text-primary transition-colors hover:bg-secondary/25"
                             >
-                              <Checkbox
-                                checked={isChecked}
-                                onCheckedChange={() => toggleAllergen(category.id, category.label)}
-                                id={`ingredient-${index}-allergen-${category.id}`}
-                              />
-                              <span>{category.label}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-
-                <div className="flex flex-col gap-3">
-                  {substitution && (
-                    <div className="rounded-lg border border-secondary/40 bg-secondary/10 p-3 text-sm">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-secondary">
-                        Listed substitution
-                      </p>
-                      <p className="mt-1 font-medium text-foreground">{substitution.alternative}</p>
-                      {substitutionSurchargeLabel && (
-                        <p className="text-xs text-muted-foreground">Surcharge: {substitutionSurchargeLabel}</p>
-                      )}
-                    </div>
-                  )}
-
-                  {(selectedAllergens.length > 0 || substitution) && (
-                    <Dialog
-                      open={isSubstitutionDialogOpen}
-                      onOpenChange={(open) => {
-                        if (open) {
-                          setActiveSubstitutionIndex(index);
-                          setSubstitutionDraft({
-                            alternative: substitution?.alternative ?? "",
-                            surcharge: substitution?.surcharge ?? "",
-                          });
-                        } else if (isSubstitutionDialogOpen) {
-                          handleCloseSubstitutionDialog();
-                        }
-                      }}
-                    >
-                      <DialogTrigger asChild>
-                        <Button variant="outline" size="sm" className="w-fit">
-                          {substitution ? "Edit substitution" : "List substitution"}
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>List substitution</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4 py-2">
-                          <div className="space-y-2">
-                            <Label htmlFor={`ingredient-${index}-substitution-name`}>
-                              Alternative ingredient
-                            </Label>
-                            <Input
-                              id={`ingredient-${index}-substitution-name`}
-                              value={substitutionDraft.alternative}
-                              onChange={(event) =>
-                                setSubstitutionDraft((current) => ({
-                                  ...current,
-                                  alternative: event.target.value,
-                                }))
-                              }
-                              placeholder="e.g. Gluten-free bun"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor={`ingredient-${index}-substitution-surcharge`}>
-                              Optional surcharge
-                            </Label>
-                            <Input
-                              id={`ingredient-${index}-substitution-surcharge`}
-                              value={substitutionDraft.surcharge}
-                              onChange={(event) =>
-                                setSubstitutionDraft((current) => ({
-                                  ...current,
-                                  surcharge: event.target.value,
-                                }))
-                              }
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              placeholder="0.50"
-                            />
-                          </div>
-                        </div>
-                        <DialogFooter className="gap-2 pt-2">
-                          <Button variant="ghost" onClick={handleCloseSubstitutionDialog}>
-                            Cancel
-                          </Button>
-                          {substitution && (
-                            <Button variant="secondary" onClick={handleRemoveSubstitution}>
-                              Remove substitution
-                            </Button>
+                              <span className="text-base leading-none">&gt;</span>
+                              <span>add substitution</span>
+                            </button>
                           )}
-                          <Button onClick={handleSaveSubstitution}>Save substitution</Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                  )}
-                </div>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
 
-                <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-start md:flex-col md:items-end">
-                  {!ingredient.confirmed && (
-                    <button
-                      onClick={handleConfirmClick}
-                      className="h-11 px-5 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition-opacity"
+                    {substitution && (
+                      <div className="space-y-2">
+                        <div className="rounded-lg border border-secondary/40 bg-secondary/10 p-3 text-sm">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-secondary">
+                            Listed substitution
+                          </p>
+                          <p className="mt-1 font-medium text-foreground">{substitution.alternative}</p>
+                          {substitutionSurchargeLabel && (
+                            <p className="text-xs text-muted-foreground">
+                              Surcharge: {substitutionSurchargeLabel}
+                            </p>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="link"
+                          className="h-auto px-0 text-sm font-semibold text-primary"
+                          onClick={() => {
+                            openSubstitutionDialogForIngredient();
+                          }}
+                        >
+                          Edit substitution
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-nowrap items-center justify-end gap-2 md:flex-col md:items-end md:justify-start md:gap-3">
+                    {!ingredient.confirmed && (
+                      <button
+                        onClick={handleConfirmClick}
+                        className="h-11 px-5 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition-opacity"
+                      >
+                        Confirm
+                      </button>
+                    )}
+                    <Button
+                      onClick={() => onDeleteIngredient(index)}
+                      variant="outline"
+                      size="icon"
+                      className="h-11 w-11 border-2 hover:bg-destructive hover:text-destructive-foreground"
                     >
-                      Confirm
-                    </button>
-                  )}
-                  <Button
-                    onClick={() => onDeleteIngredient(index)}
-                    variant="outline"
-                    size="icon"
-                    className="h-11 w-11 border-2 hover:bg-destructive hover:text-destructive-foreground"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </Button>
+                      <Trash2 className="w-5 h-5" />
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
+
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>List substitution</DialogTitle>
+                  <DialogDescription>
+                    Replacing <span className="font-semibold text-foreground">{ingredient.name}</span>
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  <div className="space-y-2">
+                    <Label htmlFor={`ingredient-${index}-substitution-name`}>
+                      Alternative ingredient
+                    </Label>
+                    <Input
+                      id={`ingredient-${index}-substitution-name`}
+                      value={substitutionDraft.alternative}
+                      onChange={(event) =>
+                        setSubstitutionDraft((current) => ({
+                          ...current,
+                          alternative: event.target.value,
+                        }))
+                      }
+                      placeholder="e.g. Gluten-free bun"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`ingredient-${index}-substitution-surcharge`}>
+                      Optional surcharge
+                    </Label>
+                    <Input
+                      id={`ingredient-${index}-substitution-surcharge`}
+                      value={substitutionDraft.surcharge}
+                      onChange={(event) =>
+                        setSubstitutionDraft((current) => ({
+                          ...current,
+                          surcharge: event.target.value,
+                        }))
+                      }
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.50"
+                    />
+                  </div>
+                </div>
+                <DialogFooter className="gap-2 pt-2">
+                  <Button variant="ghost" onClick={handleCloseSubstitutionDialog}>
+                    Cancel
+                  </Button>
+                  {substitution && (
+                    <Button variant="secondary" onClick={handleRemoveSubstitution}>
+                      Remove substitution
+                    </Button>
+                  )}
+                  <Button onClick={handleSaveSubstitution}>Save substitution</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           );
         })}
       </div>
