@@ -305,7 +305,7 @@ class MenuRecipe(Base):
 class RecipeIngredient(Base):
     """Links recipes to ingredients with quantity information."""
     __tablename__ = "recipe_ingredient"
-    
+
     id = mapped_column(Integer, primary_key=True, autoincrement=True)
     recipe_id = mapped_column(Integer, ForeignKey("recipe.id"), nullable=False)
     ingredient_id = mapped_column(Integer, ForeignKey("ingredient.id"), nullable=False)
@@ -314,13 +314,43 @@ class RecipeIngredient(Base):
     notes = mapped_column(Text, nullable=True)
     allergens = mapped_column(Text, nullable=True)
     confirmed = mapped_column(Boolean, nullable=False, default=False)
-    
+
     # Relationships
     recipe: Mapped["Recipe"] = relationship("Recipe", back_populates="ingredients")
     ingredient: Mapped["Ingredient"] = relationship("Ingredient")
-    
+    substitution: Mapped[Optional["RecipeIngredientSubstitution"]] = relationship(
+        "RecipeIngredientSubstitution",
+        back_populates="recipe_ingredient",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+
     __table_args__ = (
         UniqueConstraint("recipe_id", "ingredient_id", name="uq_recipe_ingredient"),
+    )
+
+
+class RecipeIngredientSubstitution(Base):
+    """Optional substitution details for a recipe ingredient."""
+
+    __tablename__ = "recipe_ingredient_substitution"
+
+    id = mapped_column(Integer, primary_key=True, autoincrement=True)
+    recipe_ingredient_id = mapped_column(
+        Integer,
+        ForeignKey("recipe_ingredient.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
+    alternative = mapped_column(Text, nullable=False)
+    surcharge = mapped_column(Text, nullable=True)
+    created_at = mapped_column(TIMESTAMP, default=func.now())
+
+    # Relationships
+    recipe_ingredient: Mapped["RecipeIngredient"] = relationship(
+        "RecipeIngredient",
+        back_populates="substitution",
+        single_parent=True,
     )
 
 
@@ -470,6 +500,14 @@ class RecipeIngredientRequest(BaseModel):
     unit: Optional[str] = None
     notes: Optional[str] = None
     confirmed: Optional[bool] = None
+    substitution: Optional["IngredientSubstitutionRequest"] = None
+
+
+class IngredientSubstitutionRequest(BaseModel):
+    """Substitution details provided when managing ingredients."""
+
+    alternative: str
+    surcharge: Optional[str] = None
 
 
 class RecipeIngredientResponse(BaseModel):
@@ -481,6 +519,16 @@ class RecipeIngredientResponse(BaseModel):
     notes: Optional[str] = None
     allergens: List[AllergenResponse] = []
     confirmed: bool = False
+    substitution: Optional["IngredientSubstitutionResponse"] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class IngredientSubstitutionResponse(BaseModel):
+    """Serialized substitution information for recipe ingredients."""
+
+    alternative: str
+    surcharge: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

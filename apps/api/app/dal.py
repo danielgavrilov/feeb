@@ -14,7 +14,8 @@ from .models import (
     Ingredient, Allergen, AllergenBadge, IngredientAllergen, Product, ProductIngredient, ProductAllergen,
     ProductNutrition,
     IngredientWithAllergens, IngredientResponse, AllergenResponse, AllergenBadgeResponse,
-    ProductWithDetails, ProductResponse, ProductIngredientResponse, ProductAllergenResponse
+    ProductWithDetails, ProductResponse, ProductIngredientResponse, ProductAllergenResponse,
+    RecipeIngredientSubstitution,
 )
 
 
@@ -871,7 +872,9 @@ async def add_recipe_ingredient(
     unit: Optional[str] = None,
     notes: Optional[str] = None,
     allergens: Optional[str] = None,
-    confirmed: bool = False
+    confirmed: bool = False,
+    substitution: Optional[dict] = None,
+    substitution_provided: bool = False,
 ) -> None:
     """
     Add or update an ingredient in a recipe.
@@ -915,6 +918,25 @@ async def add_recipe_ingredient(
         )
         session.add(link)
 
+    # Manage substitution link when explicitly provided
+    if substitution_provided:
+        substitution_data = substitution or {}
+        alternative = substitution_data.get("alternative") if substitution_data else None
+        surcharge = substitution_data.get("surcharge") if substitution_data else None
+
+        if alternative:
+            if link.substitution:
+                link.substitution.alternative = alternative
+                link.substitution.surcharge = surcharge
+            else:
+                link.substitution = RecipeIngredientSubstitution(
+                    alternative=alternative,
+                    surcharge=surcharge,
+                )
+        else:
+            if link.substitution:
+                link.substitution = None
+
     await session.flush()
 
 
@@ -939,10 +961,12 @@ async def get_recipe_with_details(
         select(Recipe)
         .where(Recipe.id == recipe_id)
         .options(
-            selectinload(Recipe.ingredients)
-            .selectinload(RecipeIngredient.ingredient)
-            .selectinload(Ingredient.allergens)
-            .selectinload(IngredientAllergen.allergen)
+            selectinload(Recipe.ingredients).options(
+                selectinload(RecipeIngredient.ingredient)
+                .selectinload(Ingredient.allergens)
+                .selectinload(IngredientAllergen.allergen),
+                selectinload(RecipeIngredient.substitution),
+            )
         )
     )
     recipe = result.scalar_one_or_none()
@@ -988,6 +1012,13 @@ async def get_recipe_with_details(
                     "certainty": "predicted"
                 })
 
+        substitution_data = None
+        if ri.substitution:
+            substitution_data = {
+                "alternative": ri.substitution.alternative,
+                "surcharge": ri.substitution.surcharge,
+            }
+
         ingredients.append({
             "ingredient_id": ri.ingredient_id,
             "ingredient_name": ri.ingredient.name,
@@ -995,7 +1026,8 @@ async def get_recipe_with_details(
             "unit": ri.unit,
             "notes": ri.notes,
             "allergens": allergens,
-            "confirmed": ri.confirmed
+            "confirmed": ri.confirmed,
+            "substitution": substitution_data,
         })
     
     return {

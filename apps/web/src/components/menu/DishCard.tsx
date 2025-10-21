@@ -33,6 +33,20 @@ export const DishCard = ({
   }, []);
   const ingredientHighlights = Array.from(new Set(highlightedIngredientTerms));
   const hasHighlights = allergenHighlights.length > 0 || ingredientHighlights.length > 0;
+  const substitutionSummaries = dish.ingredients
+    .map((ingredient) => {
+      const substitution = ingredient.substitution;
+      if (!substitution?.alternative) {
+        return null;
+      }
+
+      const surchargeLabel = substitution.surcharge ? formatPrice(substitution.surcharge) : "";
+      const surchargeText = surchargeLabel ? ` (${surchargeLabel})` : "";
+      const ingredientReference = ingredient.name ? ` for ${ingredient.name}` : "";
+
+      return `${substitution.alternative}${surchargeText}${ingredientReference}`.trim();
+    })
+    .filter((value): value is string => Boolean(value));
 
   return (
     <Card className="flex h-full flex-col overflow-hidden">
@@ -68,6 +82,20 @@ export const DishCard = ({
                 .filter(Boolean)
                 .join(", ")}
             </p>
+            {substitutionSummaries.length > 0 && (
+              <div className="space-y-1 pt-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/80">
+                  Substitutions
+                </p>
+                <ul className="space-y-0.5">
+                  {substitutionSummaries.map((summary, index) => (
+                    <li key={`sub-${index}`} className="text-[11px] text-muted-foreground">
+                      {summary}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
       </div>
