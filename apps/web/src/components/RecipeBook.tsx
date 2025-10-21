@@ -291,6 +291,26 @@ export const RecipeBook = ({
     [dishes, recipeStatusFilter],
   );
 
+  const selectedStatusOption = useMemo(
+    () =>
+      RECIPE_STATUS_OPTIONS.find((option) => option.value === recipeStatusFilter) ??
+      RECIPE_STATUS_OPTIONS[0],
+    [recipeStatusFilter],
+  );
+
+  const activeStatusOption = recipeStatusFilter === "all" ? null : selectedStatusOption;
+
+  const liveSelectedCount = useMemo(
+    () =>
+      selectedIds.reduce((count, id) => {
+        const dish = dishMap.get(id);
+        return dish?.isOnMenu ? count + 1 : count;
+      }, 0),
+    [selectedIds, dishMap],
+  );
+
+  const hasLiveSelected = liveSelectedCount > 0;
+
   useEffect(() => {
     setSectionOrders((prev) => {
       if (sections.length === 0) {
@@ -766,13 +786,10 @@ export const RecipeBook = ({
     );
   }
 
-  const selectedStatusLabel =
-    RECIPE_STATUS_OPTIONS.find((option) => option.value === recipeStatusFilter)?.label ?? "Recipe status";
-
   return (
     <>
       <div className="space-y-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <h2 className="text-2xl font-bold text-foreground">Recipe Book</h2>
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
@@ -781,15 +798,30 @@ export const RecipeBook = ({
                 Show ingredients
               </Label>
             </div>
-            <div className="space-y-2">
             <Select
               value={recipeStatusFilter}
               onValueChange={(value: "all" | "reviewed" | "needs_review" | "live") => setRecipeStatusFilter(value)}
             >
-              <SelectTrigger id="recipe-status-filter" className="w-[200px]" aria-label="Recipe status">
-                <SelectValue>
-                  {recipeStatusFilter === "all" ? "Recipe status" : selectedStatusLabel}
-                </SelectValue>
+              <SelectTrigger
+                id="recipe-status-filter"
+                className={cn(
+                  "w-[220px] justify-between gap-2 rounded-full px-3",
+                  activeStatusOption ? "border-transparent bg-transparent px-1" : "",
+                )}
+                aria-label="Recipe status"
+              >
+                <SelectValue
+                  placeholder="Recipe status"
+                  className={cn(
+                    "text-sm font-medium",
+                    activeStatusOption
+                      ? cn(
+                          "inline-flex min-h-[1.75rem] items-center rounded-full border px-3 py-1 text-xs",
+                          activeStatusOption.pillClassName,
+                        )
+                      : "text-muted-foreground",
+                  )}
+                />
               </SelectTrigger>
               <SelectContent>
                 {RECIPE_STATUS_OPTIONS.map((option) => (
@@ -799,23 +831,6 @@ export const RecipeBook = ({
                 ))}
               </SelectContent>
             </Select>
-            <div className="flex flex-wrap gap-2">
-              {RECIPE_STATUS_OPTIONS.map((option) => (
-                <Badge
-                  key={option.value}
-                  variant="outline"
-                  className={cn(
-                    "border text-xs font-medium transition-shadow",
-                    option.pillClassName,
-                    recipeStatusFilter === option.value
-                      ? "ring-2 ring-offset-2 ring-offset-background ring-[color:var(--color-primary)]"
-                      : ""
-                  )}
-                >
-                  {option.label}
-                </Badge>
-              ))}
-            </div>
           </div>
         </div>
       </div>
@@ -1462,6 +1477,16 @@ export const RecipeBook = ({
           </AlertDialogHeader>
           {bulkAction && actionDetails[bulkAction] && (
             <p className="text-sm text-muted-foreground">{actionDetails[bulkAction]}</p>
+          )}
+          {bulkAction === "markForReview" && hasLiveSelected && (
+            <Alert className="mt-3 border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                {liveSelectedCount === 1
+                  ? "If you mark this live item for review, it will be removed from your guest-facing menu until you have updated the ingredients. If you do not want this to happen, you can also choose to edit the dish directly in the Ingredients tab."
+                  : "If you mark these live items for review, they will be removed from your guest-facing menu until you have updated the ingredients. If you do not want this to happen, you can also choose to edit the dishes directly in the Ingredients tab."}
+              </AlertDescription>
+            </Alert>
           )}
           {bulkAction === "markAsReviewed" && (
             <Alert variant="destructive" className="mt-2">
