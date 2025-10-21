@@ -836,7 +836,7 @@ export const RecipeBook = ({
       </div>
 
         {sections.length > 0 && (
-          <Card className="p-4">
+          <Card className="p-4 mt-6">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <div>
                 <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Sections</h3>
@@ -1042,7 +1042,7 @@ export const RecipeBook = ({
           </div>
         )}
 
-        <div className="grid gap-6">
+        <div className="grid gap-6 mt-6">
           {visibleDishes.length === 0 && (
             <div className="text-center py-10">
               <p className="text-muted-foreground">No dishes match the selected filters.</p>
@@ -1356,7 +1356,6 @@ export const RecipeBook = ({
               </div>
             </div>
           ))}
-      </div>
       </div>
 
       <AlertDialog open={Boolean(unconfirmedDialogDishId)} onOpenChange={(open) => !open && setUnconfirmedDialogDishId(null)}>
