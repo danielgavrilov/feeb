@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { loadSavedMenuSections, MENU_SECTIONS_EVENT, saveMenuSections, StoredMenuSection } from "@/lib/menu-sections";
+import { shouldOpenDishSuggestions } from "./dishSuggestionState.js";
 
 const FALLBACK_MENU_SECTIONS: StoredMenuSection[] = [
   { id: "appetizer", label: "Appetizer" },
@@ -59,11 +60,9 @@ export const DishNameInput = ({
   onClearSelectedDish,
 }: DishNameInputProps) => {
   const [showOptional, setShowOptional] = useState(false);
-  const [isSuggestionOpen, setIsSuggestionOpen] = useState(false);
-  const blurTimeoutRef = useRef<number | null>(null);
+  const [isInputFocused, setIsInputFocused] = useState(false);
+  const [isPopoverHovered, setIsPopoverHovered] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const isMouseOverPopover = useRef(false);
-  const pendingOpenRef = useRef(false);
   const hasSelectedDish = Boolean(selectedDishId);
   const [menuSections, setMenuSections] = useState<StoredMenuSection[]>(() => {
     const savedSections = loadSavedMenuSections();
@@ -131,14 +130,6 @@ export const DishNameInput = ({
 
   const canAddSection = newSectionLabel.trim().length > 0;
 
-  useEffect(() => {
-    return () => {
-      if (blurTimeoutRef.current) {
-        window.clearTimeout(blurTimeoutRef.current);
-      }
-    };
-  }, []);
-
   const suggestionOptions = useMemo(() => {
     const uniqueByName = new Map<string, DishSuggestion>();
 
@@ -177,80 +168,51 @@ export const DishNameInput = ({
     return suggestionOptions.filter((option) => option.name.toLowerCase().includes(query));
   }, [suggestionOptions, value]);
 
-  const closeSuggestions = () => {
-    setIsSuggestionOpen(false);
-  };
-
-  const scheduleOpenReset = () => {
-    if (typeof window === "undefined") {
-      pendingOpenRef.current = false;
-      return;
+  useEffect(() => {
+    if (hasSelectedDish) {
+      setIsInputFocused(false);
+      setIsPopoverHovered(false);
     }
-
-    window.setTimeout(() => {
-      pendingOpenRef.current = false;
-    }, 0);
-  };
-
-  const openSuggestions = () => {
-    if (hasSelectedDish || suggestionOptions.length === 0 || isSuggestionOpen) {
-      return;
-    }
-
-    pendingOpenRef.current = true;
-    setIsSuggestionOpen(true);
-    scheduleOpenReset();
-  };
+  }, [hasSelectedDish]);
 
   useEffect(() => {
     if (suggestionOptions.length === 0) {
-      closeSuggestions();
+      setIsPopoverHovered(false);
     }
   }, [suggestionOptions.length]);
-
-  useEffect(() => {
-    if (hasSelectedDish) {
-      closeSuggestions();
-    }
-  }, [hasSelectedDish]);
 
   const handleOptionSelect = (option: DishSuggestion) => {
     onChange(option.name);
     onRecipeMatch(option.id);
-    closeSuggestions();
+    setIsInputFocused(false);
+    setIsPopoverHovered(false);
     window.setTimeout(() => {
       inputRef.current?.focus();
     }, 0);
   };
 
   const handleInputFocus = () => {
-    if (blurTimeoutRef.current) {
-      window.clearTimeout(blurTimeoutRef.current);
-      blurTimeoutRef.current = null;
-    }
-
-    openSuggestions();
+    setIsInputFocused(true);
   };
 
   const handleInputBlur = () => {
-    blurTimeoutRef.current = window.setTimeout(() => {
-      if (!isMouseOverPopover.current) {
-        closeSuggestions();
-      }
-    }, 150);
+    setIsInputFocused(false);
   };
 
   const handlePopoverMouseEnter = () => {
-    isMouseOverPopover.current = true;
-    if (blurTimeoutRef.current) {
-      window.clearTimeout(blurTimeoutRef.current);
-      blurTimeoutRef.current = null;
-    }
+    setIsPopoverHovered(true);
   };
 
   const handlePopoverMouseLeave = () => {
-    isMouseOverPopover.current = false;
+    setIsPopoverHovered(false);
   };
+
+  const shouldShowSuggestions = shouldOpenDishSuggestions({
+    hasSelectedDish,
+    suggestionCount: suggestionOptions.length,
+    isInputFocused,
+    isPopoverHovered,
+  });
 
   const optionalSummaryItems: string[] = [];
   if (menuCategory) {
@@ -275,10 +237,11 @@ export const DishNameInput = ({
           Dish Name
         </Label>
         <Popover
-          open={!hasSelectedDish && isSuggestionOpen && suggestionOptions.length > 0}
+          open={shouldShowSuggestions}
           onOpenChange={(nextOpen) => {
-            if (!nextOpen && !pendingOpenRef.current) {
-              closeSuggestions();
+            if (!nextOpen) {
+              setIsInputFocused(false);
+              setIsPopoverHovered(false);
             }
           }}
         >
@@ -290,11 +253,11 @@ export const DishNameInput = ({
                 value={value}
                 onChange={(e) => {
                   onChange(e.target.value);
-                  openSuggestions();
+                  setIsInputFocused(true);
                 }}
                 onFocus={handleInputFocus}
                 onBlur={handleInputBlur}
-                onClick={openSuggestions}
+                onClick={() => setIsInputFocused(true)}
                 placeholder="Enter dish name..."
                 className="h-16 text-2xl font-medium border-2 pr-14"
                 autoComplete="off"
@@ -303,7 +266,8 @@ export const DishNameInput = ({
                 <button
                   type="button"
                   onClick={() => {
-                    closeSuggestions();
+                    setIsInputFocused(false);
+                    setIsPopoverHovered(false);
                     onClearSelectedDish();
                     inputRef.current?.focus();
                   }}
