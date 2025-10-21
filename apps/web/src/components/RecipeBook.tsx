@@ -71,6 +71,61 @@ type SectionDefinition = {
   label: string;
 };
 
+export const ARCHIVE_SECTION_ID = "archive";
+export const ARCHIVE_SECTION_LABEL = "Archive";
+
+const isArchiveSection = (section: SectionDefinition) =>
+  section.id.toLowerCase() === ARCHIVE_SECTION_ID || section.label.trim().toLowerCase() === ARCHIVE_SECTION_ID;
+
+const normalizeSection = (section: SectionDefinition): SectionDefinition => {
+  const trimmedLabel = section.label.trim();
+
+  if (isArchiveSection(section)) {
+    const normalizedLabel = trimmedLabel.length > 0 ? trimmedLabel : ARCHIVE_SECTION_LABEL;
+    return {
+      id: ARCHIVE_SECTION_ID,
+      label: normalizedLabel,
+    };
+  }
+
+  return {
+    id: section.id,
+    label: trimmedLabel.length > 0 ? trimmedLabel : section.id,
+  };
+};
+
+const ensureArchiveSection = (sections: SectionDefinition[]): SectionDefinition[] => {
+  let hasArchive = false;
+  let changed = false;
+
+  const normalized = sections.map((section) => {
+    const result = normalizeSection(section);
+    if (result.id === ARCHIVE_SECTION_ID) {
+      hasArchive = true;
+    }
+
+    if (result.id !== section.id || result.label !== section.label) {
+      changed = true;
+    }
+
+    return result;
+  });
+
+  if (!hasArchive) {
+    changed = true;
+    normalized.push({
+      id: ARCHIVE_SECTION_ID,
+      label: ARCHIVE_SECTION_LABEL,
+    });
+  }
+
+  if (!changed && normalized.length === sections.length) {
+    return sections;
+  }
+
+  return normalized;
+};
+
 const RECIPE_STATUS_OPTIONS: Array<{
   value: "all" | "reviewed" | "needs_review" | "live";
   label: string;
@@ -108,6 +163,7 @@ interface RecipeBookProps {
   onEdit: (id: string) => void;
   onBulkAction: (action: RecipeBulkAction, ids: string[]) => Promise<void> | void;
   onToggleMenuStatus: (id: string, nextStatus: boolean) => Promise<void> | void;
+  onMoveDishesToArchive: (dishIds: string[]) => Promise<void> | void;
   formatPrice: (value: string | number | null | undefined) => string;
 }
 
@@ -117,6 +173,7 @@ export const RecipeBook = ({
   onEdit,
   onBulkAction,
   onToggleMenuStatus,
+  onMoveDishesToArchive,
   formatPrice,
 }: RecipeBookProps) => {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
@@ -130,7 +187,7 @@ export const RecipeBook = ({
   const [menuUpdatingIds, setMenuUpdatingIds] = useState<string[]>([]);
   const [removalDialogDishId, setRemovalDialogDishId] = useState<string | null>(null);
   const [unconfirmedDialogDishId, setUnconfirmedDialogDishId] = useState<string | null>(null);
-  const [sections, setSections] = useState<SectionDefinition[]>(() => loadSavedMenuSections());
+  const [sections, setSections] = useState<SectionDefinition[]>(() => ensureArchiveSection(loadSavedMenuSections()));
   const [isManageSectionsOpen, setIsManageSectionsOpen] = useState(false);
   const [editingSections, setEditingSections] = useState<SectionDefinition[]>([]);
   const [newSectionLabel, setNewSectionLabel] = useState("");
@@ -141,6 +198,8 @@ export const RecipeBook = ({
   } | null>(null);
   const [bulkActionError, setBulkActionError] = useState<string | null>(null);
   const [sectionPendingDeletionIndex, setSectionPendingDeletionIndex] = useState<number | null>(null);
+  const [isSavingSections, setIsSavingSections] = useState(false);
+  const [sectionManageError, setSectionManageError] = useState<string | null>(null);
 
   const isRemovalUpdating = removalDialogDishId
     ? menuUpdatingIds.includes(removalDialogDishId)
@@ -160,21 +219,15 @@ export const RecipeBook = ({
 
   useEffect(() => {
     setSections((prev) => {
-      if (prev.length === 0) {
-        if (categories.length === 0) {
-          return prev;
-        }
-
-        return categories.map((category) => ({ id: category, label: category }));
-      }
+      const normalizedPrev = ensureArchiveSection(prev);
 
       if (categories.length === 0) {
-        return prev;
+        return normalizedPrev;
       }
 
-      const next = [...prev];
+      const next = [...normalizedPrev];
       const existingIds = new Set(next.map((section) => section.id));
-      let changed = false;
+      let changed = normalizedPrev !== prev;
 
       categories.forEach((category) => {
         if (!existingIds.has(category)) {
@@ -184,16 +237,20 @@ export const RecipeBook = ({
         }
       });
 
-      return changed ? next : prev;
+      return changed ? next : normalizedPrev;
     });
   }, [categories]);
 
   useEffect(() => {
-    saveMenuSections(sections);
+    saveMenuSections(ensureArchiveSection(sections));
   }, [sections]);
 
   useEffect(() => {
-    if (selectedCategory !== "all" && !categories.includes(selectedCategory)) {
+    if (
+      selectedCategory !== "all" &&
+      selectedCategory !== ARCHIVE_SECTION_ID &&
+      !categories.includes(selectedCategory)
+    ) {
       setSelectedCategory("all");
     }
   }, [categories, selectedCategory]);
@@ -285,22 +342,60 @@ export const RecipeBook = ({
   }, [dishes, sections]);
 
   const filteredSections = useMemo(() => {
-    if (sections.length === 0) {
-      const availableDishes = statusFilteredDishes.filter((dish) =>
-        selectedCategory === "all" ? true : dish.menuCategory === selectedCategory,
-      );
+    const archiveSection = sections.find((section) => section.id === ARCHIVE_SECTION_ID);
+    const nonArchiveSections = sections.filter((section) => section.id !== ARCHIVE_SECTION_ID);
 
-      if (availableDishes.length === 0) {
+    if (nonArchiveSections.length === 0) {
+      if (selectedCategory === ARCHIVE_SECTION_ID) {
+        if (!archiveSection) {
+          return [];
+        }
+
+        const archivedDishes = statusFilteredDishes.filter(
+          (dish) => dish.menuCategory === ARCHIVE_SECTION_ID,
+        );
+
+        return archivedDishes.length > 0
+          ? [
+              {
+                sectionId: archiveSection.id,
+                sectionLabel: archiveSection.label,
+                dishes: archivedDishes,
+              },
+            ]
+          : [];
+      }
+
+      if (selectedCategory !== "all") {
         return [];
       }
 
-      return [
-        {
+      const nonArchivedDishes = statusFilteredDishes.filter(
+        (dish) => dish.menuCategory !== ARCHIVE_SECTION_ID,
+      );
+      const archivedDishes = statusFilteredDishes.filter(
+        (dish) => dish.menuCategory === ARCHIVE_SECTION_ID,
+      );
+
+      const groups: Array<{ sectionId: string; sectionLabel: string; dishes: SavedDish[] }> = [];
+
+      if (nonArchivedDishes.length > 0) {
+        groups.push({
           sectionId: "__all__",
           sectionLabel: "Dishes",
-          dishes: availableDishes,
-        },
-      ];
+          dishes: nonArchivedDishes,
+        });
+      }
+
+      if (archiveSection && archivedDishes.length > 0) {
+        groups.push({
+          sectionId: archiveSection.id,
+          sectionLabel: archiveSection.label,
+          dishes: archivedDishes,
+        });
+      }
+
+      return groups;
     }
 
     const orderedSectionIds =
@@ -445,8 +540,9 @@ export const RecipeBook = ({
 
   const handleManageSectionsOpenChange = (open: boolean) => {
     setIsManageSectionsOpen(open);
+    setSectionManageError(null);
     if (open) {
-      setEditingSections(sections.map((section) => ({ ...section })));
+      setEditingSections(ensureArchiveSection(sections).map((section) => ({ ...section })));
       setNewSectionLabel("");
     } else {
       setEditingSections([]);
@@ -494,15 +590,46 @@ export const RecipeBook = ({
     setSectionPendingDeletionIndex(null);
   };
 
-  const handleSaveSectionChanges = () => {
-    setSections(
+  const handleSaveSectionChanges = async () => {
+    if (isSavingSections) {
+      return;
+    }
+
+    const normalizedSections = ensureArchiveSection(
       editingSections.map((section) => ({
         ...section,
         label: section.label.trim() || section.id,
       })),
     );
-    setIsManageSectionsOpen(false);
-    setEditingSections([]);
+
+    const removedSectionIds = sections
+      .filter((section) => section.id !== ARCHIVE_SECTION_ID)
+      .filter((section) => !normalizedSections.some((item) => item.id === section.id))
+      .map((section) => section.id);
+
+    const dishesToArchive =
+      removedSectionIds.length > 0
+        ? dishes.filter((dish) => removedSectionIds.includes(dish.menuCategory))
+        : [];
+
+    const dishIdsToArchive = dishesToArchive.map((dish) => dish.id);
+
+    setSectionManageError(null);
+    setIsSavingSections(true);
+
+    try {
+      if (dishIdsToArchive.length > 0) {
+        await onMoveDishesToArchive(dishIdsToArchive);
+      }
+
+      setSections(normalizedSections);
+      handleManageSectionsOpenChange(false);
+    } catch (error) {
+      console.error("Failed to move dishes to Archive", error);
+      setSectionManageError("Unable to move dishes to the Archive section. Please try again.");
+    } finally {
+      setIsSavingSections(false);
+    }
   };
 
   const sectionPendingDeletion =
@@ -714,12 +841,17 @@ export const RecipeBook = ({
                     </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-3">
+                    {sectionManageError && (
+                      <Alert variant="destructive" className="flex items-start gap-2">
+                        <AlertTriangle className="h-4 w-4 mt-0.5" />
+                        <AlertDescription>{sectionManageError}</AlertDescription>
+                      </Alert>
+                    )}
                     {editingSections.length === 0 && (
                       <p className="text-sm text-muted-foreground">There are no sections to manage yet.</p>
                     )}
                     {editingSections.map((section, index) => {
-                      const isArchiveSection =
-                        section.id.toLowerCase() === "archive" || section.label.trim().toLowerCase() === "archive";
+                      const isArchive = isArchiveSection(section);
 
                       return (
                         <div key={section.id} className="flex flex-wrap items-center gap-2">
@@ -756,9 +888,9 @@ export const RecipeBook = ({
                               variant="destructive"
                               size="icon"
                               onClick={() => setSectionPendingDeletionIndex(index)}
-                              disabled={isArchiveSection}
+                              disabled={isArchive}
                               aria-label={`Delete section ${section.label || section.id}`}
-                              title={isArchiveSection ? "The Archive section cannot be deleted" : undefined}
+                              title={isArchive ? "The Archive section cannot be deleted" : undefined}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -799,8 +931,11 @@ export const RecipeBook = ({
                     <Button variant="outline" onClick={() => handleManageSectionsOpenChange(false)}>
                       Cancel
                     </Button>
-                    <Button onClick={handleSaveSectionChanges} disabled={editingSections.length === 0}>
-                      Save changes
+                    <Button
+                      onClick={handleSaveSectionChanges}
+                      disabled={editingSections.length === 0 || isSavingSections}
+                    >
+                      {isSavingSections ? "Saving..." : "Save changes"}
                     </Button>
                   </DialogFooter>
                 </DialogContent>
@@ -823,7 +958,9 @@ export const RecipeBook = ({
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel onClick={() => setSectionPendingDeletionIndex(null)}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleConfirmDeleteSection}>Delete section</AlertDialogAction>
+                        <AlertDialogAction onClick={handleConfirmDeleteSection} disabled={isSavingSections}>
+                          Delete section
+                        </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>

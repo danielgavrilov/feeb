@@ -3,7 +3,7 @@ import { DishNameInput } from "@/components/DishNameInput";
 import { IngredientsList, IngredientState } from "@/components/IngredientsList";
 import { PrepMethodInput } from "@/components/PrepMethodInput";
 import { ComplianceOverview } from "@/components/ComplianceOverview";
-import { RecipeBook, SavedDish, RecipeBulkAction } from "@/components/RecipeBook";
+import { RecipeBook, SavedDish, RecipeBulkAction, ARCHIVE_SECTION_ID } from "@/components/RecipeBook";
 import { MenuView } from "@/components/MenuView";
 import { Settings } from "@/components/Settings";
 import { Button } from "@/components/ui/button";
@@ -412,6 +412,32 @@ const Index = () => {
     }
   };
 
+  const handleMoveDishesToArchive = async (ids: string[]) => {
+    const recipeIds = ids
+      .map((value) => Number(value))
+      .filter((value) => !Number.isNaN(value));
+
+    if (recipeIds.length === 0) {
+      return;
+    }
+
+    try {
+      await Promise.all(
+        recipeIds.map((recipeId) => updateRecipeAPI(recipeId, { menu_category: ARCHIVE_SECTION_ID })),
+      );
+
+      toast.success(
+        recipeIds.length === 1
+          ? "Recipe moved to the Archive section"
+          : `${recipeIds.length} recipes moved to the Archive section`,
+      );
+    } catch (error) {
+      toast.error("Unable to move recipes to the Archive section");
+      console.error("Failed to move recipes to archive", error);
+      throw error;
+    }
+  };
+
   const handleToggleMenuStatus = async (id: string, nextStatus: boolean) => {
     const recipeId = Number(id);
     if (Number.isNaN(recipeId)) {
@@ -678,6 +704,7 @@ const Index = () => {
                 onEdit={handleEditDish}
                 onBulkAction={handleBulkRecipeAction}
                 onToggleMenuStatus={handleToggleMenuStatus}
+                onMoveDishesToArchive={handleMoveDishesToArchive}
                 formatPrice={formatPrice}
               />
             </div>
