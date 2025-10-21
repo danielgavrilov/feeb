@@ -138,6 +138,7 @@ export const RecipeBook = ({
     order: string[];
   } | null>(null);
   const [bulkActionError, setBulkActionError] = useState<string | null>(null);
+  const [sectionPendingDeletionIndex, setSectionPendingDeletionIndex] = useState<number | null>(null);
 
   const isRemovalUpdating = removalDialogDishId
     ? menuUpdatingIds.includes(removalDialogDishId)
@@ -448,6 +449,7 @@ export const RecipeBook = ({
     } else {
       setEditingSections([]);
       setNewSectionLabel("");
+      setSectionPendingDeletionIndex(null);
     }
   };
 
@@ -481,6 +483,15 @@ export const RecipeBook = ({
     });
   };
 
+  const handleConfirmDeleteSection = () => {
+    if (sectionPendingDeletionIndex === null) {
+      return;
+    }
+
+    setEditingSections((prev) => prev.filter((_, index) => index !== sectionPendingDeletionIndex));
+    setSectionPendingDeletionIndex(null);
+  };
+
   const handleSaveSectionChanges = () => {
     setSections(
       editingSections.map((section) => ({
@@ -491,6 +502,9 @@ export const RecipeBook = ({
     setIsManageSectionsOpen(false);
     setEditingSections([]);
   };
+
+  const sectionPendingDeletion =
+    sectionPendingDeletionIndex !== null ? editingSections[sectionPendingDeletionIndex] : null;
 
   const actionLabels: Record<RecipeBulkAction, string> = {
     delete: "Delete",
@@ -701,39 +715,55 @@ export const RecipeBook = ({
                     {editingSections.length === 0 && (
                       <p className="text-sm text-muted-foreground">There are no sections to manage yet.</p>
                     )}
-                    {editingSections.map((section, index) => (
-                      <div key={section.id} className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm text-muted-foreground w-6 text-right">{index + 1}.</span>
-                        <Input
-                          value={section.label}
-                          onChange={(event) => handleSectionLabelChange(index, event.target.value)}
-                          aria-label={`Rename section ${section.label || section.id}`}
-                          className="flex-1 min-w-[180px]"
-                        />
-                        <div className="flex items-center gap-1">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            onClick={() => moveEditingSection(index, index - 1)}
-                            disabled={index === 0}
-                            aria-label="Move section up"
-                          >
-                            <ArrowUp className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            onClick={() => moveEditingSection(index, index + 1)}
-                            disabled={index === editingSections.length - 1}
-                            aria-label="Move section down"
-                          >
-                            <ArrowDown className="h-4 w-4" />
-                          </Button>
+                    {editingSections.map((section, index) => {
+                      const isArchiveSection =
+                        section.id.toLowerCase() === "archive" || section.label.trim().toLowerCase() === "archive";
+
+                      return (
+                        <div key={section.id} className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm text-muted-foreground w-6 text-right">{index + 1}.</span>
+                          <Input
+                            value={section.label}
+                            onChange={(event) => handleSectionLabelChange(index, event.target.value)}
+                            aria-label={`Rename section ${section.label || section.id}`}
+                            className="flex-1 min-w-[180px]"
+                          />
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              onClick={() => moveEditingSection(index, index - 1)}
+                              disabled={index === 0}
+                              aria-label="Move section up"
+                            >
+                              <ArrowUp className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              onClick={() => moveEditingSection(index, index + 1)}
+                              disabled={index === editingSections.length - 1}
+                              aria-label="Move section down"
+                            >
+                              <ArrowDown className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="icon"
+                              onClick={() => setSectionPendingDeletionIndex(index)}
+                              disabled={isArchiveSection}
+                              aria-label={`Delete section ${section.label || section.id}`}
+                              title={isArchiveSection ? "The Archive section cannot be deleted" : undefined}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     <div className="space-y-2 pt-3 border-t">
                       <Label htmlFor="new-section-label" className="text-sm font-medium">
                         Add a section
@@ -772,6 +802,30 @@ export const RecipeBook = ({
                     </Button>
                   </DialogFooter>
                 </DialogContent>
+                {sectionPendingDeletion && (
+                  <AlertDialog
+                    open={sectionPendingDeletionIndex !== null}
+                    onOpenChange={(open) => {
+                      if (!open) {
+                        setSectionPendingDeletionIndex(null);
+                      }
+                    }}
+                  >
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete section</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure that you want to delete this section? Recipes in this sections will automatically be
+                          saved under "Archive".
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setSectionPendingDeletionIndex(null)}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleConfirmDeleteSection}>Delete section</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
               </Dialog>
             </div>
             <div className="flex flex-wrap gap-2">
