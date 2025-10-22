@@ -42,6 +42,11 @@ import {
 } from "@/lib/menu-sections";
 import type { AllergenFilterDefinition } from "@/data/allergen-filters";
 import { ALLERGEN_FILTERS, allergenFilterMap } from "@/data/allergen-filters";
+import {
+  summarizeDishAllergens,
+  isVeganFriendly,
+  isVegetarianFriendly,
+} from "@/lib/allergen-utils";
 
 export type RecipeBulkAction =
   | "delete"
@@ -66,6 +71,11 @@ export interface SavedDish {
       code: string;
       name: string;
       certainty?: string;
+      canonicalCode?: string | null;
+      canonicalName?: string | null;
+      familyCode?: string | null;
+      familyName?: string | null;
+      markerType?: string | null;
     }>;
     substitution?: {
       alternative: string;
@@ -113,33 +123,19 @@ const ensureArchiveSection = (sections: SectionDefinition[]): SectionDefinition[
   return [...sections, archive];
 };
 
-const getDishAllergenDefinitions = (dish: SavedDish): AllergenFilterDefinition[] => {
-  const allergenCodes = new Set<string>();
-
-  for (const ingredient of dish.ingredients) {
-    for (const allergen of ingredient.allergens ?? []) {
-      const normalizedCode = allergen?.code?.toLowerCase();
-      if (normalizedCode) {
-        allergenCodes.add(normalizedCode);
-      }
-    }
-  }
-
+export const getDishAllergenDefinitions = (dish: SavedDish): AllergenFilterDefinition[] => {
+  const summary = summarizeDishAllergens(dish.ingredients);
   const results: AllergenFilterDefinition[] = [];
+  const seen = new Set<string>();
   const veganDefinition = allergenFilterMap.get("vegan");
   const vegetarianDefinition = allergenFilterMap.get("vegetarian");
 
-  const definitionHasForbiddenCode = (definition: AllergenFilterDefinition | undefined) =>
-    definition?.codes.some((code) => allergenCodes.has(code.toLowerCase())) ?? false;
-
-  const shouldShowVegan = veganDefinition ? !definitionHasForbiddenCode(veganDefinition) : false;
-  const shouldShowVegetarian =
-    !shouldShowVegan && vegetarianDefinition ? !definitionHasForbiddenCode(vegetarianDefinition) : false;
-
-  if (shouldShowVegan && veganDefinition) {
+  if (veganDefinition && isVeganFriendly(summary)) {
     results.push(veganDefinition);
-  } else if (shouldShowVegetarian && vegetarianDefinition) {
+    seen.add(veganDefinition.id);
+  } else if (vegetarianDefinition && isVegetarianFriendly(summary)) {
     results.push(vegetarianDefinition);
+    seen.add(vegetarianDefinition.id);
   }
 
   for (const definition of ALLERGEN_FILTERS) {
@@ -147,8 +143,15 @@ const getDishAllergenDefinitions = (dish: SavedDish): AllergenFilterDefinition[]
       continue;
     }
 
-    if (definition.codes.some((code) => allergenCodes.has(code.toLowerCase()))) {
+    const normalizedId = definition.id.toLowerCase();
+    const hasFamilyMatch = summary.familyCodes.has(normalizedId);
+    const hasCodeMatch = definition.codes.some((code) =>
+      summary.canonicalCodes.has(code.toLowerCase()),
+    );
+
+    if ((hasFamilyMatch || hasCodeMatch) && !seen.has(definition.id)) {
       results.push(definition);
+      seen.add(definition.id);
     }
   }
 

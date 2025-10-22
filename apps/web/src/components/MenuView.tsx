@@ -26,6 +26,11 @@ import {
   type MenuSectionsEventDetail,
   type StoredMenuSection,
 } from "@/lib/menu-sections";
+import {
+  summarizeDishAllergens,
+  isVeganFriendly,
+  isVegetarianFriendly,
+} from "@/lib/allergen-utils";
 
 const UNCATEGORIZED_ID = "__uncategorized__";
 
@@ -37,36 +42,40 @@ const normalizeCategoryId = (category?: string | null) => {
 const getFallbackCategoryLabel = (categoryId: string) =>
   categoryId === UNCATEGORIZED_ID ? "Other" : categoryId;
 
+const allergenSummaryCache = new WeakMap<SavedDish, ReturnType<typeof summarizeDishAllergens>>();
+
+const getDishAllergenSummary = (dish: SavedDish) => {
+  const cached = allergenSummaryCache.get(dish);
+  if (cached) {
+    return cached;
+  }
+
+  const summary = summarizeDishAllergens(dish.ingredients);
+  allergenSummaryCache.set(dish, summary);
+  return summary;
+};
+
 const dishContainsAllergen = (dish: SavedDish, allergenId: string) => {
   const definition = allergenFilterMap.get(allergenId);
   if (!definition) {
     return false;
   }
 
-  const { codes, keywords, category } = definition;
-  const normalizedCodes = codes.map((code) => code.toLowerCase());
-  const normalizedKeywords = keywords.map((keyword) => keyword.toLowerCase());
+  const summary = getDishAllergenSummary(dish);
 
-  return dish.ingredients.some((ingredient) =>
-    (ingredient.allergens ?? []).some((allergen) => {
-      const code = allergen.code?.toLowerCase() ?? "";
-      const name = allergen.name?.toLowerCase() ?? "";
+  if (definition.id === "vegan") {
+    return !isVeganFriendly(summary);
+  }
 
-      if (normalizedCodes.some((candidate) => code.includes(candidate))) {
-        return true;
-      }
+  if (definition.id === "vegetarian") {
+    return !isVegetarianFriendly(summary);
+  }
 
-      if (normalizedKeywords.some((candidate) => code.includes(candidate) || name.includes(candidate))) {
-        return true;
-      }
+  if (definition.category === "allergen" && summary.familyCodes.has(definition.id.toLowerCase())) {
+    return true;
+  }
 
-      return false;
-    }) ||
-    (category === "diet" &&
-      normalizedCodes.some((candidate) =>
-        ingredient.name.toLowerCase().includes(candidate.replace("en:", "")),
-      )),
-  );
+  return definition.codes.some((code) => summary.canonicalCodes.has(code.toLowerCase()));
 };
 
 interface MenuViewProps {

@@ -48,6 +48,11 @@ export interface IngredientState {
     code: string;
     name: string;
     certainty?: string;
+    canonicalCode?: string | null;
+    canonicalName?: string | null;
+    familyCode?: string | null;
+    familyName?: string | null;
+    markerType?: string | null;
   }>;
   dietaryInfo?: string[];
   substitution?: {
@@ -69,6 +74,11 @@ interface IngredientsListProps {
       code: string;
       name: string;
       certainty?: string;
+      canonicalCode?: string | null;
+      canonicalName?: string | null;
+      familyCode?: string | null;
+      familyName?: string | null;
+      markerType?: string | null;
     }>
   ) => void;
   onUpdateIngredientSubstitution: (

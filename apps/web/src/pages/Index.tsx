@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useRestaurant } from "@/hooks/useRestaurant";
 import { useRecipes } from "@/hooks/useRecipes";
-import { Recipe } from "@/lib/api";
+import { Recipe, RecipeIngredient } from "@/lib/api";
 import { LandingPage } from "@/components/LandingPage";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -118,6 +118,20 @@ const Index = () => {
   );
 
   // Convert API recipes to SavedDish format for existing components
+  const mapIngredientAllergens = (
+    allergens: RecipeIngredient["allergens"] | undefined,
+  ) =>
+    (allergens ?? []).map((allergen) => ({
+      code: allergen.code,
+      name: allergen.name,
+      certainty: allergen.certainty,
+      canonicalCode: allergen.canonical_code ?? null,
+      canonicalName: allergen.canonical_name ?? null,
+      familyCode: allergen.family_code ?? null,
+      familyName: allergen.family_name ?? null,
+      markerType: allergen.marker_type ?? null,
+    }));
+
   const savedDishes: SavedDish[] = recipes.map((recipe: Recipe) => ({
     id: recipe.id.toString(),
     name: recipe.name,
@@ -130,7 +144,7 @@ const Index = () => {
       quantity: ing.quantity?.toString() || "",
       unit: ing.unit || "",
       confirmed: ing.confirmed,
-      allergens: ing.allergens || [],
+      allergens: mapIngredientAllergens(ing.allergens),
       substitution: ing.substitution,
     })),
     prepMethod: recipe.instructions || "",
@@ -180,7 +194,7 @@ const Index = () => {
         quantity: ing.quantity?.toString() || "",
         unit: ing.unit || (ing.confirmed ? "" : "pcs"), // Default to "pcs" for unconfirmed ingredients with missing units
         confirmed: ing.confirmed && !!(ing.quantity?.toString().trim() && (ing.unit?.trim() || "pcs")), // Only keep confirmed if valid
-        allergens: ing.allergens || [],
+      allergens: mapIngredientAllergens(ing.allergens),
         dietaryInfo: [],
         substitution: ing.substitution,
       }))

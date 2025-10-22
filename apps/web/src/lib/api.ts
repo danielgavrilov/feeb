@@ -67,6 +67,11 @@ export interface RecipeIngredient {
     code: string;
     name: string;
     certainty?: string;
+    canonical_code?: string | null;
+    canonical_name?: string | null;
+    family_code?: string | null;
+    family_name?: string | null;
+    marker_type?: string | null;
   }>;
   confirmed: boolean;
   substitution?: {
