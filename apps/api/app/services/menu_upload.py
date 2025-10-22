@@ -4,7 +4,7 @@ import base64
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence
 from uuid import uuid4
 
 import httpx
@@ -136,7 +136,7 @@ class MenuUploadService:
         if stage1 is None or stage2 is None:
             raise HTTPException(status_code=500, detail="Upload stages not initialised")
 
-        created_recipes: List[Tuple[int, str]] = []
+        created_recipes: List[Dict[str, Any]] = []
 
         # Stage 1 - LLM extraction
         self._update_stage_record(stage1, MenuUploadStageStatus.RUNNING)
@@ -172,6 +172,8 @@ class MenuUploadService:
                 menu_category,
             )
 
+            price_value = self._safe_string(item.get("price"))
+
             recipe_id = await dal.create_recipe(
                 session,
                 restaurant_id=upload.restaurant_id,
@@ -179,7 +181,7 @@ class MenuUploadService:
                 description=description,
                 instructions=self._safe_string(item.get("instructions")),
                 serving_size=self._safe_string(item.get("serving_size")),
-                price=self._safe_string(item.get("price")),
+                price=price_value,
                 image=self._safe_string(item.get("image")),
                 options=options,
                 special_notes=notes,
@@ -187,7 +189,14 @@ class MenuUploadService:
                 confirmed=False,
                 menu_section_ids=[section.id] if section else None,
             )
-            created_recipes.append((recipe_id, name))
+            created_recipes.append(
+                {
+                    "recipe_id": recipe_id,
+                    "name": name,
+                    "description": description,
+                    "price": price_value,
+                }
+            )
             session.add(
                 MenuUploadRecipe(
                     menu_upload=upload,
@@ -217,8 +226,8 @@ class MenuUploadService:
                 if len(created_recipes) <= test_batch_size:
                     # Small enough, just process all
                     recipes_for_deduction = [
-                        {"name": name, "recipe_id": recipe_id}
-                        for recipe_id, name in created_recipes
+                        self._build_deduction_payload(recipe)
+                        for recipe in created_recipes
                     ]
                     ingredient_payload = await self._call_recipe_deduction(recipes_for_deduction)
                     added_count = await self._store_deduced_ingredients(
@@ -230,8 +239,8 @@ class MenuUploadService:
                     # Test with first 5 recipes
                     test_batch = created_recipes[:test_batch_size]
                     test_recipes = [
-                        {"name": name, "recipe_id": recipe_id}
-                        for recipe_id, name in test_batch
+                        self._build_deduction_payload(recipe)
+                        for recipe in test_batch
                     ]
                     
                     # If test succeeds, process all remaining recipes
@@ -245,8 +254,8 @@ class MenuUploadService:
                     # Test passed, now process all remaining recipes in one call
                     remaining_recipes = created_recipes[test_batch_size:]
                     remaining_for_deduction = [
-                        {"name": name, "recipe_id": recipe_id}
-                        for recipe_id, name in remaining_recipes
+                        self._build_deduction_payload(recipe)
+                        for recipe in remaining_recipes
                     ]
                     
                     remaining_payload = await self._call_recipe_deduction(remaining_for_deduction)
@@ -290,7 +299,14 @@ class MenuUploadService:
         if refreshed is None:
             raise HTTPException(status_code=500, detail="Failed to load upload details")
 
-        return self._build_response(refreshed, [rid for rid, _ in created_recipes])
+        return self._build_response(
+            refreshed,
+            [
+                int(recipe["recipe_id"])
+                for recipe in created_recipes
+                if recipe.get("recipe_id") is not None
+            ],
+        )
 
     async def fetch_upload(self, session: AsyncSession, upload_id: int) -> Optional[MenuUpload]:
         """Load upload with relationships for API responses."""
@@ -337,12 +353,18 @@ class MenuUploadService:
     async def _store_deduced_ingredients(
         self,
         session: AsyncSession,
-        recipes: Sequence[Tuple[int, str]],
+        recipes: Sequence[Dict[str, Any]],
         deduction_payload: Dict,
     ) -> int:
         """Persist ingredient predictions into recipe_ingredient records."""
 
-        recipe_lookup = {name.lower(): recipe_id for recipe_id, name in recipes}
+        recipe_lookup: Dict[str, int] = {}
+        for recipe in recipes:
+            name = self._safe_string(recipe.get("name"))
+            recipe_id = recipe.get("recipe_id")
+            if not name or recipe_id is None:
+                continue
+            recipe_lookup[name.lower()] = int(recipe_id)
         added = 0
 
         recipes_data = deduction_payload.get("recipes") if isinstance(deduction_payload, dict) else None
@@ -459,6 +481,26 @@ class MenuUploadService:
         if not isinstance(recipes, list):
             raise HTTPException(status_code=502, detail="Unexpected response format from extraction service")
         return recipes
+
+    def _build_deduction_payload(self, recipe: Dict[str, Any]) -> Dict[str, Any]:
+        name = self._safe_string(recipe.get("name"))
+        if not name:
+            raise HTTPException(status_code=400, detail="Recipe name missing for deduction")
+
+        payload: Dict[str, Any] = {
+            "name": name,
+            "recipe_id": recipe.get("recipe_id"),
+        }
+
+        description = self._safe_string(recipe.get("description"))
+        if description:
+            payload["description"] = description
+
+        price = self._safe_string(recipe.get("price"))
+        if price:
+            payload["price"] = price
+
+        return payload
 
     async def _call_recipe_deduction(self, recipes: Sequence[Dict]) -> Dict:
         if not self.recipe_deduction_url:

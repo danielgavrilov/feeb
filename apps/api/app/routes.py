@@ -850,23 +850,46 @@ async def extract_menu_items(
 async def deduce_recipe_ingredients(request: dict):
     """Call Gemini to infer ingredients for each recipe.
     
-    Request: { "recipes": [{"name": "Pizza Margherita", "recipe_id": 123}, ...] }
+    Request: { "recipes": [{"name": "Pizza Margherita", "recipe_id": 123, "description": "Fresh egg pasta...", "price": "€14"}, ...] }
     Response: { "recipes": [{"name": "Pizza Margherita", "ingredients": [...]}, ...] }
     """
     
     recipes = request.get("recipes", [])
     if not recipes:
         raise HTTPException(status_code=400, detail="No recipes provided")
-    
-    # Extract recipe names for the prompt
-    recipe_names = [recipe.get("name") for recipe in recipes if recipe.get("name")]
-    if not recipe_names:
+
+    def _clean_text(value: Optional[object]) -> Optional[str]:
+        if value is None:
+            return None
+        text = str(value)
+        text = re.sub(r"\s+", " ", text)
+        text = text.strip()
+        return text or None
+
+    recipe_entries: list[str] = []
+    for recipe in recipes:
+        if not isinstance(recipe, dict):
+            continue
+        name = _clean_text(recipe.get("name"))
+        if not name:
+            continue
+        description = _clean_text(recipe.get("description"))
+        price = _clean_text(recipe.get("price"))
+        entry_lines = [f"- Name: {name}"]
+        if description:
+            entry_lines.append(f"  Description: {description}")
+        if price:
+            entry_lines.append(f"  Price: {price}")
+        recipe_entries.append("\n".join(entry_lines))
+
+    if not recipe_entries:
         raise HTTPException(status_code=400, detail="No valid recipe names found")
-    
+
     # Build the prompt for Stage 2
     prompt = dedent(
         f"""
-        For each recipe name provided, infer the ingredients needed to make it for 1 person.
+        For each recipe entry provided, infer the ingredients needed to make it for 1 person.
+        Each entry includes the dish name and may include descriptions or other context—use those details when determining the ingredient list.
         Use these canonical allergen and animal markers exactly as provided:
         {CANONICAL_ALLERGEN_MARKERS_PROMPT}
 
@@ -902,9 +925,9 @@ async def deduce_recipe_ingredients(request: dict):
         - Include the "vegetarian" marker only when an ingredient contains meat, seafood, or gelatin that makes it unsuitable for vegetarians
         - Don't infer anything else and return only valid JSON with no prose
 
-        Recipe names:
+        Recipe entries:
         """
-    ) + "\n".join(f"- {name}" for name in recipe_names)
+    ) + "\n".join(recipe_entries)
     
     client = GeminiClient()
     
