@@ -2,6 +2,7 @@
 FastAPI route handlers for ingredient and allergen lookups.
 """
 
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, status
@@ -524,7 +525,7 @@ async def extract_menu_items(
 
     Contract expected by menu_upload_service:
     - Request may contain url OR filename + content_base64 for image/pdf.
-    - Response: { "recipes": [ { name, description?, category?, options?, special_notes?, prominence? } ] }
+    - Response: { "recipes": [ { name, description?, category?, section_header?, options?, special_notes?, allergen_notes?, persons?, prominence?, price?, currency? } ] }
     """
 
     source_type = request.get("source_type")
@@ -532,18 +533,39 @@ async def extract_menu_items(
     filename = request.get("filename")
     content_base64 = request.get("content_base64")
 
-    # Build prompt from stage.plan.md (compressed to single instruction)
+    # Build prompt (compressed from the latest menu extraction specification)
     prompt = (
-        "Extract menu items (dishes, drinks, meals) from the provided content and output them as a JSON array. "
-        "IMPORTANT RULES:\n"
-        "- ONLY extract actual menu items that a customer would order (e.g., 'Cappuccino', 'Caesar Salad', 'Burger')\n"
-        "- DO NOT extract ingredient lists, allergen lists, or lists of spices/herbs\n"
-        "- DO NOT extract items that are just lists of ingredients without being an actual dish\n"
-        "- DO NOT include duplicate items\n"
-        "- Each item must be a complete menu offering with a name/title\n\n"
-        "Output format: [{\"title\": \"Dish Name\", \"price\": 10.50, \"currency\": \"€\", \"description\": \"...\", "
-        "\"category\": \"Appetizers\", \"options\": [], \"notes\": []}]\n\n"
-        "Return ONLY valid JSON with no markdown, no prose. If unsure about a field, use null or empty string/array."
+        "You are an expert menu analyst. Extract real menu offerings from the provided content and return them as JSON.\n"
+        "STRICT REQUIREMENTS:\n"
+        "- Only include dishes, drinks, or items a guest can order.\n"
+        "- Ignore ingredient, allergen, or spice lists that are not actual menu items.\n"
+        "- Do not output duplicate items; keep the most complete variant.\n"
+        "- Record the menu section header for each item when available.\n"
+        "- Capture allergen warnings or notes exactly as written.\n"
+        "- Capture how many persons the item serves when the menu states it.\n\n"
+        "Output MUST be a JSON object with this schema:\n"
+        "{\n"
+        "  \"recipes\": [\n"
+        "    {\n"
+        "      \"title\": \"Dish Name\",\n"
+        "      \"description\": \"...\",\n"
+        "      \"category\": \"Appetizers\",\n"
+        "      \"section_header\": \"Starters\",\n"
+        "      \"price\": 12.5,\n"
+        "      \"currency\": \"EUR\",\n"
+        "      \"options\": [\"Add avocado\"],\n"
+        "      \"special_notes\": \"Chef signature dish\",\n"
+        "      \"allergen_notes\": \"Contains nuts\",\n"
+        "      \"persons\": 2,\n"
+        "      \"prominence\": 0.8\n"
+        "    }\n"
+        "  ]\n"
+        "}\n\n"
+        "Formatting rules:\n"
+        "- Always return an object with the key \"recipes\" (use an empty array if nothing is found).\n"
+        "- Use null for unknown scalar values and [] for missing arrays.\n"
+        "- Represent numeric data such as price, persons, and prominence as numbers when available.\n"
+        "- Output only strict JSON (double quotes, no comments, no markdown or prose before/after)."
     )
 
     client = GeminiClient()
@@ -564,22 +586,96 @@ async def extract_menu_items(
 
     # Normalize to pipeline fields expected by menu_upload_service
     normalized = []
-    for item in items or []:
+
+    def _stringify(value: Optional[object]) -> Optional[str]:
+        if value is None:
+            return None
+        if isinstance(value, list):
+            parts = [str(part).strip() for part in value if str(part).strip()]
+            return ", ".join(parts) if parts else None
+        text = str(value).strip()
+        return text or None
+
+    def _parse_persons(value: Optional[object]) -> Optional[int]:
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return int(value) if value > 0 else None
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            number = float(text)
+            return int(number) if number > 0 else None
+        except ValueError:
+            match = re.search(r"\d+", text)
+            return int(match.group()) if match else None
+
+    raw_items = items or []
+    if isinstance(raw_items, dict):
+        raw_items = raw_items.get("recipes") or raw_items.get("items") or []
+    if not isinstance(raw_items, list):
+        raw_items = []
+
+    for item in raw_items:
         if not isinstance(item, dict):
             continue
         title = item.get("title") or item.get("name")
         if not title:
             continue
+        name = _stringify(title)
+        if not name:
+            continue
+
+        options_value = item.get("options")
+        if options_value is None:
+            options_value = item.get("extras")
+        if isinstance(options_value, list):
+            options = options_value
+        elif options_value is None:
+            options = None
+        else:
+            options = [options_value]
+
+        prominence_value = item.get("prominence") or item.get("score")
+        try:
+            prominence = float(prominence_value) if prominence_value is not None else None
+        except (TypeError, ValueError):
+            prominence = None
+
+        allergen_notes = _stringify(
+            item.get("allergen_notes")
+            or item.get("allergen_warning")
+            or item.get("allergen_warnings")
+            or item.get("allergen_note")
+            or item.get("allergens")
+        )
+
+        section_header = _stringify(
+            item.get("section_header")
+            or item.get("section")
+            or item.get("menu_section")
+            or item.get("heading")
+        )
+
         normalized.append(
             {
-                "name": str(title).strip(),
-                "description": (item.get("description") or None),
-                "category": (item.get("category") or None),
-                "options": (item.get("options") or None),
-                "special_notes": (item.get("notes") or item.get("special_notes") or None),
-                "prominence": item.get("prominence") or item.get("score"),
+                "name": name,
+                "description": _stringify(item.get("description")),
+                "category": _stringify(item.get("category")),
+                "section_header": section_header,
+                "options": options,
+                "special_notes": _stringify(item.get("notes") or item.get("special_notes")),
+                "prominence": prominence,
                 "price": item.get("price"),
-                "currency": item.get("currency"),
+                "currency": _stringify(item.get("currency")),
+                "allergen_notes": allergen_notes,
+                "persons": _parse_persons(
+                    item.get("persons")
+                    or item.get("serves")
+                    or item.get("servings")
+                    or item.get("serves_persons")
+                ),
             }
         )
 

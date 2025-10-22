@@ -174,3 +174,61 @@ async def test_get_product_success(client, test_session):
     assert len(data["allergens"]) == 1
     assert data["allergens"][0]["name"] == "Milk"
 
+
+@pytest.mark.asyncio
+async def test_extract_menu_items_normalization(client, monkeypatch):
+    """Ensure menu extraction prompt and normalization cover new schema fields."""
+
+    captured: dict[str, str] = {}
+
+    class FakeGeminiClient:
+        def __init__(self):
+            self.calls: list[dict] = []
+
+        async def extract_from_payload(self, **kwargs):  # type: ignore[no-untyped-def]
+            captured.update({"prompt": kwargs.get("prompt", "")})
+            return [
+                {
+                    "title": "Family Paella",
+                    "description": "Seafood rice for sharing",
+                    "category": "Mains",
+                    "section_header": "Large Plates",
+                    "notes": "House speciality",
+                    "options": ["Add aioli"],
+                    "price": 45,
+                    "currency": "EUR",
+                    "allergen_notes": "Contains shellfish",
+                    "persons": "4 people",
+                    "prominence": 0.7,
+                },
+                {
+                    "name": "Espresso",
+                    "category": "Drinks",
+                },
+            ]
+
+    monkeypatch.setattr("app.routes.GeminiClient", FakeGeminiClient)
+
+    payload = {"source_type": "url", "url": "https://example.com/menu"}
+    response = await client.post("/llm/extract-menu", json=payload)
+
+    assert response.status_code == 200
+
+    data = response.json()
+    assert "recipes" in data
+    assert data["recipes"][0]["name"] == "Family Paella"
+    assert data["recipes"][0]["section_header"] == "Large Plates"
+    assert data["recipes"][0]["allergen_notes"] == "Contains shellfish"
+    assert data["recipes"][0]["persons"] == 4
+    assert data["recipes"][0]["special_notes"] == "House speciality"
+    assert data["recipes"][0]["options"] == ["Add aioli"]
+    assert data["recipes"][1]["allergen_notes"] is None
+    assert data["recipes"][1]["persons"] is None
+    assert data["recipes"][1]["section_header"] is None
+
+    prompt = captured.get("prompt", "")
+    assert "allergen" in prompt.lower()
+    assert "section" in prompt.lower()
+    assert "\"persons\"" in prompt
+    assert "strict" in prompt.lower()
+
