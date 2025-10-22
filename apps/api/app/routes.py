@@ -873,9 +873,12 @@ async def deduce_recipe_ingredients(request: dict):
         name = _clean_text(recipe.get("name"))
         if not name:
             continue
+        recipe_id = recipe.get("recipe_id")
         description = _clean_text(recipe.get("description"))
         price = _clean_text(recipe.get("price"))
         entry_lines = [f"- Name: {name}"]
+        if recipe_id is not None:
+            entry_lines.append(f"  Recipe ID: {recipe_id}")
         if description:
             entry_lines.append(f"  Description: {description}")
         if price:
@@ -898,6 +901,7 @@ async def deduce_recipe_ingredients(request: dict):
         {{
           "recipes": [
             {{
+              "recipe_id": 123,
               "name": "Recipe Name",
               "ingredients": [
                 {{
@@ -914,6 +918,8 @@ async def deduce_recipe_ingredients(request: dict):
         }}
 
         Rules:
+        - CRITICAL: Preserve the exact recipe_id from the input for each recipe in your response
+        - CRITICAL: Return the recipe name EXACTLY as provided in the input (do not modify spelling or wording)
         - Quantities must be metric (grams, milliliters, pieces)
         - Base quantities on 1 person serving
         - Use ONLY singular, specific ingredient names (NOT "pancetta or bacon" - choose ONE)
