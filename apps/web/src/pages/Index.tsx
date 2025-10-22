@@ -13,6 +13,8 @@ import { useRestaurant } from "@/hooks/useRestaurant";
 import { useRecipes } from "@/hooks/useRecipes";
 import { Recipe, RecipeIngredient } from "@/lib/api";
 import { LandingPage } from "@/components/LandingPage";
+import { LanguageSelector } from "@/components/LanguageSelector";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { useSearchParams } from "react-router-dom";
 import {
   CurrencyOption,
@@ -24,6 +26,7 @@ import {
 import { ARCHIVE_SECTION_ID, ARCHIVE_SECTION_LABEL, loadSavedMenuSections } from "@/lib/menu-sections";
 
 const Index = () => {
+  const { t } = useLanguage();
   const {
     restaurant,
     restaurants,
@@ -163,9 +166,7 @@ const Index = () => {
 
   const reviewNoticeMessage =
     unconfirmedRecipeCount > 0
-      ? `${unconfirmedRecipeCount} ${
-          unconfirmedRecipeCount === 1 ? "menu item" : "menu items"
-        } still need confirmation`
+      ? t("landing.reviewStatus.pending", { count: unconfirmedRecipeCount })
       : null;
 
   const handleStartNew = useCallback(() => {
@@ -665,7 +666,7 @@ const Index = () => {
                 manualAddTabSelectionRef.current = true;
               }}
             >
-              Ingredients
+              {t("navigation.add")}
             </TabsTrigger>
             <TabsTrigger
               value="recipes"
@@ -715,7 +716,7 @@ const Index = () => {
                       {reviewNoticeMessage}
                     </span>
                     <span className="mt-1 block text-xs text-muted-foreground">
-                      Click to open the most recent dish awaiting review
+                      {t("index.reviewHelper")}
                     </span>
                   </button>
                 )}
