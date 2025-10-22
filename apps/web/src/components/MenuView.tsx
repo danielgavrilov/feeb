@@ -26,6 +26,11 @@ import {
   type MenuSectionsEventDetail,
   type StoredMenuSection,
 } from "@/lib/menu-sections";
+import {
+  summarizeDishAllergens,
+  isVeganFriendly,
+  isVegetarianFriendly,
+} from "@/lib/allergen-utils";
 
 const UNCATEGORIZED_ID = "__uncategorized__";
 
@@ -36,6 +41,19 @@ const normalizeCategoryId = (category?: string | null) => {
 
 const getFallbackCategoryLabel = (categoryId: string) =>
   categoryId === UNCATEGORIZED_ID ? "Other" : categoryId;
+
+const allergenSummaryCache = new WeakMap<SavedDish, ReturnType<typeof summarizeDishAllergens>>();
+
+const getDishAllergenSummary = (dish: SavedDish) => {
+  const cached = allergenSummaryCache.get(dish);
+  if (cached) {
+    return cached;
+  }
+
+  const summary = summarizeDishAllergens(dish.ingredients);
+  allergenSummaryCache.set(dish, summary);
+  return summary;
+};
 
 const dishContainsAllergen = (dish: SavedDish, allergenId: string) => {
   const definition = allergenFilterMap.get(allergenId);
@@ -51,10 +69,9 @@ const dishContainsAllergen = (dish: SavedDish, allergenId: string) => {
   ]);
   const normalizedKeywords = keywords.map((keyword) => keyword.toLowerCase());
 
-  return dish.ingredients.some((ingredient) =>
-    (ingredient.allergens ?? []).some((allergen) => {
-      const code = allergen.code?.toLowerCase() ?? "";
-      const name = allergen.name?.toLowerCase() ?? "";
+  if (definition.id === "vegan") {
+    return !isVeganFriendly(summary);
+  }
 
       if (normalizedCodeSet.has(code) || normalizedCodeSet.has(name)) {
         return true;

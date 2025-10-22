@@ -42,7 +42,11 @@ import {
 } from "@/lib/menu-sections";
 import type { AllergenFilterDefinition } from "@/data/allergen-filters";
 import { ALLERGEN_FILTERS, allergenFilterMap } from "@/data/allergen-filters";
-import type { AllergenConfidence } from "@/lib/api";
+import {
+  summarizeDishAllergens,
+  isVeganFriendly,
+  isVegetarianFriendly,
+} from "@/lib/allergen-utils";
 
 export type RecipeBulkAction =
   | "delete"
@@ -66,7 +70,12 @@ export interface SavedDish {
     allergens?: Array<{
       code: string;
       name: string;
-      certainty?: AllergenConfidence;
+      certainty?: string;
+      canonicalCode?: string | null;
+      canonicalName?: string | null;
+      familyCode?: string | null;
+      familyName?: string | null;
+      markerType?: string | null;
     }>;
     substitution?: {
       alternative: string;
@@ -114,54 +123,19 @@ const ensureArchiveSection = (sections: SectionDefinition[]): SectionDefinition[
   return [...sections, archive];
 };
 
-const getDishAllergenDefinitions = (dish: SavedDish): AllergenFilterDefinition[] => {
-  const allergenCodes = new Set<string>();
-
-  for (const ingredient of dish.ingredients) {
-    for (const allergen of ingredient.allergens ?? []) {
-      const normalizedCode = allergen?.code?.toLowerCase();
-      const normalizedName = allergen?.name?.toLowerCase();
-
-      if (normalizedCode) {
-        allergenCodes.add(normalizedCode);
-
-        const canonicalDefinition = allergenFilterMap.get(normalizedCode);
-        if (canonicalDefinition) {
-          allergenCodes.add(canonicalDefinition.id.toLowerCase());
-          allergenCodes.add(canonicalDefinition.name.toLowerCase());
-          canonicalDefinition.codes.forEach((code) => allergenCodes.add(code.toLowerCase()));
-        }
-      }
-
-      if (normalizedName) {
-        allergenCodes.add(normalizedName);
-      }
-    }
-  }
-
+export const getDishAllergenDefinitions = (dish: SavedDish): AllergenFilterDefinition[] => {
+  const summary = summarizeDishAllergens(dish.ingredients);
   const results: AllergenFilterDefinition[] = [];
+  const seen = new Set<string>();
   const veganDefinition = allergenFilterMap.get("vegan");
   const vegetarianDefinition = allergenFilterMap.get("vegetarian");
 
-  const definitionHasForbiddenCode = (definition: AllergenFilterDefinition | undefined) => {
-    if (!definition) {
-      return false;
-    }
-    if (definition.codes.some((code) => allergenCodes.has(code.toLowerCase()))) {
-      return true;
-    }
-    return allergenCodes.has(definition.id.toLowerCase()) ||
-      allergenCodes.has(definition.name.toLowerCase());
-  };
-
-  const shouldShowVegan = veganDefinition ? !definitionHasForbiddenCode(veganDefinition) : false;
-  const shouldShowVegetarian =
-    !shouldShowVegan && vegetarianDefinition ? !definitionHasForbiddenCode(vegetarianDefinition) : false;
-
-  if (shouldShowVegan && veganDefinition) {
+  if (veganDefinition && isVeganFriendly(summary)) {
     results.push(veganDefinition);
-  } else if (shouldShowVegetarian && vegetarianDefinition) {
+    seen.add(veganDefinition.id);
+  } else if (vegetarianDefinition && isVegetarianFriendly(summary)) {
     results.push(vegetarianDefinition);
+    seen.add(vegetarianDefinition.id);
   }
 
   for (const definition of ALLERGEN_FILTERS) {
@@ -169,12 +143,15 @@ const getDishAllergenDefinitions = (dish: SavedDish): AllergenFilterDefinition[]
       continue;
     }
 
-    if (
-      definition.codes.some((code) => allergenCodes.has(code.toLowerCase())) ||
-      allergenCodes.has(definition.id.toLowerCase()) ||
-      allergenCodes.has(definition.name.toLowerCase())
-    ) {
+    const normalizedId = definition.id.toLowerCase();
+    const hasFamilyMatch = summary.familyCodes.has(normalizedId);
+    const hasCodeMatch = definition.codes.some((code) =>
+      summary.canonicalCodes.has(code.toLowerCase()),
+    );
+
+    if ((hasFamilyMatch || hasCodeMatch) && !seen.has(definition.id)) {
       results.push(definition);
+      seen.add(definition.id);
     }
   }
 

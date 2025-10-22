@@ -1,4 +1,5 @@
 import { Recipe } from "./recipes";
+import type { CanonicalAllergen } from "@/lib/allergen-utils";
 
 export interface MenuItem {
   id: string;
@@ -11,6 +12,7 @@ export interface MenuItem {
   recipe?: Recipe;
   badges?: ("popular" | "bestseller" | "chef-pick" | "new" | "limited")[];
   allergens?: string[];
+  allergenDetails?: CanonicalAllergen[];
   dietaryTags?: string[];
   prepTime?: string;
   servings?: number;
@@ -134,6 +136,26 @@ export const MENU_ITEMS: MenuItem[] = [
     category: "dessert",
     badges: ["chef-pick"],
     allergens: ["gluten", "nuts"],
+    allergenDetails: [
+      {
+        code: "en:wheat",
+        name: "Wheat",
+        familyCode: "cereals_gluten",
+        familyName: "Cereals containing gluten",
+      },
+      {
+        code: "en:spelt",
+        name: "Spelt",
+        familyCode: "cereals_gluten",
+        familyName: "Cereals containing gluten",
+      },
+      {
+        code: "en:walnuts",
+        name: "Walnuts",
+        familyCode: "tree_nuts",
+        familyName: "Tree nuts",
+      },
+    ],
     dietaryTags: ["vegetarian"],
     prepTime: "45 min",
     servings: 1,

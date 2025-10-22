@@ -5,6 +5,7 @@ import { MenuItem, BADGE_LABELS } from "@/data/menu";
 import { Clock, Users, Minus, Plus, AlertCircle } from "lucide-react";
 import { useState } from "react";
 import { Separator } from "@/components/ui/separator";
+import { formatAllergenList } from "@/lib/allergen-utils";
 
 interface DishDetailModalProps {
   dish: MenuItem | null;
@@ -18,6 +19,11 @@ export const DishDetailModal = ({ dish, open, onClose }: DishDetailModalProps) =
   if (!dish) return null;
 
   const total = dish.price * quantity;
+  const canonicalAllergens = dish.allergenDetails ?? [];
+  const allergenSummary =
+    canonicalAllergens.length > 0
+      ? formatAllergenList(canonicalAllergens)
+      : dish.allergens?.join(", ") ?? "";
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -100,14 +106,12 @@ export const DishDetailModal = ({ dish, open, onClose }: DishDetailModalProps) =
         )}
 
         {/* Allergens */}
-        {dish.allergens && dish.allergens.length > 0 && (
+        {allergenSummary && (
           <div className="flex items-start gap-2 p-3 bg-destructive/10 rounded-lg">
             <AlertCircle size={18} className="text-destructive mt-0.5 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-sm font-medium text-destructive">Allergen Warning</p>
-              <p className="text-sm text-muted-foreground">
-                Contains: {dish.allergens.join(", ")}
-              </p>
+              <p className="text-sm text-muted-foreground">Contains: {allergenSummary}</p>
             </div>
           </div>
         )}

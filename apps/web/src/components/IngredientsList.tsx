@@ -73,7 +73,12 @@ export interface IngredientState {
   allergens?: Array<{
     code: string;
     name: string;
-    certainty?: AllergenConfidence;
+    certainty?: string;
+    canonicalCode?: string | null;
+    canonicalName?: string | null;
+    familyCode?: string | null;
+    familyName?: string | null;
+    markerType?: string | null;
   }>;
   dietaryInfo?: string[];
   substitution?: {
@@ -94,7 +99,12 @@ interface IngredientsListProps {
     allergens: Array<{
       code: string;
       name: string;
-      certainty?: AllergenConfidence;
+      certainty?: string;
+      canonicalCode?: string | null;
+      canonicalName?: string | null;
+      familyCode?: string | null;
+      familyName?: string | null;
+      markerType?: string | null;
     }>
   ) => void;
   onUpdateIngredientSubstitution: (
