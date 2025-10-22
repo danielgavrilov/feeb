@@ -91,6 +91,20 @@ const NON_VEGETARIAN_FAMILY_CODES = new Set([
 
 const normalizeCode = (code?: string | null) => code?.trim().toLowerCase() ?? "";
 
+const normalizeCanonicalCode = (code?: string | null) => {
+  const normalized = normalizeCode(code);
+
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.includes(":")) {
+    return normalized;
+  }
+
+  return `en:${normalized}`;
+};
+
 const fallbackNameFromCode = (code: string) => {
   if (!code) {
     return "";
@@ -119,7 +133,7 @@ export const getCanonicalAllergens = (
 
   ingredients.forEach((ingredient) => {
     (ingredient.allergens ?? []).forEach((allergen) => {
-      const canonicalCode = normalizeCode(allergen.canonicalCode ?? allergen.code);
+      const canonicalCode = normalizeCanonicalCode(allergen.canonicalCode ?? allergen.code);
       if (!canonicalCode || canonicalMap.has(canonicalCode)) {
         return;
       }
@@ -154,9 +168,16 @@ export const summarizeDishAllergens = (
 
   ingredients?.forEach((ingredient) => {
     (ingredient.allergens ?? []).forEach((allergen) => {
-      const canonicalCode = normalizeCode(allergen.canonicalCode ?? allergen.code);
+      const canonicalCode = normalizeCanonicalCode(allergen.canonicalCode ?? allergen.code);
       if (canonicalCode) {
         canonicalCodes.add(canonicalCode);
+        const unprefixedCode = canonicalCode.includes(":")
+          ? canonicalCode.split(":").slice(1).join(":")
+          : "";
+
+        if (unprefixedCode) {
+          canonicalCodes.add(unprefixedCode);
+        }
       }
 
       const familyCode = normalizeCode(allergen.familyCode);
@@ -173,6 +194,13 @@ export const summarizeDishAllergens = (
 
   canonicalAllergens.forEach((allergen) => {
     canonicalCodes.add(allergen.code);
+    const unprefixedCode = allergen.code.includes(":")
+      ? allergen.code.split(":").slice(1).join(":")
+      : "";
+
+    if (unprefixedCode) {
+      canonicalCodes.add(unprefixedCode);
+    }
     if (allergen.familyCode) {
       familyCodes.add(allergen.familyCode);
     }
