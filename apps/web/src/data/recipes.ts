@@ -27,13 +27,20 @@ export const DIETARY_CATEGORIES = [
 ];
 
 export const ALLERGEN_CATEGORIES = [
-  { id: "gluten", label: "Gluten" },
-  { id: "dairy", label: "Dairy" },
+  { id: "cereals_gluten", label: "Cereals containing gluten" },
+  { id: "crustaceans", label: "Crustaceans" },
   { id: "eggs", label: "Eggs" },
-  { id: "nuts", label: "Nuts" },
-  { id: "peanuts", label: "Peanuts" },
-  { id: "soy", label: "Soy" },
   { id: "fish", label: "Fish" },
-  { id: "shellfish", label: "Shellfish" },
-  { id: "sesame", label: "Sesame" },
+  { id: "peanuts", label: "Peanuts" },
+  { id: "soybeans", label: "Soybeans" },
+  { id: "milk", label: "Milk" },
+  { id: "tree_nuts", label: "Tree nuts" },
+  { id: "celery", label: "Celery" },
+  { id: "mustard", label: "Mustard" },
+  { id: "sesame", label: "Sesame seeds" },
+  { id: "sulphites", label: "Sulphur dioxide & sulphites" },
+  { id: "lupin", label: "Lupin" },
+  { id: "molluscs", label: "Molluscs" },
+  { id: "vegan", label: "Not plant-based (vegan)" },
+  { id: "vegetarian", label: "Not plant-based (vegetarian)" },
 ];
