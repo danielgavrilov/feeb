@@ -19,6 +19,7 @@ import type { AllergenFilterDefinition } from "@/data/allergen-filters";
 import { Check, Trash2, Plus, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { parsePriceInput } from "@/lib/price-format";
+import type { AllergenConfidence } from "@/lib/api";
 
 const LEGACY_ALLERGEN_ALIASES: Record<string, string[]> = {
   cereals_gluten: ["gluten"],
@@ -47,7 +48,7 @@ export interface IngredientState {
   allergens?: Array<{
     code: string;
     name: string;
-    certainty?: string;
+    certainty?: AllergenConfidence;
   }>;
   dietaryInfo?: string[];
   substitution?: {
@@ -68,7 +69,7 @@ interface IngredientsListProps {
     allergens: Array<{
       code: string;
       name: string;
-      certainty?: string;
+      certainty?: AllergenConfidence;
     }>
   ) => void;
   onUpdateIngredientSubstitution: (
@@ -373,6 +374,8 @@ export const IngredientsList = ({
                                       const statusClassName =
                                         certaintyLabel === "confirmed"
                                           ? "text-primary"
+                                          : certaintyLabel === "likely"
+                                          ? "text-amber-600 dark:text-amber-300"
                                           : "text-muted-foreground";
                                       const Icon = definition?.Icon;
                                       const allergenDisplayName =

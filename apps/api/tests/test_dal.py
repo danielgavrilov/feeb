@@ -2,6 +2,8 @@
 Tests for data access layer (DAL).
 """
 
+import json
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from app.database import Base
@@ -111,7 +113,7 @@ async def test_link_ingredient_allergen(test_session):
     assert result is not None
     assert len(result.allergens) == 1
     assert result.allergens[0].code == "en:gluten"
-    assert result.allergens[0].certainty == "direct"
+    assert result.allergens[0].certainty == "confirmed"
 
 
 @pytest.mark.asyncio
@@ -246,4 +248,64 @@ async def test_save_menu_sections_moves_recipes_to_archive(test_session):
     assert recipe is not None
     assigned_section_ids = {section["section_id"] for section in recipe["sections"]}
     assert archive_section.id in assigned_section_ids
+
+
+@pytest.mark.asyncio
+async def test_get_recipe_with_details_normalizes_predicted_allergens(test_session):
+    """Predicted allergens are normalized to canonical slugs and UI certainties."""
+
+    user_id = await dal.upsert_user(
+        test_session,
+        supabase_uid="uid-789",
+        email="owner3@example.com",
+        name="Owner 3",
+    )
+    restaurant_id = await dal.create_restaurant(
+        test_session,
+        name="Allergen Bistro",
+        user_id=user_id,
+    )
+    recipe_id = await dal.create_recipe(
+        test_session,
+        restaurant_id=restaurant_id,
+        name="Nutty Latte",
+    )
+    ingredient_id = await dal.insert_ingredient(
+        test_session,
+        code="llm:milk",  # synthetic ingredient from LLM pipeline
+        name="Foamed Milk",
+        source="llm",
+    )
+
+    predicted_payload = json.dumps(
+        [
+            {"allergen": "Milk", "certainty": "high"},
+            {"allergen": "Peanuts", "certainty": "low"},
+            {"allergen": "mystery", "certainty": "high"},
+        ]
+    )
+
+    await dal.add_recipe_ingredient(
+        test_session,
+        recipe_id=recipe_id,
+        ingredient_id=ingredient_id,
+        allergens=predicted_payload,
+        confirmed=False,
+    )
+    await test_session.commit()
+
+    recipe = await dal.get_recipe_with_details(test_session, recipe_id)
+    assert recipe is not None
+    assert recipe["ingredients"], "Expected at least one ingredient in recipe response"
+
+    ingredient = recipe["ingredients"][0]
+    normalized_codes = {allergen["code"] for allergen in ingredient["allergens"]}
+    assert "milk" in normalized_codes
+    assert "peanuts" in normalized_codes
+    assert "mystery" not in normalized_codes  # off-list entries are filtered out
+
+    milk_entry = next((a for a in ingredient["allergens"] if a["code"] == "milk"), None)
+    peanut_entry = next((a for a in ingredient["allergens"] if a["code"] == "peanuts"), None)
+    assert milk_entry is not None and milk_entry["certainty"] == "likely"
+    assert peanut_entry is not None and peanut_entry["certainty"] == "possible"
 
