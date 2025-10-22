@@ -112,12 +112,7 @@ const createNutIcon = (label: string) => {
   return Component;
 };
 
-export const GlutenWheatIcon = createGrainIcon("W");
-export const GlutenBarleyIcon = createGrainIcon("B");
-export const GlutenRyeIcon = createGrainIcon("R");
-export const GlutenOatsIcon = createGrainIcon("O");
-export const GlutenSpeltIcon = createGrainIcon("S");
-export const GlutenTriticaleIcon = createGrainIcon("T");
+export const GlutenIcon = createGrainIcon("GL");
 
 export const CrustaceansIcon = ({ className }: { className?: string }) => (
   <HexagonIcon topColor="#fb7185" bottomColor="#be123c" className={className}>
@@ -212,14 +207,7 @@ export const MilkIcon = ({ className }: { className?: string }) => (
   </HexagonIcon>
 );
 
-export const NutsAlmondIcon = createNutIcon("AL");
-export const NutsHazelnutIcon = createNutIcon("HZ");
-export const NutsWalnutIcon = createNutIcon("WA");
-export const NutsCashewIcon = createNutIcon("CA");
-export const NutsPecanIcon = createNutIcon("PE");
-export const NutsBrazilNutIcon = createNutIcon("BR");
-export const NutsPistachioIcon = createNutIcon("PI");
-export const NutsMacadamiaIcon = createNutIcon("MA");
+export const TreeNutsIcon = createNutIcon("TN");
 
 export const CeleryIcon = ({ className }: { className?: string }) => (
   <HexagonIcon topColor="#34d399" bottomColor="#047857" className={className}>

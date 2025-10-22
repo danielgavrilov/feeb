@@ -123,8 +123,11 @@ const ensureArchiveSection = (sections: SectionDefinition[]): SectionDefinition[
   return [...sections, archive];
 };
 
-export const getDishAllergenDefinitions = (dish: SavedDish): AllergenFilterDefinition[] => {
-  const summary = summarizeDishAllergens(dish.ingredients);
+export const getDishAllergenDefinitions = (
+  dish: SavedDish,
+  summaryOverride?: ReturnType<typeof summarizeDishAllergens>,
+): AllergenFilterDefinition[] => {
+  const summary = summaryOverride ?? summarizeDishAllergens(dish.ingredients);
   const results: AllergenFilterDefinition[] = [];
   const seen = new Set<string>();
   const veganDefinition = allergenFilterMap.get("vegan");
