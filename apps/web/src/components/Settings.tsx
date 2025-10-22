@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Dialog,
@@ -22,6 +23,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { Restaurant } from "@/lib/api";
 import { RestaurantUpdateInput } from "@/hooks/useRestaurant";
@@ -226,6 +238,7 @@ interface SettingsProps {
   onCreateRestaurant: (name: string, description?: string) => Promise<Restaurant>;
   onSelectRestaurant: (restaurantId: number) => void;
   onUpdateRestaurant: (restaurantId: number, updates: RestaurantUpdateInput) => Promise<Restaurant | null> | Restaurant | null;
+  onDeleteRestaurant: (restaurantId: number) => Promise<void> | void;
   showMenuImages: boolean;
   onToggleMenuImages: (show: boolean) => void;
   currency: CurrencyOption;
@@ -240,6 +253,7 @@ export const Settings = ({
   onCreateRestaurant,
   onSelectRestaurant,
   onUpdateRestaurant,
+  onDeleteRestaurant,
   showMenuImages,
   onToggleMenuImages,
   currency,
@@ -258,6 +272,9 @@ export const Settings = ({
   const [primaryColor, setPrimaryColor] = useState<string | undefined>(restaurant?.primaryColor);
   const [accentColor, setAccentColor] = useState<string | undefined>(restaurant?.accentColor);
   const [isSavingDetails, setIsSavingDetails] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [hasDeleteConfirmation, setHasDeleteConfirmation] = useState(false);
+  const [isDeletingRestaurant, setIsDeletingRestaurant] = useState(false);
 
   const logoInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -385,6 +402,31 @@ export const Settings = ({
     }
   };
 
+  const handleDeleteDialogChange = (open: boolean) => {
+    setIsDeleteDialogOpen(open);
+    if (!open) {
+      setHasDeleteConfirmation(false);
+    }
+  };
+
+  const handleConfirmDeleteRestaurant = async () => {
+    if (!restaurant) {
+      return;
+    }
+
+    try {
+      setIsDeletingRestaurant(true);
+      await onDeleteRestaurant(restaurant.id);
+      toast.success("Restaurant deleted");
+      setIsDeleteDialogOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to delete restaurant");
+    } finally {
+      setIsDeletingRestaurant(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <h2 className="mb-6 text-2xl font-bold text-foreground">Settings</h2>
@@ -494,8 +536,57 @@ export const Settings = ({
               )}
             </div>
 
-            <div className="flex justify-end">
-              <Button type="button" onClick={handleUpdateRestaurantDetails} disabled={isSavingDetails}>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+              <AlertDialog open={isDeleteDialogOpen} onOpenChange={handleDeleteDialogChange}>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-muted-foreground/40 bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                    disabled={!restaurant || isDeletingRestaurant}
+                  >
+                    Delete Restaurant
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete restaurant</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to delete this restaurant?
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <div className="rounded-md border border-destructive/20 bg-destructive/5 p-4">
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id="confirm-delete-restaurant"
+                        checked={hasDeleteConfirmation}
+                        onCheckedChange={(checked) => setHasDeleteConfirmation(checked === true)}
+                        disabled={isDeletingRestaurant}
+                        className="mt-1"
+                      />
+                      <Label htmlFor="confirm-delete-restaurant" className="text-sm text-muted-foreground">
+                        Deleting this restaurant will get rid of all menu items and associated ingredients.{" "}
+                        This action cannot be undone.
+                      </Label>
+                    </div>
+                  </div>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isDeletingRestaurant}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleConfirmDeleteRestaurant}
+                      disabled={!hasDeleteConfirmation || isDeletingRestaurant}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-destructive"
+                    >
+                      {isDeletingRestaurant ? "Deleting..." : "Delete restaurant"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              <Button
+                type="button"
+                onClick={handleUpdateRestaurantDetails}
+                disabled={isSavingDetails || isDeletingRestaurant}
+              >
                 {isSavingDetails ? "Saving..." : "Save changes"}
               </Button>
             </div>

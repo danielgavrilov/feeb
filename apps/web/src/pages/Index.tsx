@@ -30,6 +30,7 @@ const Index = () => {
     createRestaurant: createRestaurantAPI,
     selectRestaurant,
     updateRestaurant,
+    deleteRestaurant: deleteRestaurantAPI,
   } = useRestaurant();
   const {
     recipes,
@@ -794,6 +795,7 @@ const Index = () => {
                 onCreateRestaurant={createRestaurantAPI}
                 onSelectRestaurant={selectRestaurant}
                 onUpdateRestaurant={updateRestaurant}
+                onDeleteRestaurant={deleteRestaurantAPI}
                 showMenuImages={showMenuImages}
                 onToggleMenuImages={setShowMenuImages}
                 currency={currency}

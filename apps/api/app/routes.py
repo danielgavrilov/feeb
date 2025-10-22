@@ -251,6 +251,26 @@ async def update_restaurant(
     )
 
 
+@router.delete("/restaurants/{restaurant_id}", status_code=status.HTTP_200_OK)
+async def delete_restaurant(
+    restaurant_id: int,
+    session: AsyncSession = Depends(get_db)
+):
+    """Delete a restaurant and its associated records."""
+
+    deleted = await dal.delete_restaurant(session, restaurant_id)
+
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Restaurant {restaurant_id} not found",
+        )
+
+    await session.commit()
+
+    return {"status": "success", "message": f"Restaurant {restaurant_id} deleted"}
+
+
 @router.post("/menus", response_model=MenuResponse)
 async def create_menu(
     menu_data: MenuCreate,

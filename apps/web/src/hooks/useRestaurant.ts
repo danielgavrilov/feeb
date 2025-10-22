@@ -4,6 +4,7 @@ import {
   Restaurant,
   createRestaurant as apiCreateRestaurant,
   getUserRestaurants,
+  deleteRestaurant as apiDeleteRestaurant,
   updateRestaurant as apiUpdateRestaurant,
 } from "@/lib/api";
 
@@ -107,6 +108,51 @@ export function useRestaurant() {
     }
   };
 
+  const deleteRestaurant = async (restaurantId: number) => {
+    if (!restaurantId) {
+      return;
+    }
+
+    try {
+      await apiDeleteRestaurant(restaurantId);
+
+      let nextRestaurant: Restaurant | null = null;
+
+      setRestaurants((prev) => {
+        const updated = prev.filter((item) => item.id !== restaurantId);
+        nextRestaurant = updated[0] ?? null;
+        return updated;
+      });
+
+      setRestaurant((prev) => {
+        if (prev && prev.id === restaurantId) {
+          if (nextRestaurant) {
+            localStorage.setItem("selectedRestaurantId", nextRestaurant.id.toString());
+          } else {
+            localStorage.removeItem("selectedRestaurantId");
+          }
+          return nextRestaurant;
+        }
+
+        if (localStorage.getItem("selectedRestaurantId") === restaurantId.toString()) {
+          if (nextRestaurant) {
+            localStorage.setItem("selectedRestaurantId", nextRestaurant.id.toString());
+          } else {
+            localStorage.removeItem("selectedRestaurantId");
+          }
+        }
+
+        return prev;
+      });
+
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete restaurant");
+      console.error("Failed to delete restaurant:", err);
+      throw err;
+    }
+  };
+
   return {
     restaurant,
     restaurants,
@@ -115,6 +161,7 @@ export function useRestaurant() {
     createRestaurant,
     selectRestaurant,
     updateRestaurant,
+    deleteRestaurant,
     refreshRestaurants: loadRestaurants,
   };
 }
