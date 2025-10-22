@@ -154,11 +154,13 @@ user_restaurant (user_id, restaurant_id, role)
 
 -- Menus
 menu (id, restaurant_id, name, description, menu_active, created_at)
-menu_recipe (menu_id, recipe_id, position)
+menu_section (id, menu_id, name, position, created_at)
+menu_section_recipe (section_id, recipe_id, position)
 
 -- Recipes
-recipe (id, restaurant_id, name, description, instructions, menu_category, 
-        serving_size, price, image, created_at)
+recipe (id, restaurant_id, name, description, instructions,
+        serving_size, price, image, options, special_notes,
+        prominence_score, confirmed, is_on_menu, created_at)
 
 -- Recipe Ingredients (links to existing ingredient table)
 recipe_ingredient (id, recipe_id, ingredient_id, quantity, unit, notes)

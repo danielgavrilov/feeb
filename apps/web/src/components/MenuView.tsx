@@ -19,7 +19,13 @@ import { Switch } from "@/components/ui/switch";
 import { ALLERGEN_FILTERS, allergenFilterMap } from "@/data/allergen-filters";
 import type { AllergenFilterDefinition } from "@/data/allergen-filters";
 import { expandIngredientSearchTerms } from "@/data/ingredient-search";
-import { loadSavedMenuSections, MENU_SECTIONS_EVENT, StoredMenuSection } from "@/lib/menu-sections";
+import {
+  loadSavedMenuSections,
+  refreshMenuSections,
+  MENU_SECTIONS_EVENT,
+  type MenuSectionsEventDetail,
+  type StoredMenuSection,
+} from "@/lib/menu-sections";
 
 const UNCATEGORIZED_ID = "__uncategorized__";
 
@@ -68,38 +74,64 @@ interface MenuViewProps {
   restaurantName: string;
   showImages: boolean;
   formatPrice: (value: string | number | null | undefined) => string;
+  restaurantId?: number | null;
 }
 
-export const MenuView = ({ dishes, restaurantName, showImages, formatPrice }: MenuViewProps) => {
+export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, restaurantId }: MenuViewProps) => {
   const [filterMode, setFilterMode] = useState<"highlight" | "exclude">("highlight");
   const [selectedAllergens, setSelectedAllergens] = useState<string[]>([]);
   const [ingredientInputValue, setIngredientInputValue] = useState("");
   const [ingredientSearchTerms, setIngredientSearchTerms] = useState<string[]>([]);
   const [showIngredients, setShowIngredients] = useState(false);
-  const [savedSections, setSavedSections] = useState<StoredMenuSection[]>(() => loadSavedMenuSections());
+  const [savedSections, setSavedSections] = useState<StoredMenuSection[]>([]);
   const sectionLabelMap = useMemo(() => {
     const entries = new Map<string, string>();
     savedSections.forEach((section) => {
-      entries.set(section.id, section.label);
+      entries.set(section.id.toString(), section.label);
     });
     return entries;
   }, [savedSections]);
 
   useEffect(() => {
-    const handleSectionsUpdated: EventListener = (event) => {
-      const customEvent = event as CustomEvent<StoredMenuSection[]>;
-      if (Array.isArray(customEvent.detail)) {
-        setSavedSections(customEvent.detail);
-      } else {
-        setSavedSections(loadSavedMenuSections());
+    if (!restaurantId) {
+      setSavedSections([]);
+      return;
+    }
+
+    let isActive = true;
+    const cached = loadSavedMenuSections(restaurantId);
+    setSavedSections(cached.sections);
+
+    refreshMenuSections(restaurantId)
+      .then(({ sections }) => {
+        if (isActive) {
+          setSavedSections(sections);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to refresh menu view sections", error);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [restaurantId]);
+
+  useEffect(() => {
+    const handleSectionsUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<MenuSectionsEventDetail>;
+      if (!restaurantId || !customEvent.detail || customEvent.detail.restaurantId !== restaurantId) {
+        return;
       }
+
+      setSavedSections(customEvent.detail.sections);
     };
 
     window.addEventListener(MENU_SECTIONS_EVENT, handleSectionsUpdated);
     return () => {
       window.removeEventListener(MENU_SECTIONS_EVENT, handleSectionsUpdated);
     };
-  }, []);
+  }, [restaurantId]);
 
   const menuDishes = useMemo(() => dishes.filter((dish) => dish.isOnMenu), [dishes]);
 
@@ -358,11 +390,11 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice }: Me
     const uniqueCategories = new Set<string>();
 
     visibleMenuDishes.forEach((dish) => {
-      uniqueCategories.add(normalizeCategoryId(dish.menuCategory));
+      uniqueCategories.add(normalizeCategoryId(dish.menuSectionId));
     });
 
     const sectionOrder = savedSections
-      .map((section) => section.id)
+      .map((section) => section.id.toString())
       .filter((sectionId) => uniqueCategories.has(sectionId));
 
     const remaining = Array.from(uniqueCategories).filter(
@@ -555,7 +587,7 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice }: Me
         ) : (
           categoryOrder.map((categoryId) => {
             const dishesInCategory = visibleMenuDishes.filter(
-              (dish) => normalizeCategoryId(dish.menuCategory) === categoryId,
+              (dish) => normalizeCategoryId(dish.menuSectionId) === categoryId,
             );
 
             if (dishesInCategory.length === 0) {

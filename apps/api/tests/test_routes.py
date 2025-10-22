@@ -232,3 +232,69 @@ async def test_extract_menu_items_normalization(client, monkeypatch):
     assert "\"persons\"" in prompt
     assert "strict" in prompt.lower()
 
+
+@pytest.mark.asyncio
+async def test_get_menu_sections_endpoint(client, test_session):
+    """Menu section endpoint returns persisted sections and archive."""
+
+    user_id = await dal.upsert_user(
+        test_session,
+        supabase_uid="uid-sections",
+        email="sections@example.com",
+    )
+    restaurant_id = await dal.create_restaurant(
+        test_session,
+        name="Menu Sections",
+        user_id=user_id,
+    )
+    await dal.get_or_create_menu_section_by_name(test_session, restaurant_id, "Mains")
+    await test_session.commit()
+
+    response = await client.get(f"/restaurants/{restaurant_id}/menu-sections")
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["menu"]["id"] == restaurant_id
+    names = {section["name"] for section in payload["sections"]}
+    assert "Mains" in names
+    assert "Archive" in names
+
+
+@pytest.mark.asyncio
+async def test_update_menu_sections_endpoint(client, test_session):
+    """Menu sections can be reordered and renamed via the API."""
+
+    user_id = await dal.upsert_user(
+        test_session,
+        supabase_uid="uid-update-sections",
+        email="update@example.com",
+    )
+    restaurant_id = await dal.create_restaurant(
+        test_session,
+        name="Update Menu",
+        user_id=user_id,
+    )
+    mains = await dal.get_or_create_menu_section_by_name(test_session, restaurant_id, "Mains")
+    await dal.get_or_create_menu_section_by_name(test_session, restaurant_id, "Drinks")
+    await test_session.commit()
+
+    payload = {
+        "sections": [
+            {"id": mains.id, "name": "Starters", "position": 1},
+            {"name": "Specials", "position": 0},
+        ]
+    }
+
+    response = await client.put(
+        f"/restaurants/{restaurant_id}/menu-sections",
+        json=payload,
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    names = [section["name"] for section in data["sections"]]
+    assert "Starters" in names
+    assert "Specials" in names
+    assert "Archive" in names
+    assert "Drinks" not in names
+

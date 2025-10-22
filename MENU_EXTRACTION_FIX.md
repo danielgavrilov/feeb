@@ -224,10 +224,15 @@ User Action: Review and manually delete ingredient list "recipes" ⚠️
 3. **Check results**:
    ```sql
    -- See what was extracted
-   SELECT name, menu_category, COUNT(*) as count
-   FROM recipe
-   WHERE created_at > NOW() - INTERVAL '10 minutes'
-   GROUP BY name, menu_category
+   SELECT
+     r.name,
+     ms.name AS menu_section,
+     COUNT(*) AS count
+   FROM recipe r
+   LEFT JOIN menu_section_recipe msr ON msr.recipe_id = r.id
+   LEFT JOIN menu_section ms ON ms.id = msr.section_id
+   WHERE r.created_at > NOW() - INTERVAL '10 minutes'
+   GROUP BY r.name, ms.name
    ORDER BY count DESC;
    
    -- Should see actual menu items with count=1
@@ -264,11 +269,16 @@ docker logs feeb-api -f | grep "stage\|batch"
 ### Database Queries
 
 ```sql
--- Count recipes by menu_category
-SELECT menu_category, COUNT(*) 
-FROM recipe 
-WHERE created_at > NOW() - INTERVAL '1 hour'
-GROUP BY menu_category;
+-- Count recipes by menu section
+SELECT
+  ms.name AS menu_section,
+  COUNT(*)
+FROM menu_section ms
+JOIN menu_section_recipe msr ON msr.section_id = ms.id
+WHERE msr.recipe_id IN (
+  SELECT id FROM recipe WHERE created_at > NOW() - INTERVAL '1 hour'
+)
+GROUP BY ms.name;
 
 -- Find suspiciously long recipe names (likely ingredient lists)
 SELECT id, name, LENGTH(name) as name_length

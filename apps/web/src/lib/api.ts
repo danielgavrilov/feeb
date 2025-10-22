@@ -35,6 +35,28 @@ export interface Menu {
   created_at: string;
 }
 
+export interface MenuSection {
+  id: number;
+  menu_id: number;
+  name: string;
+  position?: number | null;
+  created_at: string;
+}
+
+export interface RecipeSectionLink {
+  menu_id: number;
+  menu_name: string;
+  section_id: number;
+  section_name: string;
+  section_position?: number | null;
+  recipe_position?: number | null;
+}
+
+export interface RestaurantMenuSectionsResponse {
+  menu: Menu;
+  sections: MenuSection[];
+}
+
 export interface RecipeIngredient {
   ingredient_id: number;
   ingredient_name: string;
@@ -59,7 +81,6 @@ export interface Recipe {
   name: string;
   description?: string;
   instructions?: string;
-  menu_category?: string;
   serving_size?: string;
   price?: string;
   image?: string;
@@ -69,6 +90,7 @@ export interface Recipe {
   confirmed: boolean;
   is_on_menu: boolean;
   created_at: string;
+  sections: RecipeSectionLink[];
   ingredients: RecipeIngredient[];
 }
 
@@ -89,7 +111,6 @@ export interface CreateRecipeRequest {
   name: string;
   description?: string;
   instructions?: string;
-  menu_category?: string;
   serving_size?: string;
   price?: string;
   image?: string;
@@ -99,13 +120,13 @@ export interface CreateRecipeRequest {
   prominence_score?: number;
   confirmed?: boolean;
   is_on_menu?: boolean;
+  menu_section_ids?: number[];
 }
 
 export interface UpdateRecipeRequest {
   name?: string;
   description?: string;
   instructions?: string;
-  menu_category?: string;
   serving_size?: string;
   price?: string;
   image?: string;
@@ -114,6 +135,7 @@ export interface UpdateRecipeRequest {
   prominence_score?: number;
   confirmed?: boolean;
   is_on_menu?: boolean;
+  menu_section_ids?: number[];
 }
 
 export type MenuUploadSourceType = 'pdf' | 'image' | 'url';
@@ -295,6 +317,22 @@ export async function createMenu(
 
 export async function getRestaurantMenus(restaurantId: number): Promise<Menu[]> {
   return fetchAPI(`/menus/restaurant/${restaurantId}`);
+}
+
+export async function getRestaurantMenuSections(
+  restaurantId: number,
+): Promise<RestaurantMenuSectionsResponse> {
+  return fetchAPI(`/restaurants/${restaurantId}/menu-sections`);
+}
+
+export async function updateRestaurantMenuSections(
+  restaurantId: number,
+  sections: Array<{ id?: number; name: string; position?: number | null }>,
+): Promise<RestaurantMenuSectionsResponse> {
+  return fetchAPI(`/restaurants/${restaurantId}/menu-sections`, {
+    method: 'PUT',
+    body: JSON.stringify({ sections }),
+  });
 }
 
 // ============================================================================

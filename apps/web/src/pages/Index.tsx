@@ -3,7 +3,7 @@ import { DishNameInput } from "@/components/DishNameInput";
 import { IngredientsList, IngredientState } from "@/components/IngredientsList";
 import { PrepMethodInput } from "@/components/PrepMethodInput";
 import { ComplianceOverview } from "@/components/ComplianceOverview";
-import { RecipeBook, SavedDish, RecipeBulkAction, ARCHIVE_SECTION_ID } from "@/components/RecipeBook";
+import { RecipeBook, SavedDish, RecipeBulkAction } from "@/components/RecipeBook";
 import { MenuView } from "@/components/MenuView";
 import { Settings } from "@/components/Settings";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import {
   DEFAULT_PRICE_FORMAT,
   formatPriceDisplay,
 } from "@/lib/price-format";
+import { ARCHIVE_SECTION_ID, ARCHIVE_SECTION_LABEL, loadSavedMenuSections } from "@/lib/menu-sections";
 
 const Index = () => {
   const {
@@ -45,7 +46,7 @@ const Index = () => {
     : "landing";
   const [activeTab, setActiveTab] = useState(initialTab);
   const [dishName, setDishName] = useState("");
-  const [menuCategory, setMenuCategory] = useState("");
+  const [menuSectionId, setMenuSectionId] = useState("");
   const [description, setDescription] = useState("");
   const [servingSize, setServingSize] = useState("1");
   const [price, setPrice] = useState("");
@@ -66,11 +67,60 @@ const Index = () => {
     [currency, priceFormat],
   );
 
+  const deriveMenuSectionKey = useCallback(
+    (recipe: Recipe): string => {
+      const primarySection = recipe.sections[0];
+      if (!primarySection) {
+        return "";
+      }
+
+      return primarySection.section_name.trim().toLowerCase() === ARCHIVE_SECTION_LABEL.toLowerCase()
+        ? ARCHIVE_SECTION_ID
+        : primarySection.section_id.toString();
+    },
+    [],
+  );
+
+  const resolveSectionId = useCallback(
+    (sectionKey: string): number | null => {
+      if (!restaurant?.id) {
+        return null;
+      }
+
+      if (!sectionKey) {
+        return null;
+      }
+
+      const cached = loadSavedMenuSections(restaurant.id);
+
+      if (sectionKey === ARCHIVE_SECTION_ID) {
+        const archive = cached.sections.find((section) =>
+          section.label.trim().toLowerCase() === ARCHIVE_SECTION_LABEL.toLowerCase(),
+        );
+        return archive ? archive.id : null;
+      }
+
+      const numericId = Number(sectionKey);
+      if (!Number.isNaN(numericId)) {
+        return numericId;
+      }
+
+      const match = cached.sections.find(
+        (section) =>
+          section.id.toString() === sectionKey ||
+          section.label.trim().toLowerCase() === sectionKey.trim().toLowerCase(),
+      );
+
+      return match ? match.id : null;
+    },
+    [restaurant?.id],
+  );
+
   // Convert API recipes to SavedDish format for existing components
   const savedDishes: SavedDish[] = recipes.map((recipe: Recipe) => ({
     id: recipe.id.toString(),
     name: recipe.name,
-    menuCategory: recipe.menu_category || "",
+    menuSectionId: deriveMenuSectionKey(recipe),
     description: recipe.description || "",
     servingSize: recipe.serving_size || "1",
     price: recipe.price || "",
@@ -105,7 +155,7 @@ const Index = () => {
 
   const handleStartNew = useCallback(() => {
     setDishName("");
-    setMenuCategory("");
+    setMenuSectionId("");
     setDescription("");
     setServingSize("1");
     setPrice("");
@@ -119,7 +169,7 @@ const Index = () => {
   const populateFormFromRecipe = (recipe: Recipe) => {
     setEditingDishId(recipe.id);
     setDishName(recipe.name);
-    setMenuCategory(recipe.menu_category || "");
+    setMenuSectionId(deriveMenuSectionKey(recipe));
     setDescription(recipe.description || "");
     setServingSize(recipe.serving_size || "1");
     setPrice(recipe.price || "");
@@ -313,16 +363,17 @@ const Index = () => {
       // TODO: Implement ingredient search and linking
       let updatedRecipesList: Recipe[] = recipes;
       let savedRecipe: Recipe;
+      const resolvedSectionId = resolveSectionId(menuSectionId);
       if (editingDishId) {
         savedRecipe = await updateRecipeAPI(editingDishId, {
           name: dishName,
           description,
           instructions: prepMethod,
-          menu_category: menuCategory,
           serving_size: servingSize,
           price,
           image: dishImage,
           confirmed: true,
+          menu_section_ids: resolvedSectionId !== null ? [resolvedSectionId] : [],
         });
         updatedRecipesList = recipes.map((recipe) =>
           recipe.id === savedRecipe.id ? savedRecipe : recipe
@@ -333,12 +384,12 @@ const Index = () => {
           name: dishName,
           description,
           instructions: prepMethod,
-          menu_category: menuCategory,
           serving_size: servingSize,
           price,
           image: dishImage,
           ingredients: [], // TODO: Map ingredients to ingredient IDs
           confirmed: true,
+          menu_section_ids: resolvedSectionId !== null ? [resolvedSectionId] : [],
         });
         updatedRecipesList = [...recipes, savedRecipe];
       }
@@ -427,9 +478,16 @@ const Index = () => {
       return;
     }
 
+    const archiveSectionNumericId = resolveSectionId(ARCHIVE_SECTION_ID);
+
     try {
       await Promise.all(
-        recipeIds.map((recipeId) => updateRecipeAPI(recipeId, { menu_category: ARCHIVE_SECTION_ID })),
+        recipeIds.map((recipeId) =>
+          updateRecipeAPI(recipeId, {
+            menu_section_ids:
+              archiveSectionNumericId !== null ? [archiveSectionNumericId] : [],
+          }),
+        ),
       );
 
       toast.success(
@@ -638,8 +696,8 @@ const Index = () => {
                   value={dishName}
                   onChange={setDishName}
                   onRecipeMatch={handleRecipeMatch}
-                  menuCategory={menuCategory}
-                  onMenuCategoryChange={setMenuCategory}
+                  menuSectionId={menuSectionId}
+                  onMenuSectionChange={setMenuSectionId}
                   description={description}
                   onDescriptionChange={setDescription}
                   servingSize={servingSize}
@@ -654,6 +712,7 @@ const Index = () => {
                   }))}
                   selectedDishId={editingDishId ? editingDishId.toString() : null}
                   onClearSelectedDish={handleClearDishSelection}
+                  restaurantId={restaurant?.id}
                 />
 
                 <IngredientsList
@@ -712,6 +771,7 @@ const Index = () => {
                 onToggleMenuStatus={handleToggleMenuStatus}
                 onMoveDishesToArchive={handleMoveDishesToArchive}
                 formatPrice={formatPrice}
+                restaurantId={restaurant?.id ?? null}
               />
             </div>
           </TabsContent>
@@ -722,6 +782,7 @@ const Index = () => {
               restaurantName={restaurant?.name || "My Restaurant"}
               showImages={showMenuImages}
               formatPrice={formatPrice}
+              restaurantId={restaurant?.id ?? null}
             />
           </TabsContent>
 

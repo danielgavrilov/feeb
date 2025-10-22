@@ -247,18 +247,46 @@ class UserRestaurant(Base):
 class Menu(Base):
     """Menu information."""
     __tablename__ = "menu"
-    
+
     id = mapped_column(Integer, primary_key=True, autoincrement=True)
     restaurant_id = mapped_column(Integer, ForeignKey("restaurant.id"), nullable=False)
     name = mapped_column(Text, nullable=False)
     description = mapped_column(Text, nullable=True)
     menu_active = mapped_column(Integer, default=1)
     created_at = mapped_column(TIMESTAMP, default=func.now())
-    
+
     # Relationships
     restaurant: Mapped["Restaurant"] = relationship("Restaurant", back_populates="menus")
-    recipes: Mapped[List["MenuRecipe"]] = relationship(
-        "MenuRecipe", back_populates="menu", cascade="all, delete-orphan"
+    sections: Mapped[List["MenuSection"]] = relationship(
+        "MenuSection",
+        back_populates="menu",
+        cascade="all, delete-orphan",
+        order_by="MenuSection.position",
+    )
+
+
+class MenuSection(Base):
+    """Logical grouping of dishes within a menu."""
+
+    __tablename__ = "menu_section"
+
+    id = mapped_column(Integer, primary_key=True, autoincrement=True)
+    menu_id = mapped_column(Integer, ForeignKey("menu.id"), nullable=False)
+    name = mapped_column(Text, nullable=False)
+    position = mapped_column(Integer, nullable=True)
+    created_at = mapped_column(TIMESTAMP, default=func.now(), nullable=False)
+
+    menu: Mapped["Menu"] = relationship("Menu", back_populates="sections")
+    recipes: Mapped[List["MenuSectionRecipe"]] = relationship(
+        "MenuSectionRecipe",
+        back_populates="section",
+        cascade="all, delete-orphan",
+        order_by="MenuSectionRecipe.position",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("menu_id", "name", name="uq_menu_section_menu_name"),
+        Index("ix_menu_section_menu_id", "menu_id"),
     )
 
 
@@ -271,7 +299,6 @@ class Recipe(Base):
     name = mapped_column(Text, nullable=False)
     description = mapped_column(Text, nullable=True)
     instructions = mapped_column(Text, nullable=True)
-    menu_category = mapped_column(Text, nullable=True)
     serving_size = mapped_column(Text, nullable=True)
     price = mapped_column(Text, nullable=True)
     image = mapped_column(Text, nullable=True)
@@ -281,28 +308,36 @@ class Recipe(Base):
     confirmed = mapped_column(Boolean, nullable=False, default=False)
     is_on_menu = mapped_column(Boolean, nullable=False, default=False)
     created_at = mapped_column(TIMESTAMP, default=func.now())
-    
+
     # Relationships
     restaurant: Mapped["Restaurant"] = relationship("Restaurant", back_populates="recipes")
-    menus: Mapped[List["MenuRecipe"]] = relationship(
-        "MenuRecipe", back_populates="recipe", cascade="all, delete-orphan"
+    section_links: Mapped[List["MenuSectionRecipe"]] = relationship(
+        "MenuSectionRecipe",
+        back_populates="recipe",
+        cascade="all, delete-orphan",
     )
     ingredients: Mapped[List["RecipeIngredient"]] = relationship(
         "RecipeIngredient", back_populates="recipe", cascade="all, delete-orphan"
     )
 
 
-class MenuRecipe(Base):
-    """Many-to-many link between menus and recipes."""
-    __tablename__ = "menu_recipe"
-    
-    menu_id = mapped_column(Integer, ForeignKey("menu.id"), primary_key=True)
+class MenuSectionRecipe(Base):
+    """Many-to-many link between menu sections and recipes."""
+
+    __tablename__ = "menu_section_recipe"
+
+    section_id = mapped_column(Integer, ForeignKey("menu_section.id"), primary_key=True)
     recipe_id = mapped_column(Integer, ForeignKey("recipe.id"), primary_key=True)
     position = mapped_column(Integer, nullable=True)
-    
+
     # Relationships
-    menu: Mapped["Menu"] = relationship("Menu", back_populates="recipes")
-    recipe: Mapped["Recipe"] = relationship("Recipe", back_populates="menus")
+    section: Mapped["MenuSection"] = relationship("MenuSection", back_populates="recipes")
+    recipe: Mapped["Recipe"] = relationship("Recipe", back_populates="section_links")
+
+    __table_args__ = (
+        Index("ix_menu_section_recipe_section_id", "section_id"),
+        Index("ix_menu_section_recipe_recipe_id", "recipe_id"),
+    )
 
 
 class RecipeIngredient(Base):
@@ -548,13 +583,56 @@ class IngredientSubstitutionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class MenuSectionResponse(BaseModel):
+    """Serialized menu section."""
+
+    id: int
+    menu_id: int
+    name: str
+    position: Optional[int] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MenuSectionUpsert(BaseModel):
+    """Payload for updating/creating menu sections."""
+
+    id: Optional[int] = None
+    name: str
+    position: Optional[int] = None
+
+
+class RestaurantMenuSectionsResponse(BaseModel):
+    """Menu sections grouped under a restaurant's primary menu."""
+
+    menu: MenuResponse
+    sections: List[MenuSectionResponse]
+
+
+class MenuSectionsUpdateRequest(BaseModel):
+    """Request payload for updating restaurant sections."""
+
+    sections: List[MenuSectionUpsert]
+
+
+class RecipeSectionLinkResponse(BaseModel):
+    """Recipe placement within a menu section."""
+
+    menu_id: int
+    menu_name: str
+    section_id: int
+    section_name: str
+    section_position: Optional[int] = None
+    recipe_position: Optional[int] = None
+
+
 class RecipeCreate(BaseModel):
     """Request model for creating a recipe."""
     restaurant_id: int
     name: str
     description: Optional[str] = None
     instructions: Optional[str] = None
-    menu_category: Optional[str] = None
     serving_size: Optional[str] = None
     price: Optional[str] = None
     image: Optional[str] = None
@@ -563,6 +641,7 @@ class RecipeCreate(BaseModel):
     prominence_score: Optional[float] = None
     confirmed: Optional[bool] = None
     is_on_menu: Optional[bool] = None
+    menu_section_ids: Optional[List[int]] = None
     ingredients: Optional[List[RecipeIngredientRequest]] = []
 
 
@@ -571,7 +650,6 @@ class RecipeUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     instructions: Optional[str] = None
-    menu_category: Optional[str] = None
     serving_size: Optional[str] = None
     price: Optional[str] = None
     image: Optional[str] = None
@@ -580,6 +658,7 @@ class RecipeUpdate(BaseModel):
     prominence_score: Optional[float] = None
     confirmed: Optional[bool] = None
     is_on_menu: Optional[bool] = None
+    menu_section_ids: Optional[List[int]] = None
 
 
 class RecipeResponse(BaseModel):
@@ -589,7 +668,6 @@ class RecipeResponse(BaseModel):
     name: str
     description: Optional[str] = None
     instructions: Optional[str] = None
-    menu_category: Optional[str] = None
     serving_size: Optional[str] = None
     price: Optional[str] = None
     image: Optional[str] = None
@@ -599,6 +677,7 @@ class RecipeResponse(BaseModel):
     confirmed: bool
     is_on_menu: bool
     created_at: datetime
+    sections: List[RecipeSectionLinkResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -610,7 +689,6 @@ class RecipeWithIngredients(BaseModel):
     name: str
     description: Optional[str] = None
     instructions: Optional[str] = None
-    menu_category: Optional[str] = None
     serving_size: Optional[str] = None
     price: Optional[str] = None
     image: Optional[str] = None
@@ -620,6 +698,7 @@ class RecipeWithIngredients(BaseModel):
     confirmed: bool
     is_on_menu: bool
     created_at: datetime
+    sections: List[RecipeSectionLinkResponse] = []
     ingredients: List[RecipeIngredientResponse] = []
 
     model_config = ConfigDict(from_attributes=True)

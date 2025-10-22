@@ -7,15 +7,24 @@ import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { loadSavedMenuSections, MENU_SECTIONS_EVENT, saveMenuSections, StoredMenuSection } from "@/lib/menu-sections";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  allocateTemporarySection,
+  loadSavedMenuSections,
+  MENU_SECTIONS_EVENT,
+  refreshMenuSections,
+  saveMenuSections,
+  type MenuSectionsEventDetail,
+  type StoredMenuSection,
+} from "@/lib/menu-sections";
 import { shouldOpenDishSuggestions } from "./dishSuggestionState.js";
 
 const FALLBACK_MENU_SECTIONS: StoredMenuSection[] = [
-  { id: "appetizer", label: "Appetizer" },
-  { id: "main", label: "Main" },
-  { id: "side", label: "Side" },
-  { id: "dessert", label: "Dessert" },
-  { id: "beverage", label: "Beverage" },
+  { id: -101, label: "Appetizer", isTemporary: true },
+  { id: -102, label: "Main", isTemporary: true },
+  { id: -103, label: "Side", isTemporary: true },
+  { id: -104, label: "Dessert", isTemporary: true },
+  { id: -105, label: "Beverage", isTemporary: true },
 ];
 
 export interface DishSuggestion {
@@ -28,8 +37,8 @@ interface DishNameInputProps {
   value: string;
   onChange: (value: string) => void;
   onRecipeMatch: (recipeId: string) => void;
-  menuCategory: string;
-  onMenuCategoryChange: (value: string) => void;
+  menuSectionId: string;
+  onMenuSectionChange: (value: string) => void;
   description: string;
   onDescriptionChange: (value: string) => void;
   servingSize: string;
@@ -40,14 +49,15 @@ interface DishNameInputProps {
   existingDishes: DishSuggestion[];
   selectedDishId?: string | null;
   onClearSelectedDish?: () => void;
+  restaurantId?: number | null;
 }
 
 export const DishNameInput = ({
   value,
   onChange,
   onRecipeMatch,
-  menuCategory,
-  onMenuCategoryChange,
+  menuSectionId,
+  onMenuSectionChange,
   description,
   onDescriptionChange,
   servingSize,
@@ -58,74 +68,106 @@ export const DishNameInput = ({
   existingDishes,
   selectedDishId,
   onClearSelectedDish,
+  restaurantId,
 }: DishNameInputProps) => {
   const [showOptional, setShowOptional] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [isPopoverHovered, setIsPopoverHovered] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const hasSelectedDish = Boolean(selectedDishId);
-  const [menuSections, setMenuSections] = useState<StoredMenuSection[]>(() => {
-    const savedSections = loadSavedMenuSections();
-    return savedSections.length > 0 ? savedSections : [...FALLBACK_MENU_SECTIONS];
-  });
+  const [menuSections, setMenuSections] = useState<StoredMenuSection[]>([...FALLBACK_MENU_SECTIONS]);
+  const [isSectionsLoading, setIsSectionsLoading] = useState(false);
+  const [sectionsError, setSectionsError] = useState<string | null>(null);
   const [newSectionLabel, setNewSectionLabel] = useState("");
 
   useEffect(() => {
-    if (typeof window === "undefined") {
+    if (!restaurantId) {
+      setMenuSections([...FALLBACK_MENU_SECTIONS]);
+      return;
+    }
+
+    const cached = loadSavedMenuSections(restaurantId);
+    setMenuSections(cached.sections.length > 0 ? cached.sections : [...FALLBACK_MENU_SECTIONS]);
+    setSectionsError(null);
+    setIsSectionsLoading(true);
+
+    refreshMenuSections(restaurantId)
+      .then(({ sections }) => {
+        setMenuSections(sections.length > 0 ? sections : [...FALLBACK_MENU_SECTIONS]);
+      })
+      .catch((error) => {
+        console.error("Failed to refresh dish sections", error);
+        setSectionsError("Unable to refresh menu sections.");
+      })
+      .finally(() => {
+        setIsSectionsLoading(false);
+      });
+  }, [restaurantId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !restaurantId) {
       return;
     }
 
     const handleSectionsUpdated = (event: Event) => {
-      const customEvent = event as CustomEvent<StoredMenuSection[]>;
-      const updatedSections =
-        Array.isArray(customEvent.detail) && customEvent.detail.length > 0
-          ? customEvent.detail
-          : loadSavedMenuSections();
-      setMenuSections(updatedSections.length > 0 ? updatedSections : [...FALLBACK_MENU_SECTIONS]);
+      const customEvent = event as CustomEvent<MenuSectionsEventDetail>;
+      if (!customEvent.detail || customEvent.detail.restaurantId !== restaurantId) {
+        return;
+      }
+
+      setMenuSections(
+        customEvent.detail.sections.length > 0
+          ? customEvent.detail.sections
+          : [...FALLBACK_MENU_SECTIONS],
+      );
     };
 
     window.addEventListener(MENU_SECTIONS_EVENT, handleSectionsUpdated);
     return () => {
       window.removeEventListener(MENU_SECTIONS_EVENT, handleSectionsUpdated);
     };
-  }, []);
+  }, [restaurantId]);
 
   const sectionLabelMap = useMemo(() => {
     const entries = new Map<string, string>();
     FALLBACK_MENU_SECTIONS.forEach((section) => {
-      entries.set(section.id, section.label);
+      entries.set(section.id.toString(), section.label);
     });
     menuSections.forEach((section) => {
-      entries.set(section.id, section.label);
+      entries.set(section.id.toString(), section.label);
     });
     return entries;
   }, [menuSections]);
 
   const sectionOptions = menuSections.length > 0 ? menuSections : FALLBACK_MENU_SECTIONS;
 
-  const handleAddSection = () => {
+  const handleAddSection = async () => {
     const trimmedLabel = newSectionLabel.trim();
     if (!trimmedLabel) {
       return;
     }
 
-    const baseId = trimmedLabel
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-    const existingIds = new Set(sectionOptions.map((section) => section.id));
-    let candidateId = baseId.length > 0 ? baseId : `section-${Date.now()}`;
-    let suffix = 1;
-    while (existingIds.has(candidateId)) {
-      candidateId = baseId.length > 0 ? `${baseId}-${suffix}` : `section-${Date.now()}-${suffix}`;
-      suffix += 1;
+    if (!restaurantId) {
+      const temp = allocateTemporarySection(trimmedLabel);
+      setMenuSections((prev) => [...prev, temp]);
+      onMenuSectionChange(temp.id.toString());
+      setNewSectionLabel("");
+      return;
     }
 
-    const nextSections = [...sectionOptions, { id: candidateId, label: trimmedLabel }];
-    setMenuSections(nextSections);
-    saveMenuSections(nextSections);
-    onMenuCategoryChange(candidateId);
-    setNewSectionLabel("");
+    try {
+      const temp = allocateTemporarySection(trimmedLabel);
+      const { sections } = await saveMenuSections(restaurantId, [...sectionOptions, temp]);
+      setMenuSections(sections.length > 0 ? sections : [...FALLBACK_MENU_SECTIONS]);
+      const created = sections.find((section) => section.label === trimmedLabel) ?? sections[sections.length - 1];
+      if (created) {
+        onMenuSectionChange(created.id.toString());
+      }
+      setNewSectionLabel("");
+    } catch (error) {
+      console.error("Failed to create menu section", error);
+      setSectionsError("Unable to create menu section. Please try again.");
+    }
   };
 
   const canAddSection = newSectionLabel.trim().length > 0;
@@ -215,8 +257,8 @@ export const DishNameInput = ({
   });
 
   const optionalSummaryItems: string[] = [];
-  if (menuCategory) {
-    optionalSummaryItems.push(sectionLabelMap.get(menuCategory) ?? menuCategory);
+  if (menuSectionId) {
+    optionalSummaryItems.push(sectionLabelMap.get(menuSectionId) ?? menuSectionId);
   }
   if (servingSize && servingSize !== "1") {
     optionalSummaryItems.push(`Serves ${servingSize}`);
@@ -232,6 +274,11 @@ export const DishNameInput = ({
 
   return (
     <div className="space-y-4">
+      {sectionsError && (
+        <Alert variant="destructive" className="flex items-start gap-2">
+          <AlertDescription>{sectionsError}</AlertDescription>
+        </Alert>
+      )}
       <div className="space-y-3">
         <Label htmlFor="dish-name" className="text-xl font-semibold text-foreground">
           Dish Name
@@ -344,13 +391,13 @@ export const DishNameInput = ({
               <Label htmlFor="menu-category" className="text-sm text-muted-foreground">
                 Menu Category
               </Label>
-              <Select value={menuCategory} onValueChange={onMenuCategoryChange}>
+              <Select value={menuSectionId} onValueChange={onMenuSectionChange}>
                 <SelectTrigger id="menu-category" className="h-12">
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
                   {sectionOptions.map((section) => (
-                    <SelectItem key={section.id} value={section.id}>
+                    <SelectItem key={section.id} value={section.id.toString()}>
                       {section.label}
                     </SelectItem>
                   ))}
@@ -383,6 +430,9 @@ export const DishNameInput = ({
                   </div>
                 </SelectContent>
               </Select>
+              {sectionsError && (
+                <p className="text-xs text-destructive mt-1">{sectionsError}</p>
+              )}
             </div>
 
             <div className="space-y-2">
