@@ -176,7 +176,7 @@ export const LandingPage = ({
   return (
     <div className="space-y-8 py-4">
       <section
-        className="rounded-3xl border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-rose-50 p-6 shadow-sm"
+        className="rounded-3xl border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-rose-50 p-4 shadow-sm sm:p-6"
       >
         <p className="text-xs font-semibold uppercase tracking-wide text-orange-500">
           {carouselStep ? t("landing.heroLive") : t("landing.heroGettingLive")}
@@ -238,11 +238,11 @@ export const LandingPage = ({
       <ProgressTracker steps={progressSteps} summary={progressSummary} />
 
       <section>
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-lg font-semibold text-foreground">{t("landing.quickActionsTitle")}</h2>
-          <span className="text-xs text-muted-foreground">{t("landing.quickActionsSubtitle")}</span>
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+          <h2 className="text-lg font-semibold text-foreground">Quick actions</h2>
+          <span className="text-xs text-muted-foreground">Focus on one task at a time</span>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {quickActions.map(action => (
             <Link key={action.id} to={action.href}>
               <Card className="flex h-full flex-col gap-2 rounded-2xl border border-border/70 p-4 transition hover:-translate-y-1 hover:border-emerald-400 hover:shadow-md">

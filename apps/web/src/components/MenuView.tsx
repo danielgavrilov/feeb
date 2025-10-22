@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { Search, X } from "lucide-react";
 
-import { SavedDish } from "./RecipeBook";
+import { SavedDish, getDishAllergenDefinitions } from "./RecipeBook";
 import { DishCard } from "./menu/DishCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,82 @@ const getFallbackCategoryLabel = (categoryId: string) =>
 
 const allergenSummaryCache = new WeakMap<SavedDish, ReturnType<typeof summarizeDishAllergens>>();
 
+type DishAllergenSummary = ReturnType<typeof summarizeDishAllergens>;
+
+const buildNormalizedCodeSet = (definition: AllergenFilterDefinition) => {
+  const normalizedCodes = new Set<string>();
+  const addCode = (value?: string) => {
+    if (!value) {
+      return;
+    }
+    const normalized = value.toLowerCase();
+    normalizedCodes.add(normalized);
+    if (normalized.includes(":")) {
+      const unprefixed = normalized.split(":").pop();
+      if (unprefixed) {
+        normalizedCodes.add(unprefixed);
+      }
+    }
+  };
+
+  addCode(definition.id);
+  definition.codes.forEach(addCode);
+  return normalizedCodes;
+};
+
+const buildNormalizedKeywordSet = (definition: AllergenFilterDefinition) => {
+  const keywords = new Set<string>();
+  [definition.name, ...definition.keywords].forEach((keyword) => {
+    const normalized = keyword.trim().toLowerCase();
+    if (normalized) {
+      keywords.add(normalized);
+    }
+  });
+  return keywords;
+};
+
+const getDefinitionMemberNames = (
+  summary: DishAllergenSummary,
+  definition: AllergenFilterDefinition,
+) => {
+  const normalizedCodes = buildNormalizedCodeSet(definition);
+  const normalizedKeywords = buildNormalizedKeywordSet(definition);
+  const members = new Set<string>();
+
+  summary.canonicalAllergens.forEach((allergen) => {
+    const code = allergen.code?.toLowerCase() ?? "";
+    const shortCode = code.includes(":") ? code.split(":").pop() ?? "" : code;
+    const familyCode = allergen.familyCode?.toLowerCase() ?? "";
+    const familyShortCode = familyCode.includes(":") ? familyCode.split(":").pop() ?? "" : familyCode;
+    const canonicalName = allergen.name?.trim();
+    const canonicalNameLower = canonicalName?.toLowerCase() ?? "";
+    const familyNameLower = allergen.familyName?.toLowerCase() ?? "";
+
+    if (
+      (code && normalizedCodes.has(code)) ||
+      (shortCode && normalizedCodes.has(shortCode)) ||
+      (familyCode && normalizedCodes.has(familyCode)) ||
+      (familyShortCode && normalizedCodes.has(familyShortCode))
+    ) {
+      if (canonicalName) {
+        members.add(canonicalName);
+      }
+      return;
+    }
+
+    if (
+      (canonicalNameLower && normalizedKeywords.has(canonicalNameLower)) ||
+      (familyNameLower && normalizedKeywords.has(familyNameLower))
+    ) {
+      if (canonicalName) {
+        members.add(canonicalName);
+      }
+    }
+  });
+
+  return Array.from(members);
+};
+
 const getDishAllergenSummary = (dish: SavedDish) => {
   const cached = allergenSummaryCache.get(dish);
   if (cached) {
@@ -61,6 +137,7 @@ const dishContainsAllergen = (dish: SavedDish, allergenId: string) => {
     return false;
   }
 
+  const summary = getDishAllergenSummary(dish);
   const { codes, keywords, category } = definition;
   const normalizedCodeSet = new Set<string>([definition.id.toLowerCase(), ...codes.map((code) => code.toLowerCase())]);
   const normalizedNameSet = new Set<string>([
@@ -70,29 +147,54 @@ const dishContainsAllergen = (dish: SavedDish, allergenId: string) => {
   const normalizedKeywords = keywords.map((keyword) => keyword.toLowerCase());
 
   if (definition.id === "vegan") {
+    const summary = getDishAllergenSummary(dish);
     return !isVeganFriendly(summary);
   }
+
+  if (definition.id === "vegetarian") {
+    return !isVegetarianFriendly(summary);
+  }
+
+  return dish.ingredients.some((ingredient) => {
+    const ingredientName = ingredient.name?.toLowerCase() ?? "";
+    const allergens = ingredient.allergens ?? [];
+
+    const matchesAllergenList = allergens.some((allergen) => {
+      const code = allergen.code?.toLowerCase() ?? "";
+      const name = allergen.name?.toLowerCase() ?? "";
 
       if (normalizedCodeSet.has(code) || normalizedCodeSet.has(name)) {
         return true;
       }
 
-      if (normalizedNameSet.has(code) || normalizedNameSet.has(name)) {
-        return true;
-      }
+  const normalizedCodeSet = buildNormalizedCodeSet(definition);
+  const normalizedKeywordSet = buildNormalizedKeywordSet(definition);
 
-      const canonicalMatch = allergenFilterMap.get(code);
-      if (canonicalMatch?.id === definition.id) {
-        return true;
-      }
+  for (const code of summary.canonicalCodes) {
+    if (normalizedCodeSet.has(code.toLowerCase())) {
+      return true;
+    }
+  }
 
-      return normalizedKeywords.some((candidate) => code.includes(candidate) || name.includes(candidate));
-    }) ||
-    (category === "diet" &&
-      Array.from(normalizedCodeSet).some((candidate) =>
-        ingredient.name.toLowerCase().includes(candidate.replace("en:", "")),
-      )),
-  );
+  for (const family of summary.familyCodes) {
+    if (normalizedCodeSet.has(family.toLowerCase())) {
+      return true;
+    }
+  }
+
+  for (const allergen of summary.canonicalAllergens) {
+    const canonicalName = allergen.name?.toLowerCase();
+    if (canonicalName && normalizedKeywordSet.has(canonicalName)) {
+      return true;
+    }
+
+    const familyName = allergen.familyName?.toLowerCase();
+    if (familyName && normalizedKeywordSet.has(familyName)) {
+      return true;
+    }
+  }
+
+  return false;
 };
 
 interface MenuViewProps {
@@ -373,6 +475,8 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
     return [...matching, ...nonMatching];
   }, [allergenProcessedMenuDishes, filterMode, ingredientMatchResults, ingredientMatchers.length]);
 
+  const hasActiveFilters = selectedAllergens.length > 0 || ingredientSearchTerms.length > 0;
+
   const handleSelectAllergen = (allergenId: string) => {
     setSelectedAllergens((prev) => (prev.includes(allergenId) ? prev : [...prev, allergenId]));
   };
@@ -437,18 +541,18 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
   }, [savedSections, visibleMenuDishes]);
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-background">
-        <div className="container mx-auto px-4 py-6">
-          <h1 className="text-3xl font-bold text-foreground">{restaurantName}</h1>
+    <div className="bg-background">
+      <header className="border-b border-border/60 bg-background/80">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 px-4 py-4 sm:px-6 sm:py-6">
+          <h1 className="text-2xl font-bold text-foreground sm:text-3xl">{restaurantName}</h1>
           <p className="text-sm text-muted-foreground">
             These dishes are currently available on your menu.
           </p>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8 space-y-10">
-        <section className="bg-card border border-border/60 rounded-xl p-6 shadow-sm">
+      <main className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-4 py-6 sm:px-6 sm:py-10">
+        <section className="rounded-xl border border-border/60 bg-card p-4 shadow-sm sm:p-6">
           <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div className="space-y-1">
@@ -469,16 +573,6 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
                     Show ingredients
                   </Label>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    id="exclude-selection"
-                    checked={filterMode === "exclude"}
-                    onCheckedChange={(checked) => setFilterMode(checked ? "exclude" : "highlight")}
-                  />
-                  <Label htmlFor="exclude-selection" className="text-sm font-medium text-foreground">
-                    Exclude selection
-                  </Label>
-                </div>
               </div>
             </div>
 
@@ -489,7 +583,7 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
                     Pick an allergen
                   </Label>
                   <Select onValueChange={handleSelectAllergen}>
-                    <SelectTrigger id="allergen-select">
+                    <SelectTrigger id="allergen-select" className="w-full">
                       <SelectValue placeholder="Select an allergen or dietary tag" />
                     </SelectTrigger>
                     <SelectContent>
@@ -536,6 +630,21 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
                   </form>
                 </div>
               </div>
+
+              {hasActiveFilters && (
+                <div className="flex justify-end">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="exclude-selection"
+                      checked={filterMode === "exclude"}
+                      onCheckedChange={(checked) => setFilterMode(checked ? "exclude" : "highlight")}
+                    />
+                    <Label htmlFor="exclude-selection" className="text-sm font-medium text-foreground">
+                      Exclude selection
+                    </Label>
+                  </div>
+                </div>
+              )}
 
               {(selectedAllergens.length > 0 || ingredientSearchTerms.length > 0) && (
                 <div className="flex flex-wrap items-center gap-2">
@@ -622,7 +731,7 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
 
             return (
               <section key={categoryId} className="space-y-4">
-                <div className="flex items-baseline justify-between">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
                   <h2 className="text-2xl font-semibold text-foreground">
                     {sectionLabelMap.get(categoryId) ?? getFallbackCategoryLabel(categoryId)}
                   </h2>
@@ -631,9 +740,27 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {dishesInCategory.map((dish) => {
                     const ingredientMatch = ingredientMatchResults.get(dish.id);
+                    const summary = getDishAllergenSummary(dish);
+                    const allergenDefinitions = getDishAllergenDefinitions(dish, summary);
+                    const allergenBadges = allergenDefinitions.map((definition) => {
+                      const memberNames = getDefinitionMemberNames(summary, definition)
+                        .map((name) => name.trim())
+                        .filter((name): name is string => Boolean(name));
+                      const sortedMembers = [...memberNames].sort((a, b) =>
+                        a.localeCompare(b, undefined, { sensitivity: "base" }),
+                      );
+                      const label =
+                        definition.category === "allergen" && sortedMembers.length > 0
+                          ? `Contains: ${sortedMembers
+                              .map((name) => name.toLowerCase())
+                              .join(", ")}`
+                          : definition.name;
+
+                      return { definition, label };
+                    });
                     const highlightedAllergens =
                       filterMode === "highlight"
                         ? selectedAllergens
@@ -652,6 +779,7 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
                         showIngredients={showIngredients}
                         highlightedAllergens={highlightedAllergens}
                         highlightedIngredientTerms={highlightedIngredientTerms}
+                        allergenBadges={allergenBadges}
                         formatPrice={formatPrice}
                       />
                     );

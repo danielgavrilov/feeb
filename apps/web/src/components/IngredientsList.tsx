@@ -23,28 +23,83 @@ import { parsePriceInput } from "@/lib/price-format";
 import type { AllergenConfidence } from "@/lib/api";
 
 const LEGACY_ALLERGEN_ALIASES: Record<string, string[]> = {
-  cereals_gluten: ["gluten"],
-  "cereals_gluten:wheat": ["wheat", "farina", "semolina", "durum"],
-  "cereals_gluten:rye": ["rye", "pumpernickel", "secale"],
-  "cereals_gluten:barley": ["barley", "malt", "hordeum"],
-  "cereals_gluten:oats": ["oat", "oats", "avena"],
-  "cereals_gluten:spelt": ["spelt", "dinkel"],
-  "cereals_gluten:triticale": ["triticale"],
+  cereals_gluten: [
+    "gluten",
+    "gluten_wheat",
+    "gluten_barley",
+    "gluten_rye",
+    "gluten_oats",
+    "gluten_spelt",
+    "gluten_triticale",
+    "cereals_gluten:wheat",
+    "cereals_gluten:rye",
+    "cereals_gluten:barley",
+    "cereals_gluten:oats",
+    "cereals_gluten:spelt",
+    "cereals_gluten:triticale",
+    "wheat",
+    "farina",
+    "semolina",
+    "durum",
+    "rye",
+    "pumpernickel",
+    "secale",
+    "barley",
+    "malt",
+    "hordeum",
+    "oat",
+    "oats",
+    "avena",
+    "spelt",
+    "dinkel",
+    "triticale",
+  ],
   crustaceans: ["shellfish"],
   eggs: ["egg", "eggs"],
   fish: ["fish"],
   peanuts: ["peanut", "peanuts"],
   soybeans: ["soy", "soya"],
   milk: ["dairy", "lactose"],
-  tree_nuts: ["nuts", "tree nuts"],
-  "tree_nuts:almonds": ["almond", "almonds"],
-  "tree_nuts:hazelnuts": ["hazelnut", "hazelnuts", "filbert"],
-  "tree_nuts:walnuts": ["walnut", "walnuts"],
-  "tree_nuts:cashews": ["cashew", "cashews"],
-  "tree_nuts:pecans": ["pecan", "pecans"],
-  "tree_nuts:brazil_nuts": ["brazil nut", "brazil nuts"],
-  "tree_nuts:pistachios": ["pistachio", "pistachios"],
-  "tree_nuts:macadamia": ["macadamia", "macadamia nut", "macadamia nuts"],
+  tree_nuts: [
+    "nuts",
+    "tree nuts",
+    "nuts_almond",
+    "nuts_hazelnut",
+    "nuts_walnut",
+    "nuts_cashew",
+    "nuts_pecan",
+    "nuts_brazil_nut",
+    "nuts_pistachio",
+    "nuts_macadamia",
+    "tree_nuts:almonds",
+    "tree_nuts:hazelnuts",
+    "tree_nuts:walnuts",
+    "tree_nuts:cashews",
+    "tree_nuts:pecans",
+    "tree_nuts:brazil_nuts",
+    "tree_nuts:pistachios",
+    "tree_nuts:macadamia",
+    "almond",
+    "almonds",
+    "hazelnut",
+    "hazelnuts",
+    "filbert",
+    "walnut",
+    "walnuts",
+    "cashew",
+    "cashews",
+    "pecan",
+    "pecans",
+    "brazil nut",
+    "brazil nuts",
+    "pistachio",
+    "pistachios",
+    "macadamia",
+    "macadamia nut",
+    "macadamia nuts",
+    "praline",
+    "gianduja",
+  ],
   celery: ["celery", "celeriac"],
   mustard: ["mustard"],
   sesame: ["sesame", "tahini"],
@@ -388,18 +443,18 @@ export const IngredientsList = ({
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
                       <Input
                         type="number"
                         value={ingredient.quantity}
                         onChange={(e) => onUpdateIngredient(index, e.target.value)}
-                        className="h-11 w-28 text-lg font-medium"
+                        className="h-11 w-full text-lg font-medium sm:w-28"
                       />
                       <Select
                         value={ingredient.unit || undefined}
                         onValueChange={(value) => onUpdateIngredientUnit(index, value)}
                       >
-                        <SelectTrigger className="h-11 w-32 text-lg">
+                        <SelectTrigger className="h-11 w-full text-lg sm:w-32">
                           <SelectValue placeholder="Unit" />
                         </SelectTrigger>
                         <SelectContent>
@@ -708,11 +763,11 @@ export const IngredientsList = ({
                     )}
                   </div>
 
-                  <div className="flex flex-nowrap items-center justify-end gap-2 md:flex-col md:items-end md:justify-start md:gap-3">
+                  <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end md:flex-col md:items-end md:gap-3">
                     {!ingredient.confirmed && (
                       <button
                         onClick={handleConfirmClick}
-                        className="h-11 px-5 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition-opacity"
+                        className="h-11 w-full rounded-lg bg-primary px-5 font-medium text-primary-foreground transition-opacity hover:opacity-90 sm:w-auto"
                       >
                         Confirm
                       </button>
@@ -721,7 +776,7 @@ export const IngredientsList = ({
                       onClick={() => onDeleteIngredient(index)}
                       variant="outline"
                       size="icon"
-                      className="h-11 w-11 border-2 hover:bg-destructive hover:text-destructive-foreground"
+                      className="h-11 w-full border-2 hover:bg-destructive hover:text-destructive-foreground sm:w-11"
                     >
                       <Trash2 className="w-5 h-5" />
                     </Button>
@@ -790,9 +845,9 @@ export const IngredientsList = ({
         })}
       </div>
 
-      <div className="pt-4 border-t-2 border-border border-dashed">
-        <Label className="text-lg font-semibold text-foreground mb-3 block">Add New Ingredient</Label>
-        <div className="flex gap-3 items-end">
+      <div className="border-t-2 border-border border-dashed pt-4">
+        <Label className="mb-3 block text-lg font-semibold text-foreground">Add New Ingredient</Label>
+        <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-end">
           <div className="flex-1">
             <Label htmlFor="new-ingredient-name" className="text-sm text-muted-foreground mb-1 block">
               Name
@@ -805,8 +860,8 @@ export const IngredientsList = ({
               className="h-12 text-lg"
             />
           </div>
-          <div className="w-28">
-            <Label htmlFor="new-ingredient-quantity" className="text-sm text-muted-foreground mb-1 block">
+          <div className="sm:w-28">
+            <Label htmlFor="new-ingredient-quantity" className="mb-1 block text-sm text-muted-foreground">
               Quantity
             </Label>
             <Input
@@ -818,8 +873,8 @@ export const IngredientsList = ({
               className="h-12 text-lg"
             />
           </div>
-          <div className="w-24">
-            <Label htmlFor="new-ingredient-unit" className="text-sm text-muted-foreground mb-1 block">
+          <div className="sm:w-24">
+            <Label htmlFor="new-ingredient-unit" className="mb-1 block text-sm text-muted-foreground">
               Unit
             </Label>
             <Input
@@ -832,7 +887,7 @@ export const IngredientsList = ({
           </div>
           <Button
             onClick={handleAdd}
-            className="h-12 w-12"
+            className="h-12 w-full sm:w-12"
             size="icon"
           >
             <Plus className="w-6 h-6" />

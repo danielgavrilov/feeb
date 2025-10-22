@@ -157,3 +157,4 @@ The disconnect between code (expecting new schema) and database (still on old sc
 **Prevention:** Follow the workflow documented in `agents.md` every time you change database models.
 
 
+

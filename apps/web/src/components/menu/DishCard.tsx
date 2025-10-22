@@ -11,6 +11,7 @@ interface DishCardProps {
   showIngredients: boolean;
   highlightedAllergens?: AllergenFilterDefinition[];
   highlightedIngredientTerms?: string[];
+  allergenBadges?: Array<{ definition: AllergenFilterDefinition; label: string }>;
   formatPrice: (value: string | number | null | undefined) => string;
 }
 
@@ -20,6 +21,7 @@ export const DishCard = ({
   showIngredients,
   highlightedAllergens = [],
   highlightedIngredientTerms = [],
+  allergenBadges = [],
   formatPrice,
 }: DishCardProps) => {
   const shouldShowImage = showImage && Boolean(dish.image);
@@ -71,11 +73,25 @@ export const DishCard = ({
           </div>
         )}
 
+        {allergenBadges.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {allergenBadges.map(({ definition, label }) => {
+              const Icon = definition.Icon;
+              return (
+                <Badge
+                  key={`badge-${definition.id}`}
+                  className="flex items-center gap-2 rounded-full border border-border/60 bg-muted px-3 py-1 text-xs font-medium text-foreground h-auto"
+                >
+                  <Icon className="h-4 w-4" />
+                  <span className="leading-none sm:text-sm">{label}</span>
+                </Badge>
+              );
+            })}
+          </div>
+        )}
+
         {showIngredients && dish.ingredients.length > 0 && (
           <div className="space-y-1">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              Key ingredients
-            </p>
             <p className="text-xs text-muted-foreground line-clamp-2">
               {dish.ingredients
                 .map((ingredient) => ingredient.name)
