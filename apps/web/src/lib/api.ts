@@ -250,6 +250,28 @@ export async function getUserRestaurants(userId: number): Promise<Restaurant[]> 
   return fetchAPI(`/restaurants/user/${userId}`);
 }
 
+export async function updateRestaurant(
+  restaurantId: number,
+  updates: {
+    name?: string;
+    description?: string;
+    logoDataUrl?: string | null;
+    primaryColor?: string | null;
+    accentColor?: string | null;
+  }
+): Promise<Restaurant> {
+  return fetchAPI(`/restaurants/${restaurantId}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      name: updates.name,
+      description: updates.description,
+      logo_data_url: updates.logoDataUrl,
+      primary_color: updates.primaryColor,
+      accent_color: updates.accentColor,
+    }),
+  });
+}
+
 // ============================================================================
 // Menu API
 // ============================================================================

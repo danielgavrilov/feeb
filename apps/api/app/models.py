@@ -214,6 +214,9 @@ class Restaurant(Base):
     id = mapped_column(Integer, primary_key=True, autoincrement=True)
     name = mapped_column(Text, nullable=False)
     description = mapped_column(Text, nullable=True)
+    logo_data_url = mapped_column(Text, nullable=True)
+    primary_color = mapped_column(String(7), nullable=True)
+    accent_color = mapped_column(String(7), nullable=True)
     created_at = mapped_column(TIMESTAMP, default=func.now())
     
     # Relationships
@@ -468,9 +471,21 @@ class RestaurantResponse(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
+    logo_data_url: Optional[str] = None
+    primary_color: Optional[str] = None
+    accent_color: Optional[str] = None
     created_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
+
+
+class RestaurantUpdate(BaseModel):
+    """Request model for updating a restaurant."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    logo_data_url: Optional[str] = None
+    primary_color: Optional[str] = None
+    accent_color: Optional[str] = None
 
 
 class MenuCreate(BaseModel):

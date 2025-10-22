@@ -647,6 +647,56 @@ async def get_user_restaurants(
     return result.scalars().all()
 
 
+async def update_restaurant(
+    session: AsyncSession,
+    restaurant_id: int,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    logo_data_url: Optional[str] = None,
+    primary_color: Optional[str] = None,
+    accent_color: Optional[str] = None
+) -> Optional:
+    """
+    Update restaurant details.
+    
+    Args:
+        session: Database session
+        restaurant_id: Restaurant ID
+        name: Optional new name
+        description: Optional new description
+        logo_data_url: Optional logo data URL
+        primary_color: Optional primary color (hex)
+        accent_color: Optional accent color (hex)
+    
+    Returns:
+        Updated Restaurant object or None if not found
+    """
+    from .models import Restaurant
+    
+    result = await session.execute(
+        select(Restaurant).where(Restaurant.id == restaurant_id)
+    )
+    restaurant = result.scalar_one_or_none()
+    
+    if not restaurant:
+        return None
+    
+    # Update only provided fields
+    if name is not None:
+        restaurant.name = name
+    if description is not None:
+        restaurant.description = description
+    if logo_data_url is not None:
+        restaurant.logo_data_url = logo_data_url
+    if primary_color is not None:
+        restaurant.primary_color = primary_color
+    if accent_color is not None:
+        restaurant.accent_color = accent_color
+    
+    await session.flush()
+    return restaurant
+
+
 async def create_menu(
     session: AsyncSession,
     restaurant_id: int,

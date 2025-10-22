@@ -17,6 +17,7 @@ from .models import (
     UserResponse,
     RestaurantCreate,
     RestaurantResponse,
+    RestaurantUpdate,
     MenuCreate,
     MenuResponse,
     RecipeCreate,
@@ -198,10 +199,53 @@ async def get_user_restaurants(
             id=r.id,
             name=r.name,
             description=r.description,
+            logo_data_url=r.logo_data_url,
+            primary_color=r.primary_color,
+            accent_color=r.accent_color,
             created_at=r.created_at
         )
         for r in restaurants
     ]
+
+
+@router.put("/restaurants/{restaurant_id}", response_model=RestaurantResponse)
+async def update_restaurant(
+    restaurant_id: int,
+    updates: RestaurantUpdate,
+    session: AsyncSession = Depends(get_db)
+):
+    """
+    Update restaurant details.
+    
+    - **restaurant_id**: Restaurant ID
+    - **updates**: Fields to update (all optional)
+    
+    Returns updated restaurant.
+    """
+    restaurant = await dal.update_restaurant(
+        session,
+        restaurant_id=restaurant_id,
+        name=updates.name,
+        description=updates.description,
+        logo_data_url=updates.logo_data_url,
+        primary_color=updates.primary_color,
+        accent_color=updates.accent_color
+    )
+    
+    if not restaurant:
+        raise HTTPException(status_code=404, detail=f"Restaurant {restaurant_id} not found")
+    
+    await session.commit()
+    
+    return RestaurantResponse(
+        id=restaurant.id,
+        name=restaurant.name,
+        description=restaurant.description,
+        logo_data_url=restaurant.logo_data_url,
+        primary_color=restaurant.primary_color,
+        accent_color=restaurant.accent_color,
+        created_at=restaurant.created_at
+    )
 
 
 @router.post("/menus", response_model=MenuResponse)
