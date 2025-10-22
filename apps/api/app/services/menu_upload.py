@@ -110,7 +110,14 @@ class MenuUploadService:
                 upload.stage0_completed_at = datetime.utcnow()
             session.add(stage)
         await session.flush()
-        await session.refresh(upload, attribute_names=["stages"])
+        
+        # Reload upload with eager-loaded stages to avoid lazy loading issues
+        result = await session.execute(
+            select(MenuUpload)
+            .where(MenuUpload.id == upload.id)
+            .options(selectinload(MenuUpload.stages))
+        )
+        upload = result.scalar_one()
 
         return upload
 

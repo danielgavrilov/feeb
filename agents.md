@@ -217,15 +217,60 @@ pnpm dlx shadcn-ui@latest add <component-name>
 4. Update tests in `apps/api/tests/`
 
 ### Database Migration
+
+**⚠️ CRITICAL: Always follow this workflow when changing database models to avoid data loss!**
+
+When making changes to SQLAlchemy models in `apps/api/app/models.py`:
+
 ```bash
 cd apps/api
 source venv/bin/activate
-# Auto-generate migration
-alembic revision --autogenerate -m "Description"
-# Review and edit migration in alembic/versions/
-# Apply migration
+
+# 1. Check current migration state
+alembic current
+
+# 2. Auto-generate migration based on model changes
+alembic revision --autogenerate -m "Description of changes"
+
+# 3. IMPORTANT: Review the generated migration file in alembic/versions/
+#    - Check that it captures all your changes
+#    - Verify upgrade() and downgrade() logic
+#    - Look for data migration needs
+
+# 4. Apply the migration
 alembic upgrade head
+
+# 5. Verify migration was applied
+alembic current
+
+# 6. Restart the API server to reload models
+#    If running with --reload, it should auto-reload
 ```
+
+**Common Migration Pitfalls:**
+
+1. **Never edit models without creating a migration first**
+   - Changing models.py without a migration causes the code to expect a schema that doesn't exist in the database
+   - This results in runtime errors like "table/column doesn't exist"
+
+2. **Always run `alembic upgrade head` after pulling new code**
+   - If someone else created a migration, you need to apply it to your local database
+   - Check with `alembic current` to see if you're behind
+
+3. **SQLAlchemy Method Names:**
+   - Use `nulls_last()` not `nullsLast()` (snake_case, not camelCase)
+   - Use `model_validate()` not `from_orm()` (Pydantic v2 syntax)
+
+4. **Handling Merge Conflicts:**
+   - If multiple migration heads exist, create a merge migration:
+     ```bash
+     alembic merge -m "merge migration heads" <head1> <head2>
+     alembic upgrade head
+     ```
+
+5. **Data Migration:**
+   - If renaming/removing columns with data, add data migration logic in the migration file
+   - Test migrations on a copy of production data before deploying
 
 ### Adding a New Dependency
 ```bash
@@ -317,7 +362,7 @@ pytest tests/ -v
 
 ---
 
-**Last Updated**: October 16, 2025
+**Last Updated**: October 22, 2025
 
 **Note for AI Agents**: This project is actively developed. Always check the latest README files for updates. When making changes, consider the impact across the monorepo and test both frontend and backend integration.
 

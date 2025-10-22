@@ -1064,6 +1064,13 @@ async def create_recipe(
     await session.flush()
 
     if menu_section_ids is not None:
+        # Reload recipe with eager-loaded section_links to avoid lazy loading
+        result = await session.execute(
+            select(Recipe)
+            .where(Recipe.id == recipe.id)
+            .options(selectinload(Recipe.section_links))
+        )
+        recipe = result.scalar_one()
         await _set_recipe_sections(session, recipe, menu_section_ids)
 
     return recipe.id
