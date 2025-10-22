@@ -140,6 +140,7 @@ const dishContainsAllergen = (dish: SavedDish, allergenId: string) => {
   const summary = getDishAllergenSummary(dish);
 
   if (definition.id === "vegan") {
+    const summary = getDishAllergenSummary(dish);
     return !isVeganFriendly(summary);
   }
 
