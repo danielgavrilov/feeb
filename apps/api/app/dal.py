@@ -5,9 +5,9 @@ All functions use SQLAlchemy async sessions and return Pydantic models.
 
 
 from datetime import datetime
-from typing import Optional, Optional as _Optional, Dict, List
+from typing import Optional, Optional as _Optional, Dict, List, Sequence
 
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, func
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from .models import (
@@ -16,6 +16,12 @@ from .models import (
     IngredientWithAllergens, IngredientResponse, AllergenResponse, AllergenBadgeResponse,
     ProductWithDetails, ProductResponse, ProductIngredientResponse, ProductAllergenResponse,
     RecipeIngredientSubstitution,
+    Menu,
+    MenuSection,
+    MenuSectionRecipe,
+    MenuSectionResponse,
+    MenuSectionUpsert,
+    Recipe,
 )
 
 
@@ -752,13 +758,244 @@ async def get_restaurant_menus(
     return result.scalars().all()
 
 
+async def _get_primary_menu(
+    session: AsyncSession,
+    restaurant_id: int
+) -> Menu:
+    """Fetch the primary menu for a restaurant, creating one if necessary."""
+
+    result = await session.execute(
+        select(Menu)
+        .where(Menu.restaurant_id == restaurant_id)
+        .order_by(Menu.created_at.asc())
+        .limit(1)
+    )
+    menu = result.scalar_one_or_none()
+
+    if menu:
+        return menu
+
+    menu = Menu(
+        restaurant_id=restaurant_id,
+        name="Main Menu",
+        description="",
+        menu_active=1,
+    )
+    session.add(menu)
+    await session.flush()
+    return menu
+
+
+async def _ensure_archive_section(
+    session: AsyncSession,
+    menu: Menu
+) -> MenuSection:
+    """Ensure the archive section exists for a menu."""
+
+    archive_name = "Archive"
+    result = await session.execute(
+        select(MenuSection)
+        .where(
+            MenuSection.menu_id == menu.id,
+            func.lower(MenuSection.name) == archive_name.lower(),
+        )
+        .limit(1)
+    )
+    archive = result.scalar_one_or_none()
+
+    if archive:
+        if archive.position is None:
+            archive.position = 9999
+        return archive
+
+    archive = MenuSection(
+        menu_id=menu.id,
+        name=archive_name,
+        position=9999,
+    )
+    session.add(archive)
+    await session.flush()
+    return archive
+
+
+async def get_or_create_menu_section_by_name(
+    session: AsyncSession,
+    restaurant_id: int,
+    name: Optional[str],
+) -> MenuSection:
+    """Get or create a menu section by name for the restaurant's primary menu."""
+
+    menu = await _get_primary_menu(session, restaurant_id)
+    cleaned_name = (name or "Uncategorized").strip() or "Uncategorized"
+
+    result = await session.execute(
+        select(MenuSection)
+        .where(
+            MenuSection.menu_id == menu.id,
+            func.lower(MenuSection.name) == cleaned_name.lower(),
+        )
+        .limit(1)
+    )
+    section = result.scalar_one_or_none()
+
+    if section:
+        return section
+
+    result = await session.execute(
+        select(MenuSection.position)
+        .where(MenuSection.menu_id == menu.id)
+    )
+    positions = [row[0] for row in result.all() if row[0] is not None]
+    next_position = max(positions, default=-1) + 1
+
+    section = MenuSection(
+        menu_id=menu.id,
+        name=cleaned_name,
+        position=next_position,
+    )
+    session.add(section)
+    await session.flush()
+    return section
+
+
+async def get_restaurant_menu_sections(
+    session: AsyncSession,
+    restaurant_id: int
+) -> tuple[Menu, List[MenuSection]]:
+    """Return the primary menu and its sections for a restaurant."""
+
+    menu = await _get_primary_menu(session, restaurant_id)
+    await _ensure_archive_section(session, menu)
+
+    result = await session.execute(
+        select(MenuSection)
+        .where(MenuSection.menu_id == menu.id)
+        .order_by(MenuSection.position.nullsLast(), MenuSection.created_at.asc())
+    )
+    sections = result.scalars().all()
+    return menu, sections
+
+
+async def save_restaurant_menu_sections(
+    session: AsyncSession,
+    restaurant_id: int,
+    sections_payload: Sequence[MenuSectionUpsert],
+) -> List[MenuSection]:
+    """Replace the section ordering for a restaurant's primary menu."""
+
+    menu = await _get_primary_menu(session, restaurant_id)
+    archive = await _ensure_archive_section(session, menu)
+
+    result = await session.execute(
+        select(MenuSection)
+        .where(MenuSection.menu_id == menu.id)
+    )
+    existing = {section.id: section for section in result.scalars()}
+
+    retained_ids: list[int] = []
+    position_counter = 0
+
+    for payload in sections_payload:
+        desired_position = payload.position if payload.position is not None else position_counter
+        if payload.id:
+            section = existing.get(payload.id)
+            if not section or section.menu_id != menu.id:
+                raise ValueError("Invalid menu section id for restaurant")
+            section.name = payload.name
+            section.position = desired_position
+            retained_ids.append(section.id)
+        else:
+            section = MenuSection(
+                menu_id=menu.id,
+                name=payload.name,
+                position=desired_position,
+            )
+            session.add(section)
+            await session.flush()
+            existing[section.id] = section
+            retained_ids.append(section.id)
+        position_counter = max(position_counter, desired_position + 1)
+
+    # Ensure archive is always present and ordered last
+    archive.position = archive.position if archive.position is not None else position_counter
+    if archive.id not in retained_ids:
+        retained_ids.append(archive.id)
+
+    for section_id, section in list(existing.items()):
+        if section_id in retained_ids:
+            continue
+        if section_id == archive.id:
+            continue
+        # Move recipes to archive before deleting the section
+        for link in list(section.recipes):
+            link.section_id = archive.id
+            link.position = None
+        await session.delete(section)
+
+    await session.flush()
+
+    result = await session.execute(
+        select(MenuSection)
+        .where(MenuSection.menu_id == menu.id)
+        .order_by(MenuSection.position.nullsLast(), MenuSection.created_at.asc())
+    )
+    return result.scalars().all()
+
+
+async def _set_recipe_sections(
+    session: AsyncSession,
+    recipe: Recipe,
+    section_ids: Sequence[int],
+) -> None:
+    """Assign a recipe to the provided menu sections."""
+
+    unique_ids = list(dict.fromkeys(section_ids))
+
+    if not unique_ids:
+        recipe.section_links[:] = []
+        await session.flush()
+        return
+
+    result = await session.execute(
+        select(MenuSection)
+        .where(MenuSection.id.in_(unique_ids))
+        .options(selectinload(MenuSection.menu))
+    )
+    sections = result.scalars().all()
+
+    found_ids = {section.id for section in sections}
+    missing_ids = set(unique_ids) - found_ids
+    if missing_ids:
+        raise ValueError("Invalid menu section ids provided")
+
+    for section in sections:
+        if section.menu.restaurant_id != recipe.restaurant_id:
+            raise ValueError("Menu section does not belong to recipe's restaurant")
+
+    order_map = {section_id: index for index, section_id in enumerate(unique_ids)}
+    existing_map = {link.section_id: link for link in recipe.section_links}
+
+    # Remove stale links
+    for link in list(recipe.section_links):
+        if link.section_id not in order_map:
+            recipe.section_links.remove(link)
+
+    for section in sections:
+        link = existing_map.get(section.id)
+        if not link:
+            link = MenuSectionRecipe(section_id=section.id, recipe_id=recipe.id)
+            recipe.section_links.append(link)
+        link.position = order_map[section.id]
+
+    await session.flush()
+
+
 async def create_recipe(
     session: AsyncSession,
     restaurant_id: int,
     name: str,
     description: Optional[str] = None,
     instructions: Optional[str] = None,
-    menu_category: Optional[str] = None,
     serving_size: Optional[str] = None,
     price: Optional[str] = None,
     image: Optional[str] = None,
@@ -766,7 +1003,8 @@ async def create_recipe(
     special_notes: Optional[str] = None,
     prominence_score: Optional[float] = None,
     confirmed: bool = False,
-    is_on_menu: bool = False
+    is_on_menu: bool = False,
+    menu_section_ids: Optional[Sequence[int]] = None,
 ) -> int:
     """
     Create a new recipe.
@@ -777,7 +1015,6 @@ async def create_recipe(
         name: Recipe name
         description: Optional description
         instructions: Optional preparation instructions
-        menu_category: Optional menu category
         serving_size: Optional serving size
         price: Optional price
         image: Optional image URL
@@ -792,7 +1029,6 @@ async def create_recipe(
         name=name,
         description=description,
         instructions=instructions,
-        menu_category=menu_category,
         serving_size=serving_size,
         price=price,
         image=image,
@@ -804,6 +1040,10 @@ async def create_recipe(
     )
     session.add(recipe)
     await session.flush()
+
+    if menu_section_ids is not None:
+        await _set_recipe_sections(session, recipe, menu_section_ids)
+
     return recipe.id
 
 
@@ -833,10 +1073,15 @@ async def update_recipe(
     if not recipe:
         return None
     
+    menu_section_ids = kwargs.pop("menu_section_ids", None)
+
     for key, value in kwargs.items():
         if hasattr(recipe, key) and value is not None:
             setattr(recipe, key, value)
-    
+
+    if menu_section_ids is not None:
+        await _set_recipe_sections(session, recipe, menu_section_ids)
+
     await session.flush()
     return recipe
 
@@ -1016,7 +1261,10 @@ async def get_recipe_with_details(
                 .selectinload(Ingredient.allergens)
                 .selectinload(IngredientAllergen.allergen),
                 selectinload(RecipeIngredient.substitution),
-            )
+            ),
+            selectinload(Recipe.section_links)
+            .selectinload(MenuSectionRecipe.section)
+            .selectinload(MenuSection.menu),
         )
     )
     recipe = result.scalar_one_or_none()
@@ -1080,13 +1328,36 @@ async def get_recipe_with_details(
             "substitution": substitution_data,
         })
     
+    section_links = sorted(
+        recipe.section_links,
+        key=lambda link: (
+            link.section.position if link.section and link.section.position is not None else 9999,
+            link.position if link.position is not None else 9999,
+        ),
+    )
+    sections = []
+    for link in section_links:
+        section = link.section
+        if not section:
+            continue
+        menu = section.menu
+        sections.append(
+            {
+                "menu_id": section.menu_id,
+                "menu_name": menu.name if menu else "",
+                "section_id": section.id,
+                "section_name": section.name,
+                "section_position": section.position,
+                "recipe_position": link.position,
+            }
+        )
+
     return {
         "id": recipe.id,
         "restaurant_id": recipe.restaurant_id,
         "name": recipe.name,
         "description": recipe.description,
         "instructions": recipe.instructions,
-        "menu_category": recipe.menu_category,
         "serving_size": recipe.serving_size,
         "price": recipe.price,
         "image": recipe.image,
@@ -1096,6 +1367,7 @@ async def get_recipe_with_details(
         "prominence_score": recipe.prominence_score,
         "confirmed": recipe.confirmed,
         "is_on_menu": recipe.is_on_menu,
+        "sections": sections,
         "ingredients": ingredients
     }
 

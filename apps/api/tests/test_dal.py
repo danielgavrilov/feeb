@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from app.database import Base
 from app import dal
-from app.models import Ingredient, Allergen
+from app.models import Ingredient, Allergen, MenuSectionUpsert
 
 
 # Test database URL (use in-memory SQLite for testing)
@@ -148,8 +148,102 @@ async def test_get_ingredient_by_name_fuzzy(test_session):
     # Partial match should work
     result = await dal.get_ingredient_by_name(test_session, "wheat", exact=False)
     assert result is not None
-    
+
     # Case-insensitive should work
     result = await dal.get_ingredient_by_name(test_session, "WHEAT", exact=False)
     assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_create_and_update_recipe_sections(test_session):
+    """Recipes can be created and updated with explicit menu section IDs."""
+
+    user_id = await dal.upsert_user(
+        test_session,
+        supabase_uid="uid-123",
+        email="owner@example.com",
+        name="Owner",
+    )
+    restaurant_id = await dal.create_restaurant(
+        test_session,
+        name="Test Bistro",
+        user_id=user_id,
+    )
+
+    mains = await dal.get_or_create_menu_section_by_name(test_session, restaurant_id, "Mains")
+    desserts = await dal.get_or_create_menu_section_by_name(test_session, restaurant_id, "Desserts")
+
+    recipe_id = await dal.create_recipe(
+        test_session,
+        restaurant_id=restaurant_id,
+        name="Grilled Salmon",
+        menu_section_ids=[mains.id],
+    )
+    await test_session.commit()
+
+    recipe = await dal.get_recipe(test_session, recipe_id)
+    assert recipe is not None
+    assert [section["section_id"] for section in recipe["sections"]] == [mains.id]
+
+    await dal.update_recipe(
+        test_session,
+        recipe_id,
+        menu_section_ids=[desserts.id],
+    )
+    await test_session.commit()
+
+    updated = await dal.get_recipe(test_session, recipe_id)
+    assert updated is not None
+    assert [section["section_id"] for section in updated["sections"]] == [desserts.id]
+
+
+@pytest.mark.asyncio
+async def test_save_menu_sections_moves_recipes_to_archive(test_session):
+    """Removing a section reassigns recipes to the archive section."""
+
+    user_id = await dal.upsert_user(
+        test_session,
+        supabase_uid="uid-456",
+        email="chef@example.com",
+        name="Chef",
+    )
+    restaurant_id = await dal.create_restaurant(
+        test_session,
+        name="Archive Cafe",
+        user_id=user_id,
+    )
+
+    starters = await dal.get_or_create_menu_section_by_name(test_session, restaurant_id, "Starters")
+    specials = await dal.get_or_create_menu_section_by_name(test_session, restaurant_id, "Specials")
+
+    recipe_id = await dal.create_recipe(
+        test_session,
+        restaurant_id=restaurant_id,
+        name="Tomato Soup",
+        menu_section_ids=[starters.id],
+    )
+    await test_session.commit()
+
+    await dal.save_restaurant_menu_sections(
+        test_session,
+        restaurant_id=restaurant_id,
+        sections_payload=[
+            MenuSectionUpsert(id=specials.id, name=specials.name, position=0),
+        ],
+    )
+    await test_session.commit()
+
+    menu, sections = await dal.get_restaurant_menu_sections(test_session, restaurant_id)
+    assert menu.id is not None
+
+    archive_section = next((section for section in sections if section.name == "Archive"), None)
+    assert archive_section is not None
+
+    # The starters section should have been removed
+    assert all(section.id != starters.id for section in sections)
+
+    recipe = await dal.get_recipe(test_session, recipe_id)
+    assert recipe is not None
+    assigned_section_ids = {section["section_id"] for section in recipe["sections"]}
+    assert archive_section.id in assigned_section_ids
 

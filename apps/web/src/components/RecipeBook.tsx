@@ -29,7 +29,17 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Trash2, Edit, AlertTriangle, ArrowDown, ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { loadSavedMenuSections, saveMenuSections } from "@/lib/menu-sections";
+import {
+  allocateTemporarySection,
+  loadSavedMenuSections,
+  refreshMenuSections,
+  saveMenuSections,
+  MENU_SECTIONS_EVENT,
+  ARCHIVE_SECTION_ID,
+  ARCHIVE_SECTION_LABEL,
+  type MenuSectionsEventDetail,
+  type StoredMenuSection,
+} from "@/lib/menu-sections";
 import type { AllergenFilterDefinition } from "@/data/allergen-filters";
 import { ALLERGEN_FILTERS, allergenFilterMap } from "@/data/allergen-filters";
 
@@ -43,7 +53,7 @@ export type RecipeBulkAction =
 export interface SavedDish {
   id: string;
   name: string;
-  menuCategory: string;
+  menuSectionId: string;
   description: string;
   servingSize: string;
   price: string;
@@ -71,62 +81,36 @@ export interface SavedDish {
 
 type SectionDefinition = {
   id: string;
+  numericId: number | null;
   label: string;
+  position?: number | null;
+  isArchive: boolean;
+  isTemporary?: boolean;
 };
 
-export const ARCHIVE_SECTION_ID = "archive";
-export const ARCHIVE_SECTION_LABEL = "Archive";
+const isArchiveLabel = (label: string) => label.trim().toLowerCase() === ARCHIVE_SECTION_LABEL.toLowerCase();
 
-const isArchiveSection = (section: SectionDefinition) =>
-  section.id.toLowerCase() === ARCHIVE_SECTION_ID || section.label.trim().toLowerCase() === ARCHIVE_SECTION_ID;
+const hasWindow = () => typeof window !== "undefined";
 
-const normalizeSection = (section: SectionDefinition): SectionDefinition => {
-  const trimmedLabel = section.label.trim();
-
-  if (isArchiveSection(section)) {
-    const normalizedLabel = trimmedLabel.length > 0 ? trimmedLabel : ARCHIVE_SECTION_LABEL;
-    return {
-      id: ARCHIVE_SECTION_ID,
-      label: normalizedLabel,
-    };
-  }
-
-  return {
-    id: section.id,
-    label: trimmedLabel.length > 0 ? trimmedLabel : section.id,
-  };
-};
+const mapStoredToSection = (section: StoredMenuSection): SectionDefinition => ({
+  id: isArchiveLabel(section.label) ? ARCHIVE_SECTION_ID : section.id.toString(),
+  numericId: section.id,
+  label: section.label.trim().length > 0 ? section.label.trim() : `Section ${section.id}`,
+  position: section.position ?? null,
+  isArchive: isArchiveLabel(section.label),
+  isTemporary: section.isTemporary,
+});
 
 const ensureArchiveSection = (sections: SectionDefinition[]): SectionDefinition[] => {
-  let hasArchive = false;
-  let changed = false;
-
-  const normalized = sections.map((section) => {
-    const result = normalizeSection(section);
-    if (result.id === ARCHIVE_SECTION_ID) {
-      hasArchive = true;
-    }
-
-    if (result.id !== section.id || result.label !== section.label) {
-      changed = true;
-    }
-
-    return result;
-  });
-
-  if (!hasArchive) {
-    changed = true;
-    normalized.push({
-      id: ARCHIVE_SECTION_ID,
-      label: ARCHIVE_SECTION_LABEL,
-    });
-  }
-
-  if (!changed && normalized.length === sections.length) {
+  if (sections.some((section) => section.isArchive)) {
     return sections;
   }
 
-  return normalized;
+  const archive = mapStoredToSection(allocateTemporarySection(ARCHIVE_SECTION_LABEL));
+  archive.isArchive = true;
+  archive.id = "archive";
+  archive.numericId = null;
+  return [...sections, archive];
 };
 
 const getDishAllergenDefinitions = (dish: SavedDish): AllergenFilterDefinition[] => {
@@ -210,6 +194,7 @@ interface RecipeBookProps {
   onToggleMenuStatus: (id: string, nextStatus: boolean) => Promise<void> | void;
   onMoveDishesToArchive: (dishIds: string[]) => Promise<void> | void;
   formatPrice: (value: string | number | null | undefined) => string;
+  restaurantId?: number | null;
 }
 
 export const RecipeBook = ({
@@ -220,6 +205,7 @@ export const RecipeBook = ({
   onToggleMenuStatus,
   onMoveDishesToArchive,
   formatPrice,
+  restaurantId,
 }: RecipeBookProps) => {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [recipeStatusFilter, setRecipeStatusFilter] =
@@ -232,7 +218,10 @@ export const RecipeBook = ({
   const [menuUpdatingIds, setMenuUpdatingIds] = useState<string[]>([]);
   const [removalDialogDishId, setRemovalDialogDishId] = useState<string | null>(null);
   const [unconfirmedDialogDishId, setUnconfirmedDialogDishId] = useState<string | null>(null);
-  const [sections, setSections] = useState<SectionDefinition[]>(() => ensureArchiveSection(loadSavedMenuSections()));
+  const [sections, setSections] = useState<SectionDefinition[]>([]);
+  const [menuId, setMenuId] = useState<number | null>(null);
+  const [sectionsLoading, setSectionsLoading] = useState(false);
+  const [sectionsError, setSectionsError] = useState<string | null>(null);
   const [isManageSectionsOpen, setIsManageSectionsOpen] = useState(false);
   const [editingSections, setEditingSections] = useState<SectionDefinition[]>([]);
   const [newSectionLabel, setNewSectionLabel] = useState("");
@@ -250,12 +239,60 @@ export const RecipeBook = ({
     ? menuUpdatingIds.includes(removalDialogDishId)
     : false;
 
+  useEffect(() => {
+    if (!restaurantId) {
+      setSections(ensureArchiveSection([]));
+      setMenuId(null);
+      return;
+    }
+
+    const cached = loadSavedMenuSections(restaurantId);
+    setMenuId(cached.menuId);
+    setSections(ensureArchiveSection(cached.sections.map(mapStoredToSection)));
+    setSectionsError(null);
+    setSectionsLoading(true);
+
+    refreshMenuSections(restaurantId)
+      .then(({ menuId: nextMenuId, sections: nextSections }) => {
+        setMenuId(nextMenuId);
+        setSections(ensureArchiveSection(nextSections.map(mapStoredToSection)));
+      })
+      .catch((error) => {
+        console.error("Failed to refresh menu sections", error);
+        setSectionsError("Unable to refresh menu sections from server.");
+      })
+      .finally(() => {
+        setSectionsLoading(false);
+      });
+  }, [restaurantId]);
+
+  useEffect(() => {
+    if (!hasWindow() || !restaurantId) {
+      return;
+    }
+
+    const handler = (event: Event) => {
+      const custom = event as CustomEvent<MenuSectionsEventDetail>;
+      if (!custom.detail || custom.detail.restaurantId !== restaurantId) {
+        return;
+      }
+
+      setMenuId(custom.detail.menuId);
+      setSections(ensureArchiveSection(custom.detail.sections.map(mapStoredToSection)));
+    };
+
+    window.addEventListener(MENU_SECTIONS_EVENT, handler);
+    return () => {
+      window.removeEventListener(MENU_SECTIONS_EVENT, handler);
+    };
+  }, [restaurantId]);
+
   const categories = useMemo(
     () =>
       Array.from(
         new Set(
           dishes
-            .map((dish) => dish.menuCategory)
+            .map((dish) => dish.menuSectionId)
             .filter((category): category is string => Boolean(category && category.trim())),
         ),
       ),
@@ -263,42 +300,14 @@ export const RecipeBook = ({
   );
 
   useEffect(() => {
-    setSections((prev) => {
-      const normalizedPrev = ensureArchiveSection(prev);
-
-      if (categories.length === 0) {
-        return normalizedPrev;
-      }
-
-      const next = [...normalizedPrev];
-      const existingIds = new Set(next.map((section) => section.id));
-      let changed = normalizedPrev !== prev;
-
-      categories.forEach((category) => {
-        if (!existingIds.has(category)) {
-          next.push({ id: category, label: category });
-          existingIds.add(category);
-          changed = true;
-        }
-      });
-
-      return changed ? next : normalizedPrev;
-    });
-  }, [categories]);
-
-  useEffect(() => {
-    saveMenuSections(ensureArchiveSection(sections));
-  }, [sections]);
-
-  useEffect(() => {
     if (
       selectedCategory !== "all" &&
-      selectedCategory !== ARCHIVE_SECTION_ID &&
+      !sections.some((section) => section.id === selectedCategory && section.isArchive) &&
       !categories.includes(selectedCategory)
     ) {
       setSelectedCategory("all");
     }
-  }, [categories, selectedCategory]);
+  }, [categories, sections, selectedCategory]);
 
   const sectionLabelMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -367,7 +376,7 @@ export const RecipeBook = ({
 
       sections.forEach((section) => {
         const dishIds = dishes
-          .filter((dish) => dish.menuCategory === section.id)
+          .filter((dish) => dish.menuSectionId === section.id)
           .map((dish) => dish.id);
 
         if (dishIds.length === 0) {
@@ -417,7 +426,7 @@ export const RecipeBook = ({
         }
 
         const archivedDishes = statusFilteredDishes.filter(
-          (dish) => dish.menuCategory === ARCHIVE_SECTION_ID,
+          (dish) => dish.menuSectionId === ARCHIVE_SECTION_ID,
         );
 
         return archivedDishes.length > 0
@@ -436,10 +445,10 @@ export const RecipeBook = ({
       }
 
       const nonArchivedDishes = statusFilteredDishes.filter(
-        (dish) => dish.menuCategory !== ARCHIVE_SECTION_ID,
+        (dish) => dish.menuSectionId !== ARCHIVE_SECTION_ID,
       );
       const archivedDishes = statusFilteredDishes.filter(
-        (dish) => dish.menuCategory === ARCHIVE_SECTION_ID,
+        (dish) => dish.menuSectionId === ARCHIVE_SECTION_ID,
       );
 
       const groups: Array<{ sectionId: string; sectionLabel: string; dishes: SavedDish[] }> = [];
@@ -473,7 +482,7 @@ export const RecipeBook = ({
     return orderedSectionIds
       .map((sectionId) => {
         const dishesInSection = statusFilteredDishes.filter(
-          (dish) => dish.menuCategory === sectionId,
+          (dish) => dish.menuSectionId === sectionId,
         );
 
         if (dishesInSection.length === 0) {
@@ -486,7 +495,7 @@ export const RecipeBook = ({
 
         order.forEach((dishId) => {
           const dish = dishMap.get(dishId);
-          if (dish && dish.menuCategory === sectionId && !seen.has(dish.id)) {
+          if (dish && dish.menuSectionId === sectionId && !seen.has(dish.id)) {
             orderedDishes.push(dish);
             seen.add(dish.id);
           }
@@ -607,7 +616,12 @@ export const RecipeBook = ({
     setIsManageSectionsOpen(open);
     setSectionManageError(null);
     if (open) {
-      setEditingSections(ensureArchiveSection(sections).map((section) => ({ ...section })));
+      setEditingSections(
+        ensureArchiveSection(sections).map((section, index) => ({
+          ...section,
+          position: section.position ?? index,
+        })),
+      );
       setNewSectionLabel("");
     } else {
       setEditingSections([]);
@@ -619,7 +633,19 @@ export const RecipeBook = ({
   const handleSectionLabelChange = (index: number, label: string) => {
     setEditingSections((prev) => {
       const next = [...prev];
-      next[index] = { ...next[index], label };
+      const isArchive = isArchiveLabel(label);
+      const current = next[index];
+      const newId = isArchive
+        ? ARCHIVE_SECTION_ID
+        : current.numericId !== null
+          ? current.numericId.toString()
+          : current.id;
+      next[index] = {
+        ...current,
+        id: newId,
+        label,
+        isArchive,
+      };
       return next;
     });
   };
@@ -632,7 +658,18 @@ export const RecipeBook = ({
 
     setEditingSections((prev) => {
       const id = generateSectionId(trimmedLabel, prev);
-      return [...prev, { id, label: trimmedLabel }];
+      const archive = isArchiveLabel(trimmedLabel);
+      return [
+        ...prev,
+        {
+          id,
+          numericId: null,
+          label: trimmedLabel,
+          position: prev.length,
+          isArchive: archive,
+          isTemporary: true,
+        },
+      ];
     });
     setNewSectionLabel("");
   };
@@ -642,7 +679,7 @@ export const RecipeBook = ({
       const next = [...prev];
       const [moved] = next.splice(fromIndex, 1);
       next.splice(toIndex, 0, moved);
-      return next;
+      return next.map((section, index) => ({ ...section, position: index }));
     });
   };
 
@@ -660,6 +697,11 @@ export const RecipeBook = ({
       return;
     }
 
+    if (!restaurantId) {
+      setSectionManageError("Select a restaurant before editing sections.");
+      return;
+    }
+
     const normalizedSections = ensureArchiveSection(
       editingSections.map((section) => ({
         ...section,
@@ -674,7 +716,7 @@ export const RecipeBook = ({
 
     const dishesToArchive =
       removedSectionIds.length > 0
-        ? dishes.filter((dish) => removedSectionIds.includes(dish.menuCategory))
+        ? dishes.filter((dish) => removedSectionIds.includes(dish.menuSectionId))
         : [];
 
     const dishIdsToArchive = dishesToArchive.map((dish) => dish.id);
@@ -687,11 +729,20 @@ export const RecipeBook = ({
         await onMoveDishesToArchive(dishIdsToArchive);
       }
 
-      setSections(normalizedSections);
+      const storedPayload: StoredMenuSection[] = normalizedSections.map((section, index) => ({
+        id: section.numericId ?? allocateTemporarySection(section.label, section.position).id,
+        label: section.label,
+        position: section.position ?? index,
+        isTemporary: section.numericId == null,
+      }));
+
+      const { sections: persistedSections } = await saveMenuSections(restaurantId, storedPayload);
+
+      setSections(ensureArchiveSection(persistedSections.map(mapStoredToSection)));
       handleManageSectionsOpenChange(false);
     } catch (error) {
-      console.error("Failed to move dishes to Archive", error);
-      setSectionManageError("Unable to move dishes to the Archive section. Please try again.");
+      console.error("Failed to update menu sections", error);
+      setSectionManageError("Unable to update menu sections. Please try again.");
     } finally {
       setIsSavingSections(false);
     }
@@ -774,7 +825,7 @@ export const RecipeBook = ({
     }
 
     const dishesInSection = dishes
-      .filter((dish) => dish.menuCategory === sectionId)
+      .filter((dish) => dish.menuSectionId === sectionId)
       .map((dish) => dish.id);
 
     const existingOrder = sectionOrders[sectionId] ?? [];
@@ -878,6 +929,13 @@ export const RecipeBook = ({
             </Select>
           </div>
         </div>
+
+        {sectionsError && (
+          <Alert variant="destructive" className="flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 mt-0.5" />
+            <AlertDescription>{sectionsError}</AlertDescription>
+          </Alert>
+        )}
       </div>
 
         {sections.length > 0 && (

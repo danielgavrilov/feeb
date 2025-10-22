@@ -158,13 +158,18 @@ class MenuUploadService:
             notes = self._safe_string(item.get("special_notes") or item.get("notes"))
             prominence = self._parse_float(item.get("prominence") or item.get("score"))
 
+            section = await dal.get_or_create_menu_section_by_name(
+                session,
+                upload.restaurant_id,
+                menu_category,
+            )
+
             recipe_id = await dal.create_recipe(
                 session,
                 restaurant_id=upload.restaurant_id,
                 name=name,
                 description=description,
                 instructions=self._safe_string(item.get("instructions")),
-                menu_category=menu_category,
                 serving_size=self._safe_string(item.get("serving_size")),
                 price=self._safe_string(item.get("price")),
                 image=self._safe_string(item.get("image")),
@@ -172,6 +177,7 @@ class MenuUploadService:
                 special_notes=notes,
                 prominence_score=prominence,
                 confirmed=False,
+                menu_section_ids=[section.id] if section else None,
             )
             created_recipes.append((recipe_id, name))
             session.add(

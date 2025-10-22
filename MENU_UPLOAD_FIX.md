@@ -211,9 +211,14 @@ ORDER BY mu.created_at DESC
 LIMIT 10;
 
 -- See what recipes were created for a specific upload
-SELECT r.id, r.name, r.menu_category
+SELECT
+  r.id,
+  r.name,
+  ms.name AS menu_section
 FROM recipe r
 JOIN menu_upload_recipe mur ON r.id = mur.recipe_id
+LEFT JOIN menu_section_recipe msr ON msr.recipe_id = r.id
+LEFT JOIN menu_section ms ON ms.id = msr.section_id
 WHERE mur.menu_upload_id = 13
 ORDER BY r.id;
 ```

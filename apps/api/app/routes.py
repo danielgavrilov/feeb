@@ -20,6 +20,9 @@ from .models import (
     RestaurantUpdate,
     MenuCreate,
     MenuResponse,
+    MenuSectionResponse,
+    MenuSectionsUpdateRequest,
+    RestaurantMenuSectionsResponse,
     RecipeCreate,
     RecipeUpdate,
     RecipeWithIngredients,
@@ -314,6 +317,69 @@ async def get_restaurant_menus(
     ]
 
 
+@router.get(
+    "/restaurants/{restaurant_id}/menu-sections",
+    response_model=RestaurantMenuSectionsResponse,
+)
+async def get_restaurant_menu_sections(
+    restaurant_id: int,
+    session: AsyncSession = Depends(get_db),
+):
+    """Fetch the primary menu and its sections for a restaurant."""
+
+    menu, sections = await dal.get_restaurant_menu_sections(session, restaurant_id)
+    await session.commit()
+
+    return RestaurantMenuSectionsResponse(
+        menu=MenuResponse(
+            id=menu.id,
+            restaurant_id=menu.restaurant_id,
+            name=menu.name,
+            description=menu.description,
+            menu_active=menu.menu_active,
+            created_at=menu.created_at,
+        ),
+        sections=[MenuSectionResponse.from_orm(section) for section in sections],
+    )
+
+
+@router.put(
+    "/restaurants/{restaurant_id}/menu-sections",
+    response_model=RestaurantMenuSectionsResponse,
+)
+async def update_restaurant_menu_sections(
+    restaurant_id: int,
+    payload: MenuSectionsUpdateRequest,
+    session: AsyncSession = Depends(get_db),
+):
+    """Replace the menu sections for a restaurant's primary menu."""
+
+    try:
+        await dal.save_restaurant_menu_sections(
+            session,
+            restaurant_id=restaurant_id,
+            sections_payload=payload.sections,
+        )
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    menu, sections = await dal.get_restaurant_menu_sections(session, restaurant_id)
+    await session.commit()
+
+    return RestaurantMenuSectionsResponse(
+        menu=MenuResponse(
+            id=menu.id,
+            restaurant_id=menu.restaurant_id,
+            name=menu.name,
+            description=menu.description,
+            menu_active=menu.menu_active,
+            created_at=menu.created_at,
+        ),
+        sections=[MenuSectionResponse.from_orm(section) for section in sections],
+    )
+
+
 @router.post("/recipes", response_model=RecipeWithIngredients)
 async def create_recipe(
     recipe_data: RecipeCreate,
@@ -326,32 +392,36 @@ async def create_recipe(
     - **name**: Recipe name
     - **description**: Optional description
     - **instructions**: Optional preparation instructions
-    - **menu_category**: Optional menu category
+    - **menu_section_ids**: Optional list of section IDs
     - **serving_size**: Optional serving size
     - **price**: Optional price
     - **image**: Optional image URL
     - **ingredients**: Optional list of ingredients
-    
+
     Returns recipe with full details.
     """
-    
+
     # Create the recipe
-    recipe_id = await dal.create_recipe(
-        session,
-        restaurant_id=recipe_data.restaurant_id,
-        name=recipe_data.name,
-        description=recipe_data.description,
-        instructions=recipe_data.instructions,
-        menu_category=recipe_data.menu_category,
-        serving_size=recipe_data.serving_size,
-        price=recipe_data.price,
-        image=recipe_data.image,
-        options=recipe_data.options,
-        special_notes=recipe_data.special_notes,
-        prominence_score=recipe_data.prominence_score,
-        confirmed=recipe_data.confirmed or False,
-        is_on_menu=recipe_data.is_on_menu or False
-    )
+    try:
+        recipe_id = await dal.create_recipe(
+            session,
+            restaurant_id=recipe_data.restaurant_id,
+            name=recipe_data.name,
+            description=recipe_data.description,
+            instructions=recipe_data.instructions,
+            serving_size=recipe_data.serving_size,
+            price=recipe_data.price,
+            image=recipe_data.image,
+            options=recipe_data.options,
+            special_notes=recipe_data.special_notes,
+            prominence_score=recipe_data.prominence_score,
+            confirmed=recipe_data.confirmed or False,
+            is_on_menu=recipe_data.is_on_menu or False,
+            menu_section_ids=recipe_data.menu_section_ids,
+        )
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # Add ingredients if provided
     if recipe_data.ingredients:
@@ -442,21 +512,25 @@ async def update_recipe(
     - **name**: Optional recipe name
     - **description**: Optional description
     - **instructions**: Optional preparation instructions
-    - **menu_category**: Optional menu category
+    - **menu_section_ids**: Optional list of section IDs
     - **serving_size**: Optional serving size
     - **price**: Optional price
     - **image**: Optional image URL
-    
+
     Returns updated recipe with full details.
     """
-    
+
     # Update the recipe
-    updated_recipe = await dal.update_recipe(
-        session,
-        recipe_id=recipe_id,
-        **recipe_data.model_dump(exclude_unset=True)
-    )
-    
+    try:
+        updated_recipe = await dal.update_recipe(
+            session,
+            recipe_id=recipe_id,
+            **recipe_data.model_dump(exclude_unset=True)
+        )
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     if not updated_recipe:
         raise HTTPException(status_code=404, detail=f"Recipe with ID {recipe_id} not found")
     
