@@ -431,14 +431,14 @@ export const Settings = ({
     <div className="space-y-6">
       <h2 className="mb-6 text-2xl font-bold text-foreground">Settings</h2>
 
-      <Card className="p-6">
+      <Card className="rounded-2xl p-4 sm:p-6">
         <div className="space-y-4">
           <div>
             <Label htmlFor="select-restaurant" className="mb-2 block text-lg font-semibold">
               Restaurant Name
             </Label>
             <Select value={restaurant ? restaurant.id.toString() : undefined} onValueChange={handleRestaurantSelection}>
-              <SelectTrigger id="select-restaurant" className="h-12 text-lg">
+              <SelectTrigger id="select-restaurant" className="h-12 w-full text-lg">
                 <SelectValue
                   placeholder={restaurants.length ? "Select a restaurant" : "Create your first restaurant"}
                 />
@@ -459,7 +459,7 @@ export const Settings = ({
         </div>
       </Card>
 
-      <Card className="p-6">
+      <Card className="rounded-2xl p-4 sm:p-6">
         <h3 className="mb-4 text-lg font-semibold text-foreground">Restaurant Details</h3>
         {restaurant ? (
           <div className="space-y-6">
@@ -598,7 +598,7 @@ export const Settings = ({
         )}
       </Card>
 
-      <Card className="p-6">
+      <Card className="rounded-2xl p-4 sm:p-6">
         <h3 className="mb-4 text-lg font-semibold text-foreground">Menu Preferences</h3>
         <div className="space-y-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

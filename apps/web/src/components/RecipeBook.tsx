@@ -891,9 +891,9 @@ export const RecipeBook = ({
   return (
     <>
       <div className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <h2 className="text-2xl font-bold text-foreground">Recipe Book</h2>
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-start">
             <div className="flex items-center gap-2">
               <Switch id="show-ingredients" checked={showIngredients} onCheckedChange={setShowIngredients} />
               <Label htmlFor="show-ingredients" className="text-sm font-medium text-foreground">
@@ -907,7 +907,7 @@ export const RecipeBook = ({
               <SelectTrigger
                 id="recipe-status-filter"
                 className={cn(
-                  "w-[220px] justify-between gap-2 rounded-full px-3",
+                  "w-full justify-between gap-2 rounded-full px-3 sm:w-[220px]",
                   activeStatusOption ? "border-transparent bg-transparent px-1" : "",
                 )}
                 aria-label="Recipe status"
@@ -945,15 +945,15 @@ export const RecipeBook = ({
       </div>
 
         {sections.length > 0 && (
-          <Card className="p-4 mt-6">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <Card className="mt-6 rounded-2xl p-4 sm:p-6">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
               <div>
                 <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Sections</h3>
                 <p className="text-xs text-muted-foreground">Choose which section of your recipe book to view.</p>
               </div>
               <Dialog open={isManageSectionsOpen} onOpenChange={handleManageSectionsOpenChange}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" className="w-full sm:w-auto">
                     Manage sections
                   </Button>
                 </DialogTrigger>
@@ -1121,30 +1121,30 @@ export const RecipeBook = ({
         )}
 
         {selectedCount > 0 && visibleDishes.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 p-4">
+          <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/40 p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <div className="text-sm font-medium text-foreground">
               {selectedCount} {selectedCount === 1 ? "recipe" : "recipes"} selected
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={handleSelectAll}>
+              <Button variant="outline" size="sm" onClick={handleSelectAll} className="w-full sm:w-auto">
                 Select all
               </Button>
-              <Button variant="outline" size="sm" onClick={handleClearSelection}>
+              <Button variant="outline" size="sm" onClick={handleClearSelection} className="w-full sm:w-auto">
                 Clear selection
               </Button>
-              <Button variant="outline" size="sm" onClick={() => openBulkDialog("markForReview")}>
+              <Button variant="outline" size="sm" onClick={() => openBulkDialog("markForReview")} className="w-full sm:w-auto">
                 Mark for review
               </Button>
-              <Button variant="outline" size="sm" onClick={() => openBulkDialog("markAsReviewed")}>
+              <Button variant="outline" size="sm" onClick={() => openBulkDialog("markAsReviewed")} className="w-full sm:w-auto">
                 Mark as reviewed
               </Button>
-              <Button variant="outline" size="sm" onClick={() => openBulkDialog("addToMenu")}>
+              <Button variant="outline" size="sm" onClick={() => openBulkDialog("addToMenu")} className="w-full sm:w-auto">
                 Add to menu
               </Button>
-              <Button variant="outline" size="sm" onClick={() => openBulkDialog("removeFromMenu")}>
+              <Button variant="outline" size="sm" onClick={() => openBulkDialog("removeFromMenu")} className="w-full sm:w-auto">
                 Remove from menu
               </Button>
-              <Button variant="destructive" size="sm" onClick={() => openBulkDialog("delete")}>
+              <Button variant="destructive" size="sm" onClick={() => openBulkDialog("delete")} className="w-full sm:w-auto">
                 Delete
               </Button>
             </div>
@@ -1160,14 +1160,14 @@ export const RecipeBook = ({
           {filteredSections.map(({ sectionId, sectionLabel, dishes: sectionDishes }) => (
             <div key={sectionId} className="space-y-4">
               {sections.length > 0 && (
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <h3 className="text-xl font-semibold text-foreground">{sectionLabel}</h3>
                   <Dialog
                     open={sectionOrderEditing?.sectionId === sectionId}
                     onOpenChange={(open) => handleSectionOrderDialogOpenChange(sectionId, open)}
                   >
                     <DialogTrigger asChild>
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" className="w-full sm:w-auto">
                         Edit
                       </Button>
                     </DialogTrigger>

@@ -138,6 +138,13 @@ const dishContainsAllergen = (dish: SavedDish, allergenId: string) => {
   }
 
   const summary = getDishAllergenSummary(dish);
+  const { codes, keywords, category } = definition;
+  const normalizedCodeSet = new Set<string>([definition.id.toLowerCase(), ...codes.map((code) => code.toLowerCase())]);
+  const normalizedNameSet = new Set<string>([
+    definition.name.toLowerCase(),
+    ...keywords.map((keyword) => keyword.toLowerCase()),
+  ]);
+  const normalizedKeywords = keywords.map((keyword) => keyword.toLowerCase());
 
   if (definition.id === "vegan") {
     const summary = getDishAllergenSummary(dish);
@@ -147,6 +154,18 @@ const dishContainsAllergen = (dish: SavedDish, allergenId: string) => {
   if (definition.id === "vegetarian") {
     return !isVegetarianFriendly(summary);
   }
+
+  return dish.ingredients.some((ingredient) => {
+    const ingredientName = ingredient.name?.toLowerCase() ?? "";
+    const allergens = ingredient.allergens ?? [];
+
+    const matchesAllergenList = allergens.some((allergen) => {
+      const code = allergen.code?.toLowerCase() ?? "";
+      const name = allergen.name?.toLowerCase() ?? "";
+
+      if (normalizedCodeSet.has(code) || normalizedCodeSet.has(name)) {
+        return true;
+      }
 
   const normalizedCodeSet = buildNormalizedCodeSet(definition);
   const normalizedKeywordSet = buildNormalizedKeywordSet(definition);
@@ -522,18 +541,18 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
   }, [savedSections, visibleMenuDishes]);
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-background">
-        <div className="container mx-auto px-4 py-6">
-          <h1 className="text-3xl font-bold text-foreground">{restaurantName}</h1>
+    <div className="bg-background">
+      <header className="border-b border-border/60 bg-background/80">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 px-4 py-4 sm:px-6 sm:py-6">
+          <h1 className="text-2xl font-bold text-foreground sm:text-3xl">{restaurantName}</h1>
           <p className="text-sm text-muted-foreground">
             These dishes are currently available on your menu.
           </p>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8 space-y-10">
-        <section className="bg-card border border-border/60 rounded-xl p-6 shadow-sm">
+      <main className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-4 py-6 sm:px-6 sm:py-10">
+        <section className="rounded-xl border border-border/60 bg-card p-4 shadow-sm sm:p-6">
           <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div className="space-y-1">
@@ -564,7 +583,7 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
                     Pick an allergen
                   </Label>
                   <Select onValueChange={handleSelectAllergen}>
-                    <SelectTrigger id="allergen-select">
+                    <SelectTrigger id="allergen-select" className="w-full">
                       <SelectValue placeholder="Select an allergen or dietary tag" />
                     </SelectTrigger>
                     <SelectContent>
@@ -712,7 +731,7 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
 
             return (
               <section key={categoryId} className="space-y-4">
-                <div className="flex items-baseline justify-between">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
                   <h2 className="text-2xl font-semibold text-foreground">
                     {sectionLabelMap.get(categoryId) ?? getFallbackCategoryLabel(categoryId)}
                   </h2>
@@ -721,7 +740,7 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {dishesInCategory.map((dish) => {
                     const ingredientMatch = ingredientMatchResults.get(dish.id);
                     const summary = getDishAllergenSummary(dish);

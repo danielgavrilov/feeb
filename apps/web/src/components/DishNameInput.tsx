@@ -280,7 +280,7 @@ export const DishNameInput = ({
         </Alert>
       )}
       <div className="space-y-3">
-        <Label htmlFor="dish-name" className="text-xl font-semibold text-foreground">
+        <Label htmlFor="dish-name" className="text-lg font-semibold text-foreground sm:text-xl">
           Dish Name
         </Label>
         <Popover
@@ -306,7 +306,7 @@ export const DishNameInput = ({
                 onBlur={handleInputBlur}
                 onClick={() => setIsInputFocused(true)}
                 placeholder="Enter dish name..."
-                className="h-16 text-2xl font-medium border-2 pr-14"
+                className="h-14 border-2 pr-14 text-xl font-medium sm:h-16 sm:text-2xl"
                 autoComplete="off"
               />
               {hasSelectedDish && onClearSelectedDish && (
@@ -378,15 +378,15 @@ export const DishNameInput = ({
       <button
         type="button"
         onClick={() => setShowOptional(!showOptional)}
-        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         {showOptional ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         <span>Optional details (can be added later)</span>
       </button>
 
       {showOptional && (
-        <div className="space-y-3 pt-2 pb-4 border-t border-border/50">
-          <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-3 border-t border-border/50 pt-2 pb-4">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="menu-category" className="text-sm text-muted-foreground">
                 Menu Category
