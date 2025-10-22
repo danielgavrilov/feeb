@@ -10,6 +10,11 @@ from typing import Optional, Optional as _Optional, Dict, List, Sequence
 from sqlalchemy import select, or_, func
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
+from .allergen_canonical import (
+    canonical_allergen_from_label,
+    canonicalize_allergen,
+    certainty_to_ui,
+)
 from .models import (
     Ingredient, Allergen, AllergenBadge, IngredientAllergen, Product, ProductIngredient, ProductAllergen,
     ProductNutrition,
@@ -67,7 +72,7 @@ async def get_ingredient_by_name(
         AllergenResponse(
             code=ia.allergen.code,
             name=ia.allergen.name,
-            certainty=ia.certainty
+            certainty=certainty_to_ui(ia.certainty),
         )
         for ia in ingredient.allergens
     ]
@@ -1300,34 +1305,75 @@ async def get_recipe_with_details(
             {
                 "code": ia.allergen.code,
                 "name": ia.allergen.name,
-                "certainty": ia.certainty
+                "certainty": certainty_to_ui(ia.certainty),
             }
             for ia in ri.ingredient.allergens
         ]
 
+        known_codes = {entry["code"].lower() for entry in allergens if entry.get("code")}
+
         if ri.allergens:
             try:
                 predicted = json.loads(ri.allergens)
-                if isinstance(predicted, list):
-                    for entry in predicted:
-                        if isinstance(entry, dict):
-                            allergens.append({
-                                "code": entry.get("code") or entry.get("name", "predicted"),
-                                "name": entry.get("name", ""),
-                                "certainty": entry.get("certainty", "predicted")
-                            })
-                        elif isinstance(entry, str):
-                            allergens.append({
-                                "code": entry,
-                                "name": entry,
-                                "certainty": "predicted"
-                            })
             except json.JSONDecodeError:
-                allergens.append({
-                    "code": "predicted",
-                    "name": ri.allergens,
-                    "certainty": "predicted"
-                })
+                predicted = None
+
+            if isinstance(predicted, list):
+                for entry in predicted:
+                    if isinstance(entry, dict):
+                        raw_label = entry.get("allergen") or entry.get("name") or entry.get("code")
+                        certainty_value = entry.get("certainty")
+                    else:
+                        raw_label = entry
+                        certainty_value = None
+
+                    canonical = canonical_allergen_from_label(raw_label) or canonicalize_allergen(raw_label)
+                    if not canonical:
+                        continue
+
+                    code = canonical.slug
+                    if code.lower() in known_codes:
+                        continue
+                    known_codes.add(code.lower())
+
+                    allergens.append(
+                        {
+                            "code": code,
+                            "name": canonical.label,
+                            "certainty": certainty_to_ui(certainty_value),
+                        }
+                    )
+            elif isinstance(predicted, dict):
+                canonical = canonical_allergen_from_label(predicted.get("allergen"))
+                if canonical and canonical.slug.lower() not in known_codes:
+                    known_codes.add(canonical.slug.lower())
+                    allergens.append(
+                        {
+                            "code": canonical.slug,
+                            "name": canonical.label,
+                            "certainty": certainty_to_ui(predicted.get("certainty")),
+                        }
+                    )
+            elif isinstance(predicted, str):
+                canonical = canonical_allergen_from_label(predicted) or canonicalize_allergen(predicted)
+                if canonical and canonical.slug.lower() not in known_codes:
+                    known_codes.add(canonical.slug.lower())
+                    allergens.append(
+                        {
+                            "code": canonical.slug,
+                            "name": canonical.label,
+                            "certainty": certainty_to_ui(None),
+                        }
+                    )
+            elif predicted is None:
+                if ri.allergens:
+                    allergens.append(
+                        {
+                            "code": "predicted",
+                            "name": ri.allergens,
+                            "certainty": "predicted",
+                        }
+                    )
 
         substitution_data = None
         if ri.substitution:

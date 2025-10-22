@@ -44,7 +44,11 @@ const dishContainsAllergen = (dish: SavedDish, allergenId: string) => {
   }
 
   const { codes, keywords, category } = definition;
-  const normalizedCodes = codes.map((code) => code.toLowerCase());
+  const normalizedCodeSet = new Set<string>([definition.id.toLowerCase(), ...codes.map((code) => code.toLowerCase())]);
+  const normalizedNameSet = new Set<string>([
+    definition.name.toLowerCase(),
+    ...keywords.map((keyword) => keyword.toLowerCase()),
+  ]);
   const normalizedKeywords = keywords.map((keyword) => keyword.toLowerCase());
 
   return dish.ingredients.some((ingredient) =>
@@ -52,18 +56,23 @@ const dishContainsAllergen = (dish: SavedDish, allergenId: string) => {
       const code = allergen.code?.toLowerCase() ?? "";
       const name = allergen.name?.toLowerCase() ?? "";
 
-      if (normalizedCodes.some((candidate) => code.includes(candidate))) {
+      if (normalizedCodeSet.has(code) || normalizedCodeSet.has(name)) {
         return true;
       }
 
-      if (normalizedKeywords.some((candidate) => code.includes(candidate) || name.includes(candidate))) {
+      if (normalizedNameSet.has(code) || normalizedNameSet.has(name)) {
         return true;
       }
 
-      return false;
+      const canonicalMatch = allergenFilterMap.get(code);
+      if (canonicalMatch?.id === definition.id) {
+        return true;
+      }
+
+      return normalizedKeywords.some((candidate) => code.includes(candidate) || name.includes(candidate));
     }) ||
     (category === "diet" &&
-      normalizedCodes.some((candidate) =>
+      Array.from(normalizedCodeSet).some((candidate) =>
         ingredient.name.toLowerCase().includes(candidate.replace("en:", "")),
       )),
   );
