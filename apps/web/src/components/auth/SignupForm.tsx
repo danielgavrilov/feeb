@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { useAuth } from '@/hooks/useAuth';
-import { Button } from '@/components/ui/button';
+import { useMemo, useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -12,26 +13,43 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { LanguageSelector } from "@/components/LanguageSelector";
 
-const signupSchema = z.object({
-  email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ['confirmPassword'],
-});
+const buildSignupSchema = (messages: { email: string; passwordLength: string; mismatch: string }) =>
+  z
+    .object({
+      email: z.string().email(messages.email),
+      password: z.string().min(6, messages.passwordLength),
+      confirmPassword: z.string(),
+    })
+    .refine((data) => data.password === data.confirmPassword, {
+      message: messages.mismatch,
+      path: ["confirmPassword"],
+    });
 
-type SignupFormData = z.infer<typeof signupSchema>;
+type SignupSchema = ReturnType<typeof buildSignupSchema>;
+type SignupFormData = z.infer<SignupSchema>;
 
 export function SignupForm() {
   const [isLoading, setIsLoading] = useState(false);
   const { signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
+  const { t } = useLanguage();
+
+  const signupSchema = useMemo(
+    () =>
+      buildSignupSchema({
+        email: t("validation.email"),
+        passwordLength: t("validation.passwordLength"),
+        mismatch: t("validation.passwordsMismatch"),
+      }),
+    [t],
+  );
 
   const {
     register,
@@ -46,8 +64,7 @@ export function SignupForm() {
     try {
       const { error } = await signUp(data.email, data.password);
       if (!error) {
-        // User will need to confirm their email before they can sign in
-        navigate('/login');
+        navigate("/login");
       }
     } finally {
       setIsLoading(false);
@@ -64,22 +81,18 @@ export function SignupForm() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-purple-50 to-blue-50">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-purple-50 to-blue-50 px-4 py-8">
+      <div className="mb-4 flex w-full max-w-md justify-end">
+        <LanguageSelector size="compact" />
+      </div>
       <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">Create an account</CardTitle>
-          <CardDescription className="text-center">
-            Get started with Feeb today
-          </CardDescription>
+        <CardHeader className="space-y-1 text-center">
+          <CardTitle className="text-2xl font-bold">{t("auth.signup.title")}</CardTitle>
+          <CardDescription>{t("auth.signup.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={handleGoogleSignIn}
-            disabled={isLoading}
-          >
-            <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
+          <Button variant="outline" className="w-full" onClick={handleGoogleSignIn} disabled={isLoading}>
+            <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">
               <path
                 fill="currentColor"
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -97,67 +110,52 @@ export function SignupForm() {
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
               />
             </svg>
-            Continue with Google
+            {t("auth.signup.continueWithGoogle")}
           </Button>
 
           <div className="relative">
             <Separator />
             <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-xs text-muted-foreground">
-              Or continue with email
+              {t("auth.signup.divider")}
             </span>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{t("auth.signup.emailLabel")}</Label>
               <Input
                 id="email"
                 type="email"
                 placeholder="name@example.com"
-                {...register('email')}
+                {...register("email")}
                 disabled={isLoading}
               />
-              {errors.email && (
-                <p className="text-sm text-red-500">{errors.email.message}</p>
-              )}
+              {errors.email ? <p className="text-sm text-red-500">{errors.email.message}</p> : null}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                {...register('password')}
-                disabled={isLoading}
-              />
-              {errors.password && (
-                <p className="text-sm text-red-500">{errors.password.message}</p>
-              )}
+              <Label htmlFor="password">{t("auth.signup.passwordLabel")}</Label>
+              <Input id="password" type="password" {...register("password")} disabled={isLoading} />
+              {errors.password ? <p className="text-sm text-red-500">{errors.password.message}</p> : null}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                {...register('confirmPassword')}
-                disabled={isLoading}
-              />
-              {errors.confirmPassword && (
-                <p className="text-sm text-red-500">{errors.confirmPassword.message}</p>
-              )}
+              <Label htmlFor="confirmPassword">{t("auth.signup.confirmPasswordLabel")}</Label>
+              <Input id="confirmPassword" type="password" {...register("confirmPassword")} disabled={isLoading} />
+              {errors.confirmPassword ? <p className="text-sm text-red-500">{errors.confirmPassword.message}</p> : null}
             </div>
 
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Creating account...' : 'Create account'}
+              {isLoading ? t("auth.signup.submitting") : t("auth.signup.submit")}
             </Button>
           </form>
         </CardContent>
         <CardFooter className="flex flex-col space-y-2">
-          <p className="text-sm text-center text-muted-foreground">
-            Already have an account?{' '}
+          <p className="text-center text-sm text-muted-foreground">
+            {t("auth.signup.hasAccount")}
+            {" "}
             <Link to="/login" className="text-primary hover:underline">
-              Sign in
+              {t("auth.signup.signinLink")}
             </Link>
           </p>
         </CardFooter>
@@ -165,4 +163,3 @@ export function SignupForm() {
     </div>
   );
 }
-

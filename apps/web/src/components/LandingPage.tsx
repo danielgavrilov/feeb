@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import ProgressTracker, { ProgressStep } from "@/components/ProgressTracker";
 import { useNextStep, isCarouselStep } from "@/hooks/useNextStep";
 import { mockRestaurant, RestaurantProgress } from "@/data/mockRestaurant";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface LandingPageProps {
   restaurantName?: string;
@@ -18,56 +19,29 @@ interface LandingPageProps {
   onReviewFirstRecipe?: () => void;
 }
 
-interface QuickAction {
+type QuickActionId =
+  | "uploadMenu"
+  | "addDish"
+  | "recipeBook"
+  | "uploadPhotos"
+  | "customiseMenu"
+  | "support"
+  | "pricing";
+
+interface QuickActionConfig {
   icon: string;
-  label: string;
-  description: string;
   href: string;
+  id: QuickActionId;
 }
 
-const quickActions: QuickAction[] = [
-  {
-    icon: "📤",
-    label: "Upload Menu",
-    description: "Use AI to capture your menu instantly",
-    href: "/upload",
-  },
-  {
-    icon: "➕",
-    label: "Add Dish",
-    description: "Capture a new recipe in minutes",
-    href: "/add",
-  },
-  {
-    icon: "📚",
-    label: "Recipe Book",
-    description: "Review everything your team has added",
-    href: "/recipes",
-  },
-  {
-    icon: "📸",
-    label: "Upload Photos",
-    description: "Showcase dishes with beautiful imagery",
-    href: "/photos",
-  },
-  {
-    icon: "⚙️",
-    label: "Customise Menu",
-    description: "Match your brand colours and logo",
-    href: "/customise",
-  },
-  {
-    icon: "💬",
-    label: "Support",
-    description: "Chat with us if you need a hand",
-    href: "/support",
-  },
-  {
-    icon: "📈",
-    label: "Pricing Insights",
-    description: "See profitability suggestions",
-    href: "/pricing",
-  },
+const QUICK_ACTION_CONFIG: QuickActionConfig[] = [
+  { icon: "📤", href: "/upload", id: "uploadMenu" },
+  { icon: "➕", href: "/add", id: "addDish" },
+  { icon: "📚", href: "/recipes", id: "recipeBook" },
+  { icon: "📸", href: "/photos", id: "uploadPhotos" },
+  { icon: "⚙️", href: "/customise", id: "customiseMenu" },
+  { icon: "💬", href: "/support", id: "support" },
+  { icon: "📈", href: "/pricing", id: "pricing" },
 ];
 
 export const LandingPage = ({
@@ -81,11 +55,22 @@ export const LandingPage = ({
   unconfirmedRecipes = 0,
   onReviewFirstRecipe,
 }: LandingPageProps) => {
+  const { t } = useLanguage();
   const effectiveMenuUploaded = menuUploadedProp ?? totalRecipes > 0;
   const effectiveIngredientsConfirmed =
     ingredientsConfirmedProp ?? (effectiveMenuUploaded ? unconfirmedRecipes === 0 : false);
   const wantsImages = showImagesProp ?? mockRestaurant.showImages;
   const effectiveImagesUploaded = imagesUploadedProp ?? mockRestaurant.imagesUploaded;
+
+  const quickActions = useMemo(
+    () =>
+      QUICK_ACTION_CONFIG.map((action) => ({
+        ...action,
+        label: t(`landing.quickActions.${action.id}.label`),
+        description: t(`landing.quickActions.${action.id}.description`),
+      })),
+    [t],
+  );
 
   const restaurant = useMemo<RestaurantProgress>(
     () => ({
@@ -117,17 +102,18 @@ export const LandingPage = ({
     }
 
     if (unconfirmedRecipes > 0) {
-      return `${unconfirmedRecipes} ${unconfirmedRecipes === 1 ? "menu item" : "menu items"} still need confirmation`;
+      return t("landing.reviewStatus.pending", { count: unconfirmedRecipes });
     }
 
     if (totalRecipes > 0) {
-      return "All menu items have been confirmed.";
+      return t("landing.reviewStatus.complete");
     }
 
     return null;
-  }, [effectiveMenuUploaded, unconfirmedRecipes, totalRecipes]);
+  }, [effectiveMenuUploaded, t, unconfirmedRecipes, totalRecipes]);
 
-  const isReviewAction = actionStep?.actionLabel === "Review recipe";
+  const isReviewAction =
+    actionStep?.actionLink === "/recipes?status=needs_review" || actionStep?.actionLink === "/ingredients";
 
   const progressSteps = useMemo<ProgressStep[]>(() => {
     if (!restaurant) return [];
@@ -137,21 +123,21 @@ export const LandingPage = ({
     return [
       {
         key: "upload",
-        label: "Upload menu",
+        label: t("landing.progressSteps.upload"),
         link: "/upload",
         completed: restaurant.menuUploaded,
         isCurrent: !restaurant.menuUploaded,
       },
       {
         key: "confirm",
-        label: "Confirm ingredients",
+        label: t("landing.progressSteps.confirm"),
         link: "/ingredients",
         completed: restaurant.ingredientsConfirmed,
         isCurrent: restaurant.menuUploaded && !restaurant.ingredientsConfirmed,
       },
       {
         key: "customise",
-        label: "Customise Menu",
+        label: t("landing.progressSteps.customise"),
         link: "/customise",
         completed: restaurant.customisationDone,
         isCurrent:
@@ -161,7 +147,7 @@ export const LandingPage = ({
       },
       {
         key: "photos",
-        label: "Add photos (optional)",
+        label: t("landing.progressSteps.photos"),
         link: "/photos",
         completed: !wantsImagesForStep || restaurant.imagesUploaded,
         isCurrent:
@@ -173,16 +159,19 @@ export const LandingPage = ({
       },
       {
         key: "live",
-        label: "Set Menu Live",
+        label: t("landing.progressSteps.live"),
         link: "/menu",
         completed: isSetupComplete,
         isCurrent: isSetupComplete,
       },
     ];
-  }, [restaurant, isSetupComplete]);
+  }, [restaurant, t, isSetupComplete]);
 
-  const completedCount = progressSteps.filter(step => step.completed).length;
-  const progressSummary = `${completedCount}/${progressSteps.length} steps complete`;
+  const completedCount = progressSteps.filter((step) => step.completed).length;
+  const progressSummary = t("landing.progressSummary", {
+    completed: completedCount,
+    total: progressSteps.length,
+  });
 
   return (
     <div className="space-y-8 py-4">
@@ -190,7 +179,7 @@ export const LandingPage = ({
         className="rounded-3xl border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-rose-50 p-6 shadow-sm"
       >
         <p className="text-xs font-semibold uppercase tracking-wide text-orange-500">
-        {carouselStep ? "You’re live!" : "Let’s get you live"}
+          {carouselStep ? t("landing.heroLive") : t("landing.heroGettingLive")}
         </p>
         {actionStep ? (
           <div className="mt-3 space-y-4">
@@ -219,10 +208,10 @@ export const LandingPage = ({
           <div className="mt-3 space-y-4">
             <div className="space-y-2">
               <h1 className="text-2xl font-semibold text-slate-900 sm:text-3xl">
-                Welcome back, {restaurant.name} 🌟
+                {t("landing.greeting", { name: restaurant.name })}
               </h1>
               <p className="text-sm leading-relaxed text-slate-700">
-                Keep the momentum going with these quick wins for your team.
+                {t("landing.quickWins")}
               </p>
             </div>
             <div className="-mx-1 flex snap-x gap-3 overflow-x-auto pb-1">
@@ -250,12 +239,12 @@ export const LandingPage = ({
 
       <section>
         <div className="flex items-baseline justify-between">
-          <h2 className="text-lg font-semibold text-foreground">Quick actions</h2>
-          <span className="text-xs text-muted-foreground">Focus on one task at a time</span>
+          <h2 className="text-lg font-semibold text-foreground">{t("landing.quickActionsTitle")}</h2>
+          <span className="text-xs text-muted-foreground">{t("landing.quickActionsSubtitle")}</span>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {quickActions.map(action => (
-            <Link key={action.label} to={action.href}>
+            <Link key={action.id} to={action.href}>
               <Card className="flex h-full flex-col gap-2 rounded-2xl border border-border/70 p-4 transition hover:-translate-y-1 hover:border-emerald-400 hover:shadow-md">
                 <span className="text-2xl" aria-hidden>
                   {action.icon}
@@ -272,23 +261,19 @@ export const LandingPage = ({
         <section>
           <div className="flex items-start justify-between gap-3 rounded-2xl border border-teal-100 bg-teal-50/80 p-4">
             <div className="space-y-1">
-              <p className="text-sm font-semibold text-teal-900">
-                Want to boost your profits?
-              </p>
-              <p className="text-xs text-teal-800">
-                Try Pricing Insights to spot margin opportunities without the guesswork.
-              </p>
+              <p className="text-sm font-semibold text-teal-900">{t("landing.upsellTitle")}</p>
+              <p className="text-xs text-teal-800">{t("landing.upsellDescription")}</p>
             </div>
             <div className="flex items-center gap-2">
               <Button asChild variant="ghost" size="sm">
-                <Link to="/pricing">Explore</Link>
+                <Link to="/pricing">{t("landing.upsellAction")}</Link>
               </Button>
               <button
                 type="button"
                 onClick={() => setUpsellDismissed(true)}
                 className="text-xs font-medium text-teal-700 underline-offset-2 hover:underline"
               >
-                Dismiss
+                {t("landing.upsellDismiss")}
               </button>
             </div>
           </div>

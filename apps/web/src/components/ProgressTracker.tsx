@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export interface ProgressStep {
   key: string;
@@ -15,10 +16,12 @@ interface ProgressTrackerProps {
 }
 
 export const ProgressTracker = ({ steps, summary }: ProgressTrackerProps) => {
+  const { t } = useLanguage();
+
   return (
     <section className="rounded-2xl border border-border/70 bg-card/80 p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-foreground">Setup progress</h2>
+        <h2 className="text-base font-semibold text-foreground">{t("progressTracker.title")}</h2>
         {summary ? <span className="text-xs text-muted-foreground">{summary}</span> : null}
       </div>
       <div className="mt-4 overflow-x-auto pb-1">

@@ -13,6 +13,8 @@ import { useRestaurant } from "@/hooks/useRestaurant";
 import { useRecipes } from "@/hooks/useRecipes";
 import { Recipe, RecipeIngredient } from "@/lib/api";
 import { LandingPage } from "@/components/LandingPage";
+import { LanguageSelector } from "@/components/LanguageSelector";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { useSearchParams } from "react-router-dom";
 import {
   CurrencyOption,
@@ -24,6 +26,7 @@ import {
 import { ARCHIVE_SECTION_ID, ARCHIVE_SECTION_LABEL, loadSavedMenuSections } from "@/lib/menu-sections";
 
 const Index = () => {
+  const { t } = useLanguage();
   const {
     restaurant,
     restaurants,
@@ -163,9 +166,7 @@ const Index = () => {
 
   const reviewNoticeMessage =
     unconfirmedRecipeCount > 0
-      ? `${unconfirmedRecipeCount} ${
-          unconfirmedRecipeCount === 1 ? "menu item" : "menu items"
-        } still need confirmation`
+      ? t("landing.reviewStatus.pending", { count: unconfirmedRecipeCount })
       : null;
 
   const handleStartNew = useCallback(() => {
@@ -642,7 +643,10 @@ const Index = () => {
               <h1 className="text-2xl font-bold text-brand-primary">Feeb</h1>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-muted-foreground">{restaurant?.name || "No Restaurant"}</span>
+              <LanguageSelector size="compact" />
+              <span className="text-sm text-muted-foreground">
+                {restaurant?.name || t("common.restaurant.fallback")}
+              </span>
             </div>
           </div>
         </div>
@@ -652,7 +656,7 @@ const Index = () => {
         <Tabs value={activeTab} onValueChange={handleTabsValueChange} className="w-full">
           <TabsList className="mb-6 flex w-full flex-wrap gap-2 sm:gap-3 sm:h-14">
             <TabsTrigger value="landing" className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base">
-              Landing
+              {t("navigation.landing")}
             </TabsTrigger>
             <TabsTrigger
               value="add"
@@ -661,16 +665,16 @@ const Index = () => {
                 manualAddTabSelectionRef.current = true;
               }}
             >
-              Ingredients
+              {t("navigation.add")}
             </TabsTrigger>
             <TabsTrigger value="recipes" className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base">
-              Recipe Book
+              {t("navigation.recipes")}
             </TabsTrigger>
             <TabsTrigger value="menu" className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base">
-              Menu
+              {t("navigation.menu")}
             </TabsTrigger>
             <TabsTrigger value="settings" className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base">
-              Settings
+              {t("navigation.settings")}
             </TabsTrigger>
           </TabsList>
 
@@ -702,7 +706,7 @@ const Index = () => {
                       {reviewNoticeMessage}
                     </span>
                     <span className="mt-1 block text-xs text-muted-foreground">
-                      Click to open the most recent dish awaiting review
+                      {t("index.reviewHelper")}
                     </span>
                   </button>
                 )}
