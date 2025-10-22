@@ -14,9 +14,30 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ALLERGEN_CATEGORIES } from "@/data/recipes";
+import { allergenFilterMap } from "@/data/allergen-filters";
+import type { AllergenFilterDefinition } from "@/data/allergen-filters";
 import { Check, Trash2, Plus, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { parsePriceInput } from "@/lib/price-format";
+
+const LEGACY_ALLERGEN_ALIASES: Record<string, string[]> = {
+  cereals_gluten: ["gluten"],
+  crustaceans: ["shellfish"],
+  eggs: ["eggs"],
+  fish: ["fish"],
+  peanuts: ["peanuts"],
+  soybeans: ["soy"],
+  milk: ["dairy"],
+  tree_nuts: ["nuts"],
+  celery: ["celery"],
+  mustard: ["mustard"],
+  sesame: ["sesame"],
+  sulphites: ["sulphites", "sulfites"],
+  lupin: ["lupin"],
+  molluscs: ["shellfish"],
+  vegan: ["vegan", "not vegan", "not plant-based"],
+  vegetarian: ["vegetarian", "not vegetarian", "not plant-based"],
+};
 
 export interface IngredientState {
   name: string;
@@ -73,6 +94,69 @@ export const IngredientsList = ({
   const [newUnit, setNewUnit] = useState("g");
   const [activeSubstitutionIndex, setActiveSubstitutionIndex] = useState<number | null>(null);
   const [substitutionDraft, setSubstitutionDraft] = useState({ alternative: "", surcharge: "" });
+
+  const matchesDefinitionValue = (definition: AllergenFilterDefinition, value?: string) => {
+    if (!value) {
+      return false;
+    }
+    const normalizedId = definition.id.toLowerCase();
+    const normalizedValue = value.toLowerCase();
+
+    if (normalizedId === normalizedValue) {
+      return true;
+    }
+
+    if (definition.name.toLowerCase() === normalizedValue) {
+      return true;
+    }
+
+    const aliases = LEGACY_ALLERGEN_ALIASES[normalizedId] ?? [];
+    return aliases.includes(normalizedValue);
+  };
+
+  const findDefinitionForAllergen = (code?: string, name?: string) => {
+    if (!code && !name) {
+      return undefined;
+    }
+
+    for (const definition of allergenFilterMap.values()) {
+      if (matchesDefinitionValue(definition, code) || matchesDefinitionValue(definition, name)) {
+        return definition;
+      }
+    }
+
+    return undefined;
+  };
+
+  const matchesAllergenSelection = (
+    allergen: { code?: string; name?: string },
+    allergenId: string,
+    fallbackLabel?: string,
+  ) => {
+    const definition =
+      allergenFilterMap.get(allergenId) ??
+      allergenFilterMap.get(allergenId.toLowerCase()) ??
+      findDefinitionForAllergen(allergenId, fallbackLabel);
+
+    if (definition) {
+      return (
+        matchesDefinitionValue(definition, allergen.code) ||
+        matchesDefinitionValue(definition, allergen.name)
+      );
+    }
+
+    const normalizedId = allergenId.toLowerCase();
+    const normalizedFallback = fallbackLabel?.toLowerCase();
+
+    return (
+      allergen.code?.toLowerCase() === normalizedId ||
+      allergen.name?.toLowerCase() === normalizedId ||
+      (normalizedFallback
+        ? allergen.code?.toLowerCase() === normalizedFallback ||
+          allergen.name?.toLowerCase() === normalizedFallback
+        : false)
+    );
+  };
 
   const initializeSubstitutionDraft = (
     ingredientIndex: number,
@@ -166,23 +250,20 @@ export const IngredientsList = ({
             onConfirmIngredient(index);
           };
 
-          const toggleAllergen = (allergenId: string, allergenLabel: string) => {
-            const normalizedId = allergenId.toLowerCase();
-            const updatedAllergens = selectedAllergens.some((existing) => {
-              const codeMatch = existing.code?.toLowerCase() === normalizedId;
-              const nameMatch = existing.name?.toLowerCase() === normalizedId;
-              return codeMatch || nameMatch;
-            })
-              ? selectedAllergens.filter((existing) => {
-                  const codeMatch = existing.code?.toLowerCase() === normalizedId;
-                  const nameMatch = existing.name?.toLowerCase() === normalizedId;
-                  return !(codeMatch || nameMatch);
-                })
+          const toggleAllergen = (allergenId: string, fallbackLabel?: string) => {
+            const definition = allergenFilterMap.get(allergenId);
+            const label = definition?.name ?? fallbackLabel ?? allergenId;
+            const updatedAllergens = selectedAllergens.some((existing) =>
+              matchesAllergenSelection(existing, allergenId, label),
+            )
+              ? selectedAllergens.filter(
+                  (existing) => !matchesAllergenSelection(existing, allergenId, label),
+                )
               : [
                   ...selectedAllergens,
                   {
                     code: allergenId,
-                    name: allergenLabel,
+                    name: label,
                     certainty: ingredient.confirmed ? "confirmed" : "predicted",
                   },
                 ];
@@ -281,6 +362,10 @@ export const IngredientsList = ({
                                 {selectedAllergens.length > 0 ? (
                                   <div className="mt-3 flex flex-wrap gap-2">
                                     {selectedAllergens.map((allergen, allergenIndex) => {
+                                      const definition = findDefinitionForAllergen(
+                                        allergen.code,
+                                        allergen.name,
+                                      );
                                       const certaintyLabel = (
                                         allergen.certainty || (ingredient.confirmed ? "confirmed" : "predicted")
                                       ).toLowerCase();
@@ -289,14 +374,18 @@ export const IngredientsList = ({
                                         certaintyLabel === "confirmed"
                                           ? "text-primary"
                                           : "text-muted-foreground";
+                                      const Icon = definition?.Icon;
+                                      const allergenDisplayName =
+                                        definition?.name ?? allergen.name ?? allergen.code ?? "Allergen";
 
                                       return (
                                         <span
                                           key={`${allergen.code ?? "unknown"}-${allergen.name ?? allergenIndex}`}
                                           className="inline-flex items-center gap-2 rounded-full border border-secondary/40 bg-secondary/15 px-3 py-1 text-xs"
                                         >
+                                          {Icon && <Icon className="h-4 w-4 text-secondary" />}
                                           <span className="text-sm font-semibold text-secondary">
-                                            {allergen.name || allergen.code}
+                                            {allergenDisplayName}
                                           </span>
                                           <span className={`text-[10px] uppercase tracking-wide ${statusClassName}`}>
                                             {displayLabel}
@@ -321,12 +410,12 @@ export const IngredientsList = ({
                             <p className="text-sm font-semibold text-foreground">Select allergens</p>
                             <div className="mt-2 max-h-56 space-y-2 overflow-y-auto pr-1">
                               {ALLERGEN_CATEGORIES.map((category) => {
-                                const normalizedId = category.id.toLowerCase();
-                                const isChecked = selectedAllergens.some((existing) => {
-                                  const codeMatch = existing.code?.toLowerCase() === normalizedId;
-                                  const nameMatch = existing.name?.toLowerCase() === normalizedId;
-                                  return codeMatch || nameMatch;
-                                });
+                                const definition = allergenFilterMap.get(category.id);
+                                const label = definition?.name ?? category.label ?? category.id;
+                                const Icon = definition?.Icon;
+                                const isChecked = selectedAllergens.some((existing) =>
+                                  matchesAllergenSelection(existing, category.id, label),
+                                );
                                 return (
                                   <label
                                     key={category.id}
@@ -334,10 +423,11 @@ export const IngredientsList = ({
                                   >
                                     <Checkbox
                                       checked={isChecked}
-                                      onCheckedChange={() => toggleAllergen(category.id, category.label)}
+                                      onCheckedChange={() => toggleAllergen(category.id, label)}
                                       id={`ingredient-${index}-allergen-${category.id}`}
                                     />
-                                    <span>{category.label}</span>
+                                    {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
+                                    <span>{label}</span>
                                   </label>
                                 );
                               })}
