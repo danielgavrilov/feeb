@@ -20,6 +20,7 @@ import type { AllergenFilterDefinition } from "@/data/allergen-filters";
 import { Check, Trash2, Plus, ChevronsUpDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { parsePriceInput } from "@/lib/price-format";
+import type { AllergenConfidence } from "@/lib/api";
 
 const LEGACY_ALLERGEN_ALIASES: Record<string, string[]> = {
   cereals_gluten: ["gluten"],
@@ -49,7 +50,11 @@ const LEGACY_ALLERGEN_ALIASES: Record<string, string[]> = {
   sesame: ["sesame", "tahini"],
   sulphites: ["sulphites", "sulfites"],
   lupin: ["lupin"],
-  molluscs: ["shellfish", "mollusc"],
+  molluscs: ["shellfish"],
+  meat: ["meat", "contains meat"],
+  animal_product: ["animal product", "honey", "gelatin", "animal fat", "lard"],
+  vegan: ["vegan", "not vegan", "not plant-based"],
+  vegetarian: ["vegetarian", "not vegetarian", "not plant-based"],
 };
 
 const ANIMAL_PRODUCT_ALLERGENS = new Set([
@@ -68,7 +73,7 @@ export interface IngredientState {
   allergens?: Array<{
     code: string;
     name: string;
-    certainty?: string;
+    certainty?: AllergenConfidence;
   }>;
   dietaryInfo?: string[];
   substitution?: {
@@ -89,7 +94,7 @@ interface IngredientsListProps {
     allergens: Array<{
       code: string;
       name: string;
-      certainty?: string;
+      certainty?: AllergenConfidence;
     }>
   ) => void;
   onUpdateIngredientSubstitution: (
@@ -423,6 +428,8 @@ export const IngredientsList = ({
                                       const statusClassName =
                                         certaintyLabel === "confirmed"
                                           ? "text-primary"
+                                          : certaintyLabel === "likely"
+                                          ? "text-amber-600 dark:text-amber-300"
                                           : "text-muted-foreground";
                                       const Icon = definition?.Icon;
                                       const allergenDisplayName =

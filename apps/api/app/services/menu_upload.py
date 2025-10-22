@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 
 from ..config import settings
 from .. import dal
+from ..allergen_canonical import CanonicalAllergen, canonicalize_allergen, normalize_certainty
 from ..models import (
     MenuUpload,
     MenuUploadCreateResponse,
@@ -357,14 +358,7 @@ class MenuUploadService:
                 quantity = self._parse_float(ingredient.get("quantity"))
                 unit = self._safe_string(ingredient.get("unit"))
                 notes = self._safe_string(ingredient.get("notes"))
-                allergens = ingredient.get("allergens")
-                allergen_serialized: Optional[str]
-                if allergens is None:
-                    allergen_serialized = None
-                elif isinstance(allergens, (list, dict)):
-                    allergen_serialized = json.dumps(allergens)
-                else:
-                    allergen_serialized = json.dumps([allergens])
+                allergen_serialized = self._normalize_predicted_allergens(ingredient.get("allergens"))
 
                 ingredient_code = f"llm:{uuid4().hex}"
                 ingredient_id = await dal.insert_ingredient(
@@ -387,6 +381,55 @@ class MenuUploadService:
                 added += 1
 
         return added
+
+    def _normalize_predicted_allergens(self, raw: object) -> Optional[str]:
+        """Convert LLM supplied allergens into canonical JSON for storage."""
+
+        if raw is None:
+            return None
+
+        if isinstance(raw, dict):
+            candidates = [raw]
+        elif isinstance(raw, list):
+            candidates = list(raw)
+        else:
+            candidates = [raw]
+
+        normalized: List[Dict[str, Optional[str]]] = []
+        seen: set[str] = set()
+
+        for candidate in candidates:
+            if isinstance(candidate, dict):
+                allergen_value = (
+                    candidate.get("allergen")
+                    or candidate.get("name")
+                    or candidate.get("code")
+                    or candidate.get("label")
+                )
+                certainty_value = candidate.get("certainty") or candidate.get("confidence")
+            else:
+                allergen_value = candidate
+                certainty_value = None
+
+            canonical: Optional[CanonicalAllergen] = canonicalize_allergen(allergen_value)
+            if not canonical:
+                continue
+
+            if canonical.slug in seen:
+                continue
+            seen.add(canonical.slug)
+
+            normalized.append(
+                {
+                    "allergen": canonical.label,
+                    "certainty": normalize_certainty(certainty_value),
+                }
+            )
+
+        if not normalized:
+            return None
+
+        return json.dumps(normalized)
 
     async def _call_extraction_service(self, source_type: str, source_value: str) -> List[Dict]:
         if not self.extraction_url:

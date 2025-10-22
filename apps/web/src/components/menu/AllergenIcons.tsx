@@ -29,21 +29,14 @@ const HexagonIcon = ({ topColor, bottomColor, children, className }: HexagonIcon
         </clipPath>
       </defs>
       <polygon points="32 0 60 16 60 48 32 64 4 48 4 16" fill={`url(#${gradientId})`} />
-      <g clipPath={`url(#${clipPathId})`}>
-        {children}
-      </g>
+      <g clipPath={`url(#${clipPathId})`}>{children}</g>
     </svg>
   );
 };
 
-export const CerealsGlutenIcon = ({ className }: { className?: string }) => (
-  <HexagonIcon topColor="#f4b942" bottomColor="#d97706" className={className}>
-    <path
-      d="M32 14v36"
-      stroke="white"
-      strokeWidth={3}
-      strokeLinecap="round"
-    />
+const GrainStalk = () => (
+  <>
+    <path d="M32 14v36" stroke="white" strokeWidth={3} strokeLinecap="round" />
     <path
       d="M26 20c4 4 4 12 0 16 4 4 4 12 0 16"
       fill="none"
@@ -58,8 +51,73 @@ export const CerealsGlutenIcon = ({ className }: { className?: string }) => (
       strokeWidth={3}
       strokeLinecap="round"
     />
-  </HexagonIcon>
+  </>
 );
+
+const NutShape = () => (
+  <>
+    <path
+      d="M32 18c8 0 14 6 14 14 0 10-10 16-14 18-4-2-14-8-14-18 0-8 6-14 14-14Z"
+      fill="#fef3c7"
+    />
+    <path
+      d="M32 20c4 4 6 8 6 12s-2 8-6 12c-4-4-6-8-6-12s2-8 6-12Z"
+      fill="#fde68a"
+    />
+    <path d="M32 20v24" stroke="#d97706" strokeWidth={3} strokeLinecap="round" />
+  </>
+);
+
+const createGrainIcon = (label: string) => {
+  const Component = ({ className }: { className?: string }) => (
+    <HexagonIcon topColor="#f4b942" bottomColor="#d97706" className={className}>
+      <GrainStalk />
+      <text
+        x="32"
+        y="46"
+        textAnchor="middle"
+        fontSize="14"
+        fill="#fde68a"
+        fontWeight={700}
+        letterSpacing="0.5"
+        dominantBaseline="middle"
+      >
+        {label}
+      </text>
+    </HexagonIcon>
+  );
+  Component.displayName = `GrainIcon${label}`;
+  return Component;
+};
+
+const createNutIcon = (label: string) => {
+  const Component = ({ className }: { className?: string }) => (
+    <HexagonIcon topColor="#f59e0b" bottomColor="#92400e" className={className}>
+      <NutShape />
+      <text
+        x="32"
+        y="46"
+        textAnchor="middle"
+        fontSize="12"
+        fill="#78350f"
+        fontWeight={700}
+        letterSpacing="0.5"
+        dominantBaseline="middle"
+      >
+        {label}
+      </text>
+    </HexagonIcon>
+  );
+  Component.displayName = `NutIcon${label}`;
+  return Component;
+};
+
+export const GlutenWheatIcon = createGrainIcon("W");
+export const GlutenBarleyIcon = createGrainIcon("B");
+export const GlutenRyeIcon = createGrainIcon("R");
+export const GlutenOatsIcon = createGrainIcon("O");
+export const GlutenSpeltIcon = createGrainIcon("S");
+export const GlutenTriticaleIcon = createGrainIcon("T");
 
 export const CrustaceansIcon = ({ className }: { className?: string }) => (
   <HexagonIcon topColor="#fb7185" bottomColor="#be123c" className={className}>
@@ -154,19 +212,14 @@ export const MilkIcon = ({ className }: { className?: string }) => (
   </HexagonIcon>
 );
 
-export const TreeNutsIcon = ({ className }: { className?: string }) => (
-  <HexagonIcon topColor="#f59e0b" bottomColor="#92400e" className={className}>
-    <path
-      d="M32 18c8 0 14 6 14 14 0 10-10 16-14 18-4-2-14-8-14-18 0-8 6-14 14-14Z"
-      fill="#fef3c7"
-    />
-    <path
-      d="M32 20c4 4 6 8 6 12s-2 8-6 12c-4-4-6-8-6-12s2-8 6-12Z"
-      fill="#fde68a"
-    />
-    <path d="M32 20v24" stroke="#d97706" strokeWidth={3} strokeLinecap="round" />
-  </HexagonIcon>
-);
+export const NutsAlmondIcon = createNutIcon("AL");
+export const NutsHazelnutIcon = createNutIcon("HZ");
+export const NutsWalnutIcon = createNutIcon("WA");
+export const NutsCashewIcon = createNutIcon("CA");
+export const NutsPecanIcon = createNutIcon("PE");
+export const NutsBrazilNutIcon = createNutIcon("BR");
+export const NutsPistachioIcon = createNutIcon("PI");
+export const NutsMacadamiaIcon = createNutIcon("MA");
 
 export const CeleryIcon = ({ className }: { className?: string }) => (
   <HexagonIcon topColor="#34d399" bottomColor="#047857" className={className}>
@@ -250,6 +303,48 @@ export const MolluscsIcon = ({ className }: { className?: string }) => (
     />
     <path d="M28 34c2 2 6 2 8 0" stroke="white" strokeWidth={3} strokeLinecap="round" />
     <path d="M26 40c4 2 8 2 12 0" stroke="white" strokeWidth={3} strokeLinecap="round" />
+  </HexagonIcon>
+);
+
+export const MeatIcon = ({ className }: { className?: string }) => (
+  <HexagonIcon topColor="#f87171" bottomColor="#b91c1c" className={className}>
+    <path
+      d="M24 26c-4 4-4 10 0 14s10 4 14 0 4-10 0-14-10-4-14 0Z"
+      fill="#fecdd3"
+    />
+    <path
+      d="M38 32c4-2 6 2 6 4 2 0 4 2 4 4s-2 4-4 4-4-2-4-4c-2 2-6 2-8 0"
+      fill="none"
+      stroke="#fee2e2"
+      strokeWidth={3}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <circle cx="42" cy="38" r="2.5" fill="#fee2e2" />
+    <circle cx="46" cy="42" r="2" fill="white" opacity={0.85} />
+  </HexagonIcon>
+);
+
+export const AnimalProductIcon = ({ className }: { className?: string }) => (
+  <HexagonIcon topColor="#facc15" bottomColor="#b45309" className={className}>
+    <path
+      d="M32 18c-6 6-10 12-10 18 0 6 4 12 10 12s10-6 10-12c0-6-4-12-10-18Z"
+      fill="#fef3c7"
+    />
+    <path
+      d="M28 32c2 2 6 2 8 0"
+      stroke="#fbbf24"
+      strokeWidth={3}
+      strokeLinecap="round"
+    />
+    <path
+      d="M30 38c2 2 4 2 6 0"
+      stroke="#f59e0b"
+      strokeWidth={3}
+      strokeLinecap="round"
+    />
+    <circle cx="32" cy="28" r="4" fill="#fcd34d" />
+    <circle cx="32" cy="44" r="3" fill="#fde68a" />
   </HexagonIcon>
 );
 
