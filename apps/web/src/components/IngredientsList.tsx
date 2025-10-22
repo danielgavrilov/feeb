@@ -132,6 +132,21 @@ export const IngredientsList = ({
   const [substitutionDraft, setSubstitutionDraft] = useState({ alternative: "", surcharge: "" });
   const [expandedAllergenCategory, setExpandedAllergenCategory] = useState<string | null>(null);
 
+  const sortedAllergenCategories = [...ALLERGEN_CATEGORIES].sort((a, b) => {
+    const aDefinition = allergenFilterMap.get(a.id);
+    const bDefinition = allergenFilterMap.get(b.id);
+    const aLabel = (aDefinition?.name ?? a.label ?? a.id).toLowerCase();
+    const bLabel = (bDefinition?.name ?? b.label ?? b.id).toLowerCase();
+    const aHasChildren = Array.isArray(a.children) && a.children.length > 0;
+    const bHasChildren = Array.isArray(b.children) && b.children.length > 0;
+
+    if (aHasChildren !== bHasChildren) {
+      return aHasChildren ? 1 : -1;
+    }
+
+    return aLabel.localeCompare(bLabel);
+  });
+
   const matchesDefinitionValue = (definition: AllergenFilterDefinition, value?: string) => {
     if (!value) {
       return false;
@@ -323,7 +338,7 @@ export const IngredientsList = ({
                   {
                     code: definition?.id ?? allergenId,
                     name: canonicalName,
-                    certainty: ingredient.confirmed ? "confirmed" : "predicted",
+                    certainty: "confirmed",
                   },
                 ];
 
@@ -426,11 +441,29 @@ export const IngredientsList = ({
                                 </p>
                                 {selectedAllergens.length > 0 ? (
                                   <div className="mt-3 flex flex-wrap gap-2">
-                                    {selectedAllergens.map((allergen, allergenIndex) => {
-                                      const definition = findDefinitionForAllergen(
-                                        allergen.code,
-                                        allergen.name,
-                                      );
+                                    {[...selectedAllergens]
+                                      .sort((a, b) => {
+                                        const aDefinition = findDefinitionForAllergen(
+                                          a.code,
+                                          a.name,
+                                        );
+                                        const bDefinition = findDefinitionForAllergen(
+                                          b.code,
+                                          b.name,
+                                        );
+                                        const aLabel = (
+                                          aDefinition?.name ?? a.name ?? a.code ?? ""
+                                        ).toLowerCase();
+                                        const bLabel = (
+                                          bDefinition?.name ?? b.name ?? b.code ?? ""
+                                        ).toLowerCase();
+                                        return aLabel.localeCompare(bLabel);
+                                      })
+                                      .map((allergen, allergenIndex) => {
+                                        const definition = findDefinitionForAllergen(
+                                          allergen.code,
+                                          allergen.name,
+                                        );
                                       const certaintyLabel = (
                                         allergen.certainty || (ingredient.confirmed ? "confirmed" : "predicted")
                                       ).toLowerCase();
@@ -476,7 +509,7 @@ export const IngredientsList = ({
                           <div>
                             <p className="text-sm font-semibold text-foreground">Select allergens</p>
                             <div className="mt-2 max-h-56 space-y-2 overflow-y-auto pr-1">
-                              {ALLERGEN_CATEGORIES.map((category) => {
+                              {sortedAllergenCategories.map((category) => {
                                 const definition = allergenFilterMap.get(category.id);
                                 const label = definition?.name ?? category.label ?? category.id;
                                 const Icon = definition?.Icon;
@@ -532,10 +565,22 @@ export const IngredientsList = ({
                                       </button>
                                       {isExpanded && (
                                         <div className="mt-2 space-y-2 pl-6">
-                                          {category.children?.map((child) => {
-                                            const childDefinition = allergenFilterMap.get(child.id);
-                                            const childLabel =
-                                              childDefinition?.name ?? child.label ?? child.id;
+                                          {[...(category.children ?? [])]
+                                            .sort((aChild, bChild) => {
+                                              const aDefinition = allergenFilterMap.get(aChild.id);
+                                              const bDefinition = allergenFilterMap.get(bChild.id);
+                                              const aLabel = (
+                                                aDefinition?.name ?? aChild.label ?? aChild.id
+                                              ).toLowerCase();
+                                              const bLabel = (
+                                                bDefinition?.name ?? bChild.label ?? bChild.id
+                                              ).toLowerCase();
+                                              return aLabel.localeCompare(bLabel);
+                                            })
+                                            .map((child) => {
+                                              const childDefinition = allergenFilterMap.get(child.id);
+                                              const childLabel =
+                                                childDefinition?.name ?? child.label ?? child.id;
                                             const childChecked = isAllergenSelected(
                                               selectedAllergens,
                                               child.id,
