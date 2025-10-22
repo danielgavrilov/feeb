@@ -26,35 +26,52 @@ export const DIETARY_CATEGORIES = [
   { id: "low-fodmap", label: "Low FODMAP", icon: "🍽️" },
 ];
 
-export const ALLERGEN_CATEGORIES = [
-  { id: "gluten_wheat", label: "Gluten (wheat)" },
-  { id: "gluten_barley", label: "Gluten (barley)" },
-  { id: "gluten_rye", label: "Gluten (rye)" },
-  { id: "gluten_oats", label: "Gluten (oats)" },
-  { id: "gluten_spelt", label: "Gluten (spelt)" },
-  { id: "gluten_triticale", label: "Gluten (triticale)" },
+export interface AllergenCategoryOption {
+  id: string;
+  label: string;
+}
+
+export interface AllergenCategoryDefinition extends AllergenCategoryOption {
+  children?: AllergenCategoryOption[];
+}
+
+export const ALLERGEN_CATEGORIES: AllergenCategoryDefinition[] = [
+  {
+    id: "cereals_gluten",
+    label: "Cereals containing gluten",
+    children: [
+      { id: "cereals_gluten:wheat", label: "Wheat" },
+      { id: "cereals_gluten:rye", label: "Rye" },
+      { id: "cereals_gluten:barley", label: "Barley" },
+      { id: "cereals_gluten:oats", label: "Oats" },
+      { id: "cereals_gluten:spelt", label: "Spelt" },
+      { id: "cereals_gluten:triticale", label: "Triticale" },
+    ],
+  },
   { id: "crustaceans", label: "Crustaceans" },
   { id: "eggs", label: "Eggs" },
   { id: "fish", label: "Fish" },
   { id: "peanuts", label: "Peanuts" },
   { id: "soybeans", label: "Soybeans" },
   { id: "milk", label: "Milk" },
-  { id: "nuts_almond", label: "Nuts (almond)" },
-  { id: "nuts_hazelnut", label: "Nuts (hazelnut)" },
-  { id: "nuts_walnut", label: "Nuts (walnut)" },
-  { id: "nuts_cashew", label: "Nuts (cashew)" },
-  { id: "nuts_pecan", label: "Nuts (pecan)" },
-  { id: "nuts_brazil_nut", label: "Nuts (brazil nut)" },
-  { id: "nuts_pistachio", label: "Nuts (pistachio)" },
-  { id: "nuts_macadamia", label: "Nuts (macadamia)" },
+  {
+    id: "tree_nuts",
+    label: "Tree nuts",
+    children: [
+      { id: "tree_nuts:almonds", label: "Almonds" },
+      { id: "tree_nuts:hazelnuts", label: "Hazelnuts" },
+      { id: "tree_nuts:walnuts", label: "Walnuts" },
+      { id: "tree_nuts:cashews", label: "Cashews" },
+      { id: "tree_nuts:pecans", label: "Pecans" },
+      { id: "tree_nuts:brazil_nuts", label: "Brazil nuts" },
+      { id: "tree_nuts:pistachios", label: "Pistachios" },
+      { id: "tree_nuts:macadamia", label: "Macadamia nuts" },
+    ],
+  },
   { id: "celery", label: "Celery" },
   { id: "mustard", label: "Mustard" },
   { id: "sesame", label: "Sesame seeds" },
   { id: "sulphites", label: "Sulphur dioxide & sulphites" },
   { id: "lupin", label: "Lupin" },
   { id: "molluscs", label: "Molluscs" },
-  { id: "meat", label: "Meat" },
-  { id: "animal_product", label: "Animal product (honey, fat, gelatin)" },
-  { id: "vegan", label: "Not plant-based (vegan)" },
-  { id: "vegetarian", label: "Not plant-based (vegetarian)" },
 ];
