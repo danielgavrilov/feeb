@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -29,6 +30,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Trash2, Edit, AlertTriangle, ArrowDown, ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { loadSavedMenuSections, saveMenuSections } from "@/lib/menu-sections";
+import type { AllergenFilterDefinition } from "@/data/allergen-filters";
+import { ALLERGEN_FILTERS, allergenFilterMap } from "@/data/allergen-filters";
 
 export type RecipeBulkAction =
   | "delete"
@@ -124,6 +127,48 @@ const ensureArchiveSection = (sections: SectionDefinition[]): SectionDefinition[
   }
 
   return normalized;
+};
+
+const getDishAllergenDefinitions = (dish: SavedDish): AllergenFilterDefinition[] => {
+  const allergenCodes = new Set<string>();
+
+  for (const ingredient of dish.ingredients) {
+    for (const allergen of ingredient.allergens ?? []) {
+      const normalizedCode = allergen?.code?.toLowerCase();
+      if (normalizedCode) {
+        allergenCodes.add(normalizedCode);
+      }
+    }
+  }
+
+  const results: AllergenFilterDefinition[] = [];
+  const veganDefinition = allergenFilterMap.get("vegan");
+  const vegetarianDefinition = allergenFilterMap.get("vegetarian");
+
+  const definitionHasForbiddenCode = (definition: AllergenFilterDefinition | undefined) =>
+    definition?.codes.some((code) => allergenCodes.has(code.toLowerCase())) ?? false;
+
+  const shouldShowVegan = veganDefinition ? !definitionHasForbiddenCode(veganDefinition) : false;
+  const shouldShowVegetarian =
+    !shouldShowVegan && vegetarianDefinition ? !definitionHasForbiddenCode(vegetarianDefinition) : false;
+
+  if (shouldShowVegan && veganDefinition) {
+    results.push(veganDefinition);
+  } else if (shouldShowVegetarian && vegetarianDefinition) {
+    results.push(vegetarianDefinition);
+  }
+
+  for (const definition of ALLERGEN_FILTERS) {
+    if (definition.category !== "allergen") {
+      continue;
+    }
+
+    if (definition.codes.some((code) => allergenCodes.has(code.toLowerCase()))) {
+      results.push(definition);
+    }
+  }
+
+  return results;
 };
 
 const RECIPE_STATUS_OPTIONS: Array<{
@@ -1216,6 +1261,7 @@ export const RecipeBook = ({
                   })();
 
                   const priceLabel = dish.price ? formatPrice(dish.price) : "";
+                  const allergenDefinitions = getDishAllergenDefinitions(dish);
 
                   return (
                     <Card
@@ -1253,7 +1299,28 @@ export const RecipeBook = ({
                               <p className="text-sm text-muted-foreground md:max-w-[66%]">{dish.description}</p>
                             )}
                           </div>
-                          <div className="mt-3 flex gap-2 flex-wrap">
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            {allergenDefinitions.length > 0 && (
+                              <TooltipProvider delayDuration={150}>
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  {allergenDefinitions.map((definition) => {
+                                    const Icon = definition.Icon;
+                                    return (
+                                      <Tooltip key={definition.id}>
+                                        <TooltipTrigger asChild>
+                                          <span className="inline-flex rounded-md border border-border/50 bg-background/80 p-1.5 shadow-sm">
+                                            <Icon className="h-8 w-8" />
+                                          </span>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" align="center">
+                                          {definition.name}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    );
+                                  })}
+                                </div>
+                              </TooltipProvider>
+                            )}
                             {dish.servingSize !== "1" && (
                               <Badge variant="outline">Serves {dish.servingSize}</Badge>
                             )}
