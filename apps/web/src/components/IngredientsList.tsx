@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -16,28 +17,53 @@ import {
 import { ALLERGEN_CATEGORIES } from "@/data/recipes";
 import { allergenFilterMap } from "@/data/allergen-filters";
 import type { AllergenFilterDefinition } from "@/data/allergen-filters";
-import { Check, Trash2, Plus, ChevronsUpDown } from "lucide-react";
+import { Check, Trash2, Plus, ChevronsUpDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { parsePriceInput } from "@/lib/price-format";
+import type { AllergenConfidence } from "@/lib/api";
 
 const LEGACY_ALLERGEN_ALIASES: Record<string, string[]> = {
   cereals_gluten: ["gluten"],
+  "cereals_gluten:wheat": ["wheat", "farina", "semolina", "durum"],
+  "cereals_gluten:rye": ["rye", "pumpernickel", "secale"],
+  "cereals_gluten:barley": ["barley", "malt", "hordeum"],
+  "cereals_gluten:oats": ["oat", "oats", "avena"],
+  "cereals_gluten:spelt": ["spelt", "dinkel"],
+  "cereals_gluten:triticale": ["triticale"],
   crustaceans: ["shellfish"],
-  eggs: ["eggs"],
+  eggs: ["egg", "eggs"],
   fish: ["fish"],
-  peanuts: ["peanuts"],
-  soybeans: ["soy"],
-  milk: ["dairy"],
-  tree_nuts: ["nuts"],
-  celery: ["celery"],
+  peanuts: ["peanut", "peanuts"],
+  soybeans: ["soy", "soya"],
+  milk: ["dairy", "lactose"],
+  tree_nuts: ["nuts", "tree nuts"],
+  "tree_nuts:almonds": ["almond", "almonds"],
+  "tree_nuts:hazelnuts": ["hazelnut", "hazelnuts", "filbert"],
+  "tree_nuts:walnuts": ["walnut", "walnuts"],
+  "tree_nuts:cashews": ["cashew", "cashews"],
+  "tree_nuts:pecans": ["pecan", "pecans"],
+  "tree_nuts:brazil_nuts": ["brazil nut", "brazil nuts"],
+  "tree_nuts:pistachios": ["pistachio", "pistachios"],
+  "tree_nuts:macadamia": ["macadamia", "macadamia nut", "macadamia nuts"],
+  celery: ["celery", "celeriac"],
   mustard: ["mustard"],
-  sesame: ["sesame"],
+  sesame: ["sesame", "tahini"],
   sulphites: ["sulphites", "sulfites"],
   lupin: ["lupin"],
   molluscs: ["shellfish"],
+  meat: ["meat", "contains meat"],
+  animal_product: ["animal product", "honey", "gelatin", "animal fat", "lard"],
   vegan: ["vegan", "not vegan", "not plant-based"],
   vegetarian: ["vegetarian", "not vegetarian", "not plant-based"],
 };
+
+const ANIMAL_PRODUCT_ALLERGENS = new Set([
+  "crustaceans",
+  "eggs",
+  "fish",
+  "milk",
+  "molluscs",
+]);
 
 export interface IngredientState {
   name: string;
@@ -104,6 +130,7 @@ export const IngredientsList = ({
   const [newUnit, setNewUnit] = useState("g");
   const [activeSubstitutionIndex, setActiveSubstitutionIndex] = useState<number | null>(null);
   const [substitutionDraft, setSubstitutionDraft] = useState({ alternative: "", surcharge: "" });
+  const [expandedAllergenCategory, setExpandedAllergenCategory] = useState<string | null>(null);
 
   const matchesDefinitionValue = (definition: AllergenFilterDefinition, value?: string) => {
     if (!value) {
@@ -167,6 +194,22 @@ export const IngredientsList = ({
         : false)
     );
   };
+
+  const isAllergenSelected = (
+    allergens: Array<{ code?: string; name?: string }>,
+    allergenId: string,
+    fallbackLabel?: string,
+  ) =>
+    allergens.some((existing) =>
+      matchesAllergenSelection(existing, allergenId, fallbackLabel),
+    );
+
+  const isAnimalProductAllergen = (allergenId: string) => {
+    const baseId = allergenId.split(":")[0];
+    return ANIMAL_PRODUCT_ALLERGENS.has(allergenId) || ANIMAL_PRODUCT_ALLERGENS.has(baseId);
+  };
+
+  const toInputId = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, "-");
 
   const initializeSubstitutionDraft = (
     ingredientIndex: number,
@@ -261,19 +304,25 @@ export const IngredientsList = ({
           };
 
           const toggleAllergen = (allergenId: string, fallbackLabel?: string) => {
-            const definition = allergenFilterMap.get(allergenId);
-            const label = definition?.name ?? fallbackLabel ?? allergenId;
-            const updatedAllergens = selectedAllergens.some((existing) =>
-              matchesAllergenSelection(existing, allergenId, label),
-            )
+            const definition =
+              allergenFilterMap.get(allergenId) ??
+              allergenFilterMap.get(allergenId.toLowerCase());
+            const canonicalName = definition?.name ?? fallbackLabel ?? allergenId;
+            const alreadySelected = isAllergenSelected(
+              selectedAllergens,
+              allergenId,
+              canonicalName,
+            );
+            const updatedAllergens = alreadySelected
               ? selectedAllergens.filter(
-                  (existing) => !matchesAllergenSelection(existing, allergenId, label),
+                  (existing) =>
+                    !matchesAllergenSelection(existing, allergenId, canonicalName),
                 )
               : [
                   ...selectedAllergens,
                   {
-                    code: allergenId,
-                    name: label,
+                    code: definition?.id ?? allergenId,
+                    name: canonicalName,
                     certainty: ingredient.confirmed ? "confirmed" : "predicted",
                   },
                 ];
@@ -353,7 +402,13 @@ export const IngredientsList = ({
                   </div>
 
                   <div className="space-y-4">
-                    <Popover>
+                    <Popover
+                      onOpenChange={(open) => {
+                        if (!open) {
+                          setExpandedAllergenCategory(null);
+                        }
+                      }}
+                    >
                       <PopoverTrigger asChild>
                         <button
                           type="button"
@@ -383,6 +438,8 @@ export const IngredientsList = ({
                                       const statusClassName =
                                         certaintyLabel === "confirmed"
                                           ? "text-primary"
+                                          : certaintyLabel === "likely"
+                                          ? "text-amber-600 dark:text-amber-300"
                                           : "text-muted-foreground";
                                       const Icon = definition?.Icon;
                                       const allergenDisplayName =
@@ -423,21 +480,139 @@ export const IngredientsList = ({
                                 const definition = allergenFilterMap.get(category.id);
                                 const label = definition?.name ?? category.label ?? category.id;
                                 const Icon = definition?.Icon;
-                                const isChecked = selectedAllergens.some((existing) =>
-                                  matchesAllergenSelection(existing, category.id, label),
+                                const hasChildren =
+                                  Array.isArray(category.children) && category.children.length > 0;
+                                const isExpanded = expandedAllergenCategory === category.id;
+                                const selectedChildCount = hasChildren
+                                  ? category.children?.reduce((count, child) => {
+                                      const childDefinition = allergenFilterMap.get(child.id);
+                                      const childLabel =
+                                        childDefinition?.name ?? child.label ?? child.id;
+                                      return isAllergenSelected(
+                                        selectedAllergens,
+                                        child.id,
+                                        childLabel,
+                                      )
+                                        ? count + 1
+                                        : count;
+                                    }, 0) ?? 0
+                                  : 0;
+
+                                if (hasChildren) {
+                                  return (
+                                    <div key={category.id} className="rounded-md">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setExpandedAllergenCategory((current) =>
+                                            current === category.id ? null : category.id,
+                                          )
+                                        }
+                                        className="flex w-full items-center justify-between rounded-md px-2 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted/40"
+                                      >
+                                        <span className="flex items-center gap-2">
+                                          {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
+                                          <span>{label}</span>
+                                        </span>
+                                        <span className="flex items-center gap-2">
+                                          {selectedChildCount > 0 && (
+                                            <Badge
+                                              variant="outline"
+                                              className="text-[10px] font-semibold uppercase tracking-wide"
+                                            >
+                                              {selectedChildCount} selected
+                                            </Badge>
+                                          )}
+                                          <ChevronRight
+                                            className={`h-4 w-4 transition-transform ${
+                                              isExpanded ? "rotate-90" : ""
+                                            }`}
+                                          />
+                                        </span>
+                                      </button>
+                                      {isExpanded && (
+                                        <div className="mt-2 space-y-2 pl-6">
+                                          {category.children?.map((child) => {
+                                            const childDefinition = allergenFilterMap.get(child.id);
+                                            const childLabel =
+                                              childDefinition?.name ?? child.label ?? child.id;
+                                            const childChecked = isAllergenSelected(
+                                              selectedAllergens,
+                                              child.id,
+                                              childLabel,
+                                            );
+                                            const showAnimalBadge =
+                                              isAnimalProductAllergen(child.id) && childChecked;
+                                            const checkboxId = `ingredient-${index}-allergen-${toInputId(
+                                              child.id,
+                                            )}`;
+                                            return (
+                                              <label
+                                                key={child.id}
+                                                htmlFor={checkboxId}
+                                                className="flex items-center justify-between gap-2 rounded-md px-2 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/40"
+                                              >
+                                                <span className="flex items-center gap-2">
+                                                  <Checkbox
+                                                    id={checkboxId}
+                                                    checked={childChecked}
+                                                    onCheckedChange={() =>
+                                                      toggleAllergen(child.id, childLabel)
+                                                    }
+                                                  />
+                                                  <span>{childLabel}</span>
+                                                </span>
+                                                {showAnimalBadge && (
+                                                  <Badge
+                                                    variant="destructive"
+                                                    className="text-[10px] font-semibold uppercase tracking-wide"
+                                                  >
+                                                    Animal product
+                                                  </Badge>
+                                                )}
+                                              </label>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                }
+
+                                const isChecked = isAllergenSelected(
+                                  selectedAllergens,
+                                  category.id,
+                                  label,
                                 );
+                                const checkboxId = `ingredient-${index}-allergen-${toInputId(
+                                  category.id,
+                                )}`;
+                                const showAnimalBadge =
+                                  isAnimalProductAllergen(category.id) && isChecked;
+
                                 return (
                                   <label
                                     key={category.id}
-                                    className="flex items-center gap-2 text-sm font-medium text-foreground"
+                                    htmlFor={checkboxId}
+                                    className="flex items-center justify-between gap-2 rounded-md px-2 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/40"
                                   >
-                                    <Checkbox
-                                      checked={isChecked}
-                                      onCheckedChange={() => toggleAllergen(category.id, label)}
-                                      id={`ingredient-${index}-allergen-${category.id}`}
-                                    />
-                                    {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
-                                    <span>{label}</span>
+                                    <span className="flex items-center gap-2">
+                                      <Checkbox
+                                        checked={isChecked}
+                                        onCheckedChange={() => toggleAllergen(category.id, label)}
+                                        id={checkboxId}
+                                      />
+                                      {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
+                                      <span>{label}</span>
+                                    </span>
+                                    {showAnimalBadge && (
+                                      <Badge
+                                        variant="destructive"
+                                        className="text-[10px] font-semibold uppercase tracking-wide"
+                                      >
+                                        Animal product
+                                      </Badge>
+                                    )}
                                   </label>
                                 );
                               })}

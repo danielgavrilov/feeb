@@ -57,6 +57,8 @@ export interface RestaurantMenuSectionsResponse {
   sections: MenuSection[];
 }
 
+export type AllergenConfidence = "confirmed" | "likely" | "possible" | "predicted";
+
 export interface RecipeIngredient {
   ingredient_id: number;
   ingredient_name: string;

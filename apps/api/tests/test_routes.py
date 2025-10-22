@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 from app.main import app
 from app.database import Base, get_db
 from app import dal
+from app.routes import CANONICAL_ALLERGEN_MARKERS_PROMPT
 
 
 # Test database URL
@@ -232,6 +233,58 @@ async def test_extract_menu_items_normalization(client, monkeypatch):
     assert "\"persons\"" in prompt
     assert "strict" in prompt.lower()
 
+
+@pytest.mark.asyncio
+async def test_deduce_ingredients_prompt_enforces_allergen_schema(client, monkeypatch):
+    """Stage 2 prompt must pin the canonical markers and schema expectations."""
+
+    captured: dict[str, str] = {}
+
+    class FakeGeminiClient:
+        def __init__(self):
+            self.calls: list[dict] = []
+
+        async def extract_from_payload(self, **kwargs):  # type: ignore[no-untyped-def]
+            captured.update({"prompt": kwargs.get("prompt", "")})
+            return {
+                "recipes": [
+                    {
+                        "name": "Margherita Pizza",
+                        "ingredients": [
+                            {
+                                "name": "mozzarella",
+                                "quantity": 80,
+                                "unit": "g",
+                                "allergens": [
+                                    {"allergen": "milk", "certainty": "certain"},
+                                    {"allergen": "vegan", "certainty": "certain"},
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            }
+
+    monkeypatch.setattr("app.routes.GeminiClient", FakeGeminiClient)
+
+    response = await client.post(
+        "/llm/deduce-ingredients",
+        json={"recipes": [{"name": "Margherita Pizza", "recipe_id": 1}]},
+    )
+
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["recipes"][0]["ingredients"][0]["allergens"] == [
+        {"allergen": "milk", "certainty": "certain"},
+        {"allergen": "vegan", "certainty": "certain"},
+    ]
+
+    prompt = captured.get("prompt", "")
+    assert CANONICAL_ALLERGEN_MARKERS_PROMPT in prompt
+    assert "\"allergens\" must be a JSON array of objects" in prompt
+    assert "\"certainty\"" in prompt and "certain" in prompt and "probable" in prompt
+    assert "\"vegan\" marker" in prompt and "\"vegetarian\" marker" in prompt
 
 @pytest.mark.asyncio
 async def test_get_menu_sections_endpoint(client, test_session):

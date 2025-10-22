@@ -61,21 +61,38 @@ const dishContainsAllergen = (dish: SavedDish, allergenId: string) => {
     return false;
   }
 
-  const summary = getDishAllergenSummary(dish);
+  const { codes, keywords, category } = definition;
+  const normalizedCodeSet = new Set<string>([definition.id.toLowerCase(), ...codes.map((code) => code.toLowerCase())]);
+  const normalizedNameSet = new Set<string>([
+    definition.name.toLowerCase(),
+    ...keywords.map((keyword) => keyword.toLowerCase()),
+  ]);
+  const normalizedKeywords = keywords.map((keyword) => keyword.toLowerCase());
 
   if (definition.id === "vegan") {
     return !isVeganFriendly(summary);
   }
 
-  if (definition.id === "vegetarian") {
-    return !isVegetarianFriendly(summary);
-  }
+      if (normalizedCodeSet.has(code) || normalizedCodeSet.has(name)) {
+        return true;
+      }
 
-  if (definition.category === "allergen" && summary.familyCodes.has(definition.id.toLowerCase())) {
-    return true;
-  }
+      if (normalizedNameSet.has(code) || normalizedNameSet.has(name)) {
+        return true;
+      }
 
-  return definition.codes.some((code) => summary.canonicalCodes.has(code.toLowerCase()));
+      const canonicalMatch = allergenFilterMap.get(code);
+      if (canonicalMatch?.id === definition.id) {
+        return true;
+      }
+
+      return normalizedKeywords.some((candidate) => code.includes(candidate) || name.includes(candidate));
+    }) ||
+    (category === "diet" &&
+      Array.from(normalizedCodeSet).some((candidate) =>
+        ingredient.name.toLowerCase().includes(candidate.replace("en:", "")),
+      )),
+  );
 };
 
 interface MenuViewProps {

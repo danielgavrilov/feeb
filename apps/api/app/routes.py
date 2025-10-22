@@ -3,6 +3,7 @@ FastAPI route handlers for ingredient and allergen lookups.
 """
 
 import re
+from textwrap import dedent
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, status
@@ -35,6 +36,26 @@ from .models import (
 from . import dal
 from .services.menu_upload import menu_upload_service
 from .services.gemini_client import GeminiClient
+
+
+CANONICAL_ALLERGEN_MARKERS_PROMPT = """[
+  {"id": "cereals_gluten", "label": "Cereals containing gluten"},
+  {"id": "crustaceans", "label": "Crustaceans"},
+  {"id": "eggs", "label": "Eggs"},
+  {"id": "fish", "label": "Fish"},
+  {"id": "peanuts", "label": "Peanuts"},
+  {"id": "soybeans", "label": "Soybeans"},
+  {"id": "milk", "label": "Milk"},
+  {"id": "tree_nuts", "label": "Tree nuts"},
+  {"id": "celery", "label": "Celery"},
+  {"id": "mustard", "label": "Mustard"},
+  {"id": "sesame", "label": "Sesame seeds"},
+  {"id": "sulphites", "label": "Sulphur dioxide & sulphites"},
+  {"id": "lupin", "label": "Lupin"},
+  {"id": "molluscs", "label": "Molluscs"},
+  {"id": "vegan", "label": "Not plant-based (vegan)"},
+  {"id": "vegetarian", "label": "Not plant-based (vegetarian)"}
+]"""
 
 router = APIRouter()
 
@@ -843,37 +864,47 @@ async def deduce_recipe_ingredients(request: dict):
         raise HTTPException(status_code=400, detail="No valid recipe names found")
     
     # Build the prompt for Stage 2
-    prompt = """For each recipe name provided, infer the ingredients needed to make it for 1 person. 
-Return a JSON object with this structure:
+    prompt = dedent(
+        f"""
+        For each recipe name provided, infer the ingredients needed to make it for 1 person.
+        Use these canonical allergen and animal markers exactly as provided:
+        {CANONICAL_ALLERGEN_MARKERS_PROMPT}
 
-{
-  "recipes": [
-    {
-      "name": "Recipe Name",
-      "ingredients": [
-        {
-          "name": "ingredient name",
-          "quantity": 0.0,
-          "unit": "g/ml/piece/etc",
-          "allergens": ["gluten", "dairy", "nuts", etc]
-        }
-      ]
-    }
-  ]
-}
+        Return a JSON object with this structure:
 
-Rules:
-- Quantities should be metric (grams, milliliters, pieces)
-- Base quantities on 1 person serving
-- Infer common allergens per ingredient
-- Use ONLY singular, specific ingredient names (NOT "pancetta or bacon" - choose ONE)
-- Choose the most common/traditional ingredient variant
-- Use simple ingredient names without alternatives or options
-- Don't infer anything else
-- Return only valid JSON, no prose
+        {{
+          "recipes": [
+            {{
+              "name": "Recipe Name",
+              "ingredients": [
+                {{
+                  "name": "ingredient name",
+                  "quantity": 0.0,
+                  "unit": "g/ml/piece/etc",
+                  "allergens": [
+                    {{"allergen": "marker_id", "certainty": "certain|probable"}}
+                  ]
+                }}
+              ]
+            }}
+          ]
+        }}
 
-Recipe names:
-""" + "\n".join(f"- {name}" for name in recipe_names)
+        Rules:
+        - Quantities must be metric (grams, milliliters, pieces)
+        - Base quantities on 1 person serving
+        - Use ONLY singular, specific ingredient names (NOT "pancetta or bacon" - choose ONE)
+        - Choose the most common/traditional ingredient variant
+        - Each ingredient's "allergens" must be a JSON array of objects shaped exactly like {{"allergen": "<marker>", "certainty": "<certain|probable>"}}
+        - Allowed markers are ONLY the canonical ids listed above
+        - Use "certain" when the allergen or marker is definitely present in the ingredient; use "probable" when it is likely but not guaranteed (e.g., shared fryers or garnish risk)
+        - Include the "vegan" marker whenever an ingredient uses any animal-derived product (dairy, eggs, honey, meat, seafood, gelatin, etc.)
+        - Include the "vegetarian" marker only when an ingredient contains meat, seafood, or gelatin that makes it unsuitable for vegetarians
+        - Don't infer anything else and return only valid JSON with no prose
+
+        Recipe names:
+        """
+    ) + "\n".join(f"- {name}" for name in recipe_names)
     
     client = GeminiClient()
     
