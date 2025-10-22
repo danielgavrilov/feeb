@@ -229,6 +229,9 @@ class Restaurant(Base):
     recipes: Mapped[List["Recipe"]] = relationship(
         "Recipe", back_populates="restaurant", cascade="all, delete-orphan"
     )
+    menu_uploads: Mapped[List["MenuUpload"]] = relationship(
+        "MenuUpload", back_populates="restaurant", cascade="all, delete-orphan"
+    )
 
 
 class UserRestaurant(Base):
@@ -762,7 +765,7 @@ class MenuUpload(Base):
     created_at = mapped_column(TIMESTAMP, default=func.now())
     updated_at = mapped_column(TIMESTAMP, default=func.now(), onupdate=func.now())
 
-    restaurant: Mapped[Optional["Restaurant"]] = relationship("Restaurant")
+    restaurant: Mapped[Optional["Restaurant"]] = relationship("Restaurant", back_populates="menu_uploads")
     user: Mapped[Optional["AppUser"]] = relationship("AppUser")
     stages: Mapped[List["MenuUploadStage"]] = relationship(
         "MenuUploadStage", back_populates="menu_upload", cascade="all, delete-orphan"
