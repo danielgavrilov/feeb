@@ -502,8 +502,8 @@ class MenuUploadService:
             stage0_completed_at=upload.stage0_completed_at,
             stage1_completed_at=upload.stage1_completed_at,
             stage2_completed_at=upload.stage2_completed_at,
-            stages=[MenuUploadStageResponse.from_orm(stage) for stage in upload.stages],
-            recipes=[MenuUploadRecipeResponse.from_orm(link) for link in upload.recipes],
+            stages=[MenuUploadStageResponse.model_validate(stage) for stage in upload.stages],
+            recipes=[MenuUploadRecipeResponse.model_validate(link) for link in upload.recipes],
             created_recipe_ids=list(recipe_ids),
         )
 
@@ -521,8 +521,8 @@ class MenuUploadService:
             stage0_completed_at=upload.stage0_completed_at,
             stage1_completed_at=upload.stage1_completed_at,
             stage2_completed_at=upload.stage2_completed_at,
-            stages=[MenuUploadStageResponse.from_orm(stage) for stage in upload.stages],
-            recipes=[MenuUploadRecipeResponse.from_orm(link) for link in upload.recipes],
+            stages=[MenuUploadStageResponse.model_validate(stage) for stage in upload.stages],
+            recipes=[MenuUploadRecipeResponse.model_validate(link) for link in upload.recipes],
         )
 
 

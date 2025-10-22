@@ -870,7 +870,7 @@ async def get_restaurant_menu_sections(
     result = await session.execute(
         select(MenuSection)
         .where(MenuSection.menu_id == menu.id)
-        .order_by(MenuSection.position.nullsLast(), MenuSection.created_at.asc())
+        .order_by(MenuSection.position.nulls_last(), MenuSection.created_at.asc())
     )
     sections = result.scalars().all()
     return menu, sections
@@ -937,7 +937,7 @@ async def save_restaurant_menu_sections(
     result = await session.execute(
         select(MenuSection)
         .where(MenuSection.menu_id == menu.id)
-        .order_by(MenuSection.position.nullsLast(), MenuSection.created_at.asc())
+        .order_by(MenuSection.position.nulls_last(), MenuSection.created_at.asc())
     )
     return result.scalars().all()
 
@@ -1066,7 +1066,9 @@ async def update_recipe(
     from .models import Recipe
     
     result = await session.execute(
-        select(Recipe).where(Recipe.id == recipe_id)
+        select(Recipe)
+        .where(Recipe.id == recipe_id)
+        .options(selectinload(Recipe.section_links))
     )
     recipe = result.scalar_one_or_none()
     

@@ -339,7 +339,7 @@ async def get_restaurant_menu_sections(
             menu_active=menu.menu_active,
             created_at=menu.created_at,
         ),
-        sections=[MenuSectionResponse.from_orm(section) for section in sections],
+        sections=[MenuSectionResponse.model_validate(section) for section in sections],
     )
 
 
@@ -376,7 +376,7 @@ async def update_restaurant_menu_sections(
             menu_active=menu.menu_active,
             created_at=menu.created_at,
         ),
-        sections=[MenuSectionResponse.from_orm(section) for section in sections],
+        sections=[MenuSectionResponse.model_validate(section) for section in sections],
     )
 
 
