@@ -269,7 +269,16 @@ async def test_deduce_ingredients_prompt_enforces_allergen_schema(client, monkey
 
     response = await client.post(
         "/llm/deduce-ingredients",
-        json={"recipes": [{"name": "Margherita Pizza", "recipe_id": 1}]},
+        json={
+            "recipes": [
+                {
+                    "name": "Margherita Pizza",
+                    "recipe_id": 1,
+                    "description": "Fresh egg pasta with sage, Parmesan and truffle.",
+                    "price": "€18",
+                }
+            ]
+        },
     )
 
     assert response.status_code == 200
@@ -285,6 +294,8 @@ async def test_deduce_ingredients_prompt_enforces_allergen_schema(client, monkey
     assert "\"allergens\" must be a JSON array of objects" in prompt
     assert "\"certainty\"" in prompt and "certain" in prompt and "probable" in prompt
     assert "\"vegan\" marker" in prompt and "\"vegetarian\" marker" in prompt
+    assert "Description: Fresh egg pasta with sage, Parmesan and truffle." in prompt
+    assert "Price: €18" in prompt
 
 @pytest.mark.asyncio
 async def test_get_menu_sections_endpoint(client, test_session):
