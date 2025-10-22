@@ -698,9 +698,26 @@ async def update_restaurant(
         restaurant.primary_color = primary_color
     if accent_color is not None:
         restaurant.accent_color = accent_color
-    
+
     await session.flush()
     return restaurant
+
+
+async def delete_restaurant(
+    session: AsyncSession,
+    restaurant_id: int,
+) -> bool:
+    """Delete a restaurant and its related data."""
+
+    from .models import Restaurant
+
+    restaurant = await session.get(Restaurant, restaurant_id)
+    if not restaurant:
+        return False
+
+    await session.delete(restaurant)
+    await session.flush()
+    return True
 
 
 async def create_menu(

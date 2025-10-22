@@ -294,6 +294,12 @@ export async function updateRestaurant(
   });
 }
 
+export async function deleteRestaurant(restaurantId: number) {
+  return fetchAPI(`/restaurants/${restaurantId}`, {
+    method: 'DELETE',
+  });
+}
+
 // ============================================================================
 // Menu API
 // ============================================================================
