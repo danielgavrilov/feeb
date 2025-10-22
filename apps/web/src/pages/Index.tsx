@@ -634,42 +634,55 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="bg-card border-b border-border sticky top-0 z-50 shadow-sm">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <img src="/logo.svg" alt="Feeb Logo" className="w-8 h-8 feeb-logo" />
-              <h1 className="text-2xl font-bold text-brand-primary">Feeb</h1>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-muted-foreground">{restaurant?.name || "No Restaurant"}</span>
-            </div>
+      <header className="sticky top-0 z-50 border-b border-border/70 bg-card/95 shadow-sm backdrop-blur">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="flex items-center gap-3">
+            <img src="/logo.svg" alt="Feeb Logo" className="h-8 w-8 feeb-logo" />
+            <h1 className="text-xl font-bold text-brand-primary sm:text-2xl">Feeb</h1>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground sm:text-base">
+            <span className="font-medium text-foreground">Current restaurant:</span>
+            <span className="truncate font-semibold text-brand-primary/80">
+              {restaurant?.name || "No restaurant selected"}
+            </span>
           </div>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
+      <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-3 pb-10 pt-6 sm:px-4 lg:gap-10">
         <Tabs value={activeTab} onValueChange={handleTabsValueChange} className="w-full">
-          <TabsList className="mb-6 flex w-full flex-wrap gap-2 sm:gap-3 sm:h-14">
-            <TabsTrigger value="landing" className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base">
+          <TabsList className="mb-6 flex w-full flex-nowrap gap-2 overflow-x-auto rounded-xl border border-border/60 bg-muted/40 p-1 sm:gap-3">
+            <TabsTrigger
+              value="landing"
+              className="flex-1 min-w-[120px] flex-shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-colors data-[state=active]:bg-background data-[state=active]:shadow sm:min-w-[140px] sm:text-base"
+            >
               Landing
             </TabsTrigger>
             <TabsTrigger
               value="add"
-              className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base"
+              className="flex-1 min-w-[120px] flex-shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-colors data-[state=active]:bg-background data-[state=active]:shadow sm:min-w-[140px] sm:text-base"
               onClick={() => {
                 manualAddTabSelectionRef.current = true;
               }}
             >
               Ingredients
             </TabsTrigger>
-            <TabsTrigger value="recipes" className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base">
+            <TabsTrigger
+              value="recipes"
+              className="flex-1 min-w-[120px] flex-shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-colors data-[state=active]:bg-background data-[state=active]:shadow sm:min-w-[140px] sm:text-base"
+            >
               Recipe Book
             </TabsTrigger>
-            <TabsTrigger value="menu" className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base">
+            <TabsTrigger
+              value="menu"
+              className="flex-1 min-w-[120px] flex-shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-colors data-[state=active]:bg-background data-[state=active]:shadow sm:min-w-[140px] sm:text-base"
+            >
               Menu
             </TabsTrigger>
-            <TabsTrigger value="settings" className="flex-1 min-w-[140px] text-sm font-semibold sm:text-base">
+            <TabsTrigger
+              value="settings"
+              className="flex-1 min-w-[120px] flex-shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-colors data-[state=active]:bg-background data-[state=active]:shadow sm:min-w-[140px] sm:text-base"
+            >
               Settings
             </TabsTrigger>
           </TabsList>
@@ -687,7 +700,7 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="add">
-            <div className="bg-card rounded-xl shadow-lg p-8 space-y-8">
+            <div className="space-y-8 rounded-xl bg-card p-4 shadow-lg sm:p-6 lg:p-8">
               <div className="space-y-8">
                 {reviewNoticeMessage && (
                   <button
@@ -747,11 +760,11 @@ const Index = () => {
                 )}
               </div>
 
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <Button
                   onClick={handleAddPhoto}
                   variant="outline"
-                  className="h-14 px-6 text-lg font-semibold"
+                  className="h-12 w-full px-4 text-base font-semibold sm:h-14 sm:w-auto sm:px-6 sm:text-lg"
                   size="lg"
                 >
                   Add Photo
@@ -759,7 +772,7 @@ const Index = () => {
                 <Button
                   onClick={handleAddPreparation}
                   variant="outline"
-                  className="h-14 px-6 text-lg font-semibold"
+                  className="h-12 w-full px-4 text-base font-semibold sm:h-14 sm:w-auto sm:px-6 sm:text-lg"
                   size="lg"
                 >
                   {showPrepMethod ? "Hide Preparation" : "Add Preparation"}
@@ -767,7 +780,7 @@ const Index = () => {
                 <Button
                   onClick={handleSaveDish}
                   disabled={!canSave()}
-                  className="h-14 px-6 text-lg font-semibold sm:ml-auto"
+                  className="h-12 w-full px-4 text-base font-semibold sm:h-14 sm:w-auto sm:px-6 sm:text-lg sm:ml-auto"
                   size="lg"
                 >
                   Save
@@ -777,7 +790,7 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="recipes">
-            <div className="bg-card rounded-xl shadow-lg p-8">
+            <div className="rounded-xl bg-card p-4 shadow-lg sm:p-6 lg:p-8">
               <RecipeBook
                 dishes={savedDishes}
                 onDelete={handleDeleteDish}
@@ -802,7 +815,7 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="settings">
-            <div className="bg-card rounded-xl shadow-lg p-8">
+            <div className="rounded-xl bg-card p-4 shadow-lg sm:p-6 lg:p-8">
               <Settings
                 restaurant={restaurant}
                 restaurants={restaurants}
