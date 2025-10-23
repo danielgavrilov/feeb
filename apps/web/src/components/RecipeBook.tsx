@@ -123,6 +123,14 @@ const ensureArchiveSection = (sections: SectionDefinition[]): SectionDefinition[
   return [...sections, archive];
 };
 
+const getDishStatus = (dish: SavedDish): "live" | "reviewed" | "needs_review" => {
+  if (dish.isOnMenu) {
+    return "live";
+  }
+
+  return dish.confirmed ? "reviewed" : "needs_review";
+};
+
 export const getDishAllergenDefinitions = (
   dish: SavedDish,
   summaryOverride?: ReturnType<typeof summarizeDishAllergens>,
@@ -334,19 +342,11 @@ export const RecipeBook = ({
   const statusFilteredDishes = useMemo(
     () =>
       dishes.filter((dish) => {
-        if (recipeStatusFilter === "live") {
-          return Boolean(dish.isOnMenu);
+        if (recipeStatusFilter === "all") {
+          return true;
         }
 
-        if (recipeStatusFilter === "reviewed") {
-          return dish.confirmed && !dish.isOnMenu;
-        }
-
-        if (recipeStatusFilter === "needs_review") {
-          return !dish.confirmed;
-        }
-
-        return true;
+        return getDishStatus(dish) === recipeStatusFilter;
       }),
     [dishes, recipeStatusFilter],
   );
@@ -1244,13 +1244,8 @@ export const RecipeBook = ({
               <div className="grid gap-4">
                 {sectionDishes.map((dish) => {
                   const isSelected = selectedIds.includes(dish.id);
-                  const isOnMenu = Boolean(dish.isOnMenu);
                   const isMenuUpdating = menuUpdatingIds.includes(dish.id);
-                  const statusKey: "live" | "reviewed" | "needs_review" = isOnMenu
-                    ? "live"
-                    : dish.confirmed
-                      ? "reviewed"
-                      : "needs_review";
+                  const statusKey = getDishStatus(dish);
 
                   const statusButtonBaseClass =
                     "inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
