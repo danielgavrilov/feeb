@@ -92,7 +92,7 @@ export const DishCard = ({
 
         {showIngredients && dish.ingredients.length > 0 && (
           <div className="space-y-1">
-            <p className="text-xs text-muted-foreground line-clamp-2">
+            <p className="text-xs text-muted-foreground">
               {dish.ingredients
                 .map((ingredient) => ingredient.name)
                 .filter(Boolean)
