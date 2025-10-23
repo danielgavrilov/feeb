@@ -421,6 +421,36 @@ class MenuUploadService:
                     allergens=allergen_serialized,
                     confirmed=False,
                 )
+                
+                # Save allergens to ingredient_allergen table
+                if allergen_serialized:
+                    try:
+                        allergens_list = json.loads(allergen_serialized)
+                        for allergen_entry in allergens_list:
+                            allergen_name = allergen_entry.get("allergen")
+                            certainty = allergen_entry.get("certainty")
+                            
+                            if allergen_name:
+                                # Get or create allergen record
+                                allergen_code = f"llm:{allergen_name.lower().replace(' ', '-')}"
+                                allergen_id = await dal.get_or_create_allergen(
+                                    session,
+                                    code=allergen_code,
+                                    name=allergen_name,
+                                )
+                                
+                                # Create ingredient-allergen link
+                                await dal.add_ingredient_allergen(
+                                    session,
+                                    ingredient_id=ingredient_id,
+                                    allergen_id=allergen_id,
+                                    certainty=certainty or "possible",
+                                    source="llm",
+                                )
+                    except (json.JSONDecodeError, KeyError) as e:
+                        # Log error but don't fail the entire import
+                        print(f"Warning: Failed to parse allergens for ingredient {name}: {e}")
+                
                 added += 1
 
         return added

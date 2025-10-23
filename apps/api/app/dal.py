@@ -1301,6 +1301,89 @@ async def add_recipe_ingredient(
     await session.flush()
 
 
+async def get_or_create_allergen(
+    session: AsyncSession,
+    code: str,
+    name: str,
+) -> int:
+    """
+    Get existing allergen or create new one.
+    
+    Args:
+        session: Database session
+        code: Allergen code
+        name: Allergen name
+    
+    Returns:
+        Allergen ID
+    """
+    from .models import Allergen
+    
+    # Try to find existing allergen
+    result = await session.execute(
+        select(Allergen).where(Allergen.code == code)
+    )
+    allergen = result.scalar_one_or_none()
+    
+    if allergen:
+        return allergen.id
+    
+    # Create new allergen
+    allergen = Allergen(
+        code=code,
+        name=name,
+        category="diet" if code.startswith("llm:") else "allergen",
+    )
+    session.add(allergen)
+    await session.flush()
+    return allergen.id
+
+
+async def add_ingredient_allergen(
+    session: AsyncSession,
+    ingredient_id: int,
+    allergen_id: int,
+    certainty: str = "possible",
+    source: str = "llm",
+) -> None:
+    """
+    Add ingredient-allergen association.
+    
+    Args:
+        session: Database session
+        ingredient_id: Ingredient ID
+        allergen_id: Allergen ID
+        certainty: Certainty level
+        source: Data source
+    """
+    from .models import IngredientAllergen
+    
+    # Check if association already exists
+    result = await session.execute(
+        select(IngredientAllergen).where(
+            IngredientAllergen.ingredient_id == ingredient_id,
+            IngredientAllergen.allergen_id == allergen_id,
+            IngredientAllergen.source == source,
+        )
+    )
+    existing = result.scalar_one_or_none()
+    
+    if existing:
+        # Update existing association
+        existing.certainty = certainty
+    else:
+        # Create new association
+        association = IngredientAllergen(
+            ingredient_id=ingredient_id,
+            allergen_id=allergen_id,
+            certainty=certainty,
+            source=source,
+        )
+        session.add(association)
+    
+    await session.flush()
+
+
 async def get_recipe_with_details(
     session: AsyncSession,
     recipe_id: int

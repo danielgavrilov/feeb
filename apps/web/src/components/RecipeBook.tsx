@@ -162,15 +162,18 @@ export const getDishAllergenDefinitions = (
       return false;
     }
 
+    // Check for meat marker type
+    const hasMeatMarker = summary.markerTypes.has("meat");
+    if (hasMeatMarker) {
+      return true;
+    }
+
+    // Check for meat canonical codes
     const normalizedMeatCodes = new Set<string>();
     const addNormalizedCode = (value?: string) => {
-      if (!value) {
-        return;
-      }
-
+      if (!value) return;
       const normalized = value.toLowerCase();
       normalizedMeatCodes.add(normalized);
-
       if (normalized.includes(":")) {
         const unprefixed = normalized.split(":").pop();
         if (unprefixed) {
@@ -182,16 +185,14 @@ export const getDishAllergenDefinitions = (
     addNormalizedCode(meatDefinition.id);
     meatDefinition.codes.forEach(addNormalizedCode);
 
-    let hasMeatCode = false;
     for (const code of summary.canonicalCodes) {
       if (normalizedMeatCodes.has(code.toLowerCase())) {
-        hasMeatCode = true;
-        break;
+        return true;
       }
     }
-    const hasMeatMarker = summary.markerTypes.has("meat");
 
-    return !vegetarianFriendly || hasMeatCode || hasMeatMarker;
+    // If no meat markers or codes found, don't show meat badge
+    return false;
   })();
 
   if (shouldIncludeMeatDefinition && meatDefinition) {
