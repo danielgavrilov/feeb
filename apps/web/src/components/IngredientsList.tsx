@@ -127,6 +127,8 @@ export interface IngredientState {
   quantity: string;
   unit: string;
   confirmed: boolean;
+  ingredientId?: number | null;
+  originalName?: string;
   allergens?: Array<{
     code: string;
     name: string;
@@ -146,9 +148,10 @@ export interface IngredientState {
 
 interface IngredientsListProps {
   ingredients: IngredientState[];
+  onUpdateIngredientName: (index: number, name: string) => void;
   onUpdateIngredient: (index: number, quantity: string) => void;
   onUpdateIngredientUnit: (index: number, unit: string) => void;
-  onConfirmIngredient: (index: number) => void;
+  onConfirmIngredient: (index: number) => Promise<void> | void;
   onDeleteIngredient: (index: number) => void;
   onAddIngredient: (name: string, quantity: string, unit: string) => void;
   onUpdateIngredientAllergens: (
@@ -168,11 +171,13 @@ interface IngredientsListProps {
     index: number,
     substitution?: IngredientState["substitution"],
   ) => void;
+  onIngredientNameBlur: (index: number) => void;
   formatPrice: (value: string | number | null | undefined) => string;
 }
 
 export const IngredientsList = ({
   ingredients,
+  onUpdateIngredientName,
   onUpdateIngredient,
   onUpdateIngredientUnit,
   onConfirmIngredient,
@@ -180,6 +185,7 @@ export const IngredientsList = ({
   onAddIngredient,
   onUpdateIngredientAllergens,
   onUpdateIngredientSubstitution,
+  onIngredientNameBlur,
   formatPrice,
 }: IngredientsListProps) => {
   const [newName, setNewName] = useState("");
@@ -404,12 +410,12 @@ export const IngredientsList = ({
           const substitution = ingredient.substitution;
           const isSubstitutionDialogOpen = activeSubstitutionIndex === index;
           const substitutionSurchargeLabel = formatSurchargeLabel(substitution?.surcharge);
-          const handleConfirmClick = () => {
+          const handleConfirmClick = async () => {
             if (!ingredient.quantity.trim() || !ingredient.unit.trim()) {
               toast.error("Please specify the quantity and unit for this ingredient");
               return;
             }
-            onConfirmIngredient(index);
+            await onConfirmIngredient(index);
           };
 
           const toggleAllergen = (allergenId: string, fallbackLabel?: string) => {
@@ -482,20 +488,21 @@ export const IngredientsList = ({
               >
                 <div className="grid gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)_auto] md:items-start">
                   <div className="space-y-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`text-lg font-medium ${
-                            ingredient.confirmed ? "text-confirmed-foreground" : "text-inferred-foreground"
-                          }`}
-                        >
-                          {ingredient.name}
-                        </span>
-                        {ingredient.confirmed && (
-                          <Check className="w-5 h-5 text-confirmed-foreground" />
-                        )}
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                          <Input
+                            value={ingredient.name}
+                            onChange={(event) => onUpdateIngredientName(index, event.target.value)}
+                            onBlur={() => onIngredientNameBlur(index)}
+                            placeholder="Ingredient name"
+                            className="h-11 text-lg font-medium"
+                            aria-label="Ingredient name"
+                          />
+                          {ingredient.confirmed && (
+                            <Check className="w-5 h-5 text-confirmed-foreground" />
+                          )}
+                        </div>
                       </div>
-                    </div>
 
                     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
                       <Input

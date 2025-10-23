@@ -77,6 +77,8 @@ export interface SavedDish {
     quantity: string;
     unit: string;
     confirmed?: boolean;
+    ingredientId?: number | null;
+    originalName?: string;
     allergens?: Array<{
       code: string;
       name: string;

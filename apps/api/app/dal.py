@@ -235,6 +235,26 @@ async def insert_ingredient(
     return ingredient.id
 
 
+async def update_ingredient_name(
+    session: AsyncSession,
+    ingredient_id: int,
+    name: str,
+) -> bool:
+    """Update the name of an ingredient if it exists."""
+
+    result = await session.execute(
+        select(Ingredient).where(Ingredient.id == ingredient_id)
+    )
+    ingredient = result.scalar_one_or_none()
+
+    if not ingredient:
+        return False
+
+    ingredient.name = name
+    await session.flush()
+    return True
+
+
 async def link_ingredient_allergen(
     session: AsyncSession,
     ingredient_id: int,
