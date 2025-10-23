@@ -54,6 +54,7 @@ export const ALLERGEN_CATEGORIES: AllergenCategoryDefinition[] = [
   { id: "peanuts", label: "Peanuts" },
   { id: "soybeans", label: "Soybeans" },
   { id: "milk", label: "Milk" },
+  { id: "meat", label: "Meat" },
   {
     id: "tree_nuts",
     label: "Tree nuts",
