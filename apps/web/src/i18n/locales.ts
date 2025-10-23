@@ -20,7 +20,7 @@ const baseTranslations: Record<LanguageCode, TranslationDictionary> = {
       },
     },
     navigation: {
-      landing: "Landing",
+      landing: "Home",
       add: "Ingredients",
       recipes: "Recipe Book",
       menu: "Menu",
