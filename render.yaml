@@ -1,0 +1,27 @@
+services:
+  - type: web
+    runtime: python
+    name: feeb-api
+    region: frankfurt
+    plan: free
+    branch: deployment
+    rootDir: apps/api
+    buildFilter:
+      paths:
+        - apps/api
+    autoDeployTrigger: commit
+    healthCheckPath: /health
+    buildCommand: uv sync
+    startCommand: uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT
+
+  - type: web
+    runtime: static
+    name: feeb-web
+    branch: deployment
+    rootDir: apps/web
+    buildFilter:
+      paths:
+        - apps/web
+    autoDeployTrigger: commit
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
