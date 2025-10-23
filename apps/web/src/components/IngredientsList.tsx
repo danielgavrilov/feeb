@@ -242,28 +242,50 @@ export const IngredientsList = ({
     allergenId: string,
     fallbackLabel?: string,
   ) => {
+    const normalizedId = allergenId.toLowerCase();
+    const normalizedFallback = fallbackLabel?.toLowerCase();
+    const normalizedCode = allergen.code?.toLowerCase();
+    const normalizedName = allergen.name?.toLowerCase();
+
+    if (normalizedCode === normalizedId || normalizedName === normalizedId) {
+      return true;
+    }
+
+    if (
+      normalizedFallback &&
+      (normalizedCode === normalizedFallback || normalizedName === normalizedFallback)
+    ) {
+      return true;
+    }
+
     const definition =
       allergenFilterMap.get(allergenId) ??
       allergenFilterMap.get(allergenId.toLowerCase()) ??
       findDefinitionForAllergen(allergenId, fallbackLabel);
 
-    if (definition) {
+    if (!definition) {
+      return false;
+    }
+
+    const idMatchesDefinition = matchesDefinitionValue(definition, allergenId);
+    const fallbackMatchesDefinition = normalizedFallback
+      ? matchesDefinitionValue(definition, fallbackLabel)
+      : false;
+
+    if (idMatchesDefinition && !fallbackMatchesDefinition) {
       return (
         matchesDefinitionValue(definition, allergen.code) ||
         matchesDefinitionValue(definition, allergen.name)
       );
     }
 
-    const normalizedId = allergenId.toLowerCase();
-    const normalizedFallback = fallbackLabel?.toLowerCase();
+    if (!idMatchesDefinition && fallbackMatchesDefinition) {
+      return false;
+    }
 
     return (
-      allergen.code?.toLowerCase() === normalizedId ||
-      allergen.name?.toLowerCase() === normalizedId ||
-      (normalizedFallback
-        ? allergen.code?.toLowerCase() === normalizedFallback ||
-          allergen.name?.toLowerCase() === normalizedFallback
-        : false)
+      matchesDefinitionValue(definition, allergen.code) ||
+      matchesDefinitionValue(definition, allergen.name)
     );
   };
 
@@ -394,22 +416,37 @@ export const IngredientsList = ({
             const definition =
               allergenFilterMap.get(allergenId) ??
               allergenFilterMap.get(allergenId.toLowerCase());
-            const canonicalName = definition?.name ?? fallbackLabel ?? allergenId;
+            const normalizedId = allergenId.toLowerCase();
+            const definitionMatchesId = definition
+              ? definition.id.toLowerCase() === normalizedId
+              : false;
+
+            let entryCode = allergenId;
+            let entryName = fallbackLabel ?? allergenId;
+
+            if (definitionMatchesId && definition) {
+              entryCode = definition.id;
+              entryName = definition.name;
+            } else if (!fallbackLabel && definition?.name) {
+              entryName = definition.name;
+            }
+
+            const selectionLabel = entryName;
             const alreadySelected = isAllergenSelected(
               selectedAllergens,
               allergenId,
-              canonicalName,
+              selectionLabel,
             );
             const updatedAllergens = alreadySelected
               ? selectedAllergens.filter(
                   (existing) =>
-                    !matchesAllergenSelection(existing, allergenId, canonicalName),
+                    !matchesAllergenSelection(existing, allergenId, selectionLabel),
                 )
               : [
                   ...selectedAllergens,
                   {
-                    code: definition?.id ?? allergenId,
-                    name: canonicalName,
+                    code: entryCode,
+                    name: entryName,
                     certainty: "confirmed",
                   },
                 ];
@@ -548,7 +585,7 @@ export const IngredientsList = ({
                                           : "text-muted-foreground";
                                       const Icon = definition?.Icon;
                                       const allergenDisplayName =
-                                        definition?.name ?? allergen.name ?? allergen.code ?? "Allergen";
+                                        allergen.name ?? definition?.name ?? allergen.code ?? "Allergen";
 
                                       return (
                                         <span
