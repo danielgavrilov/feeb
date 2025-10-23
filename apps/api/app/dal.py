@@ -1025,6 +1025,9 @@ async def _set_recipe_sections(
 ) -> None:
     """Assign a recipe to the provided menu sections."""
 
+    # Eagerly load section_links to avoid lazy loading in async context
+    await session.refresh(recipe, ["section_links"])
+
     unique_ids = list(dict.fromkeys(section_ids))
 
     if not unique_ids:
