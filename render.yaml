@@ -25,3 +25,10 @@ services:
     autoDeployTrigger: commit
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://feeb.onrender.com
+      - key: VITE_SUPABASE_URL
+        value: https://ikojeprcvldqpfyugbkp.supabase.co
+      - key: VITE_SUPABASE_ANON_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlrb2plcHJjdmxkcXBmeXVnYmtwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA5OTQxODYsImV4cCI6MjA3NjU3MDE4Nn0.aaZigPDqE-vuhK3xKxGdCuXloWQUBl2a-IN-5KPluu0
