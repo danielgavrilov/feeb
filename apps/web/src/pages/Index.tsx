@@ -646,7 +646,7 @@ const Index = () => {
             <h1 className="text-xl font-bold text-brand-primary sm:text-2xl">Feeb</h1>
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground sm:text-base">
-            <span className="font-medium text-foreground">Current restaurant:</span>
+            <span className="font-medium text-foreground"></span>
             <span className="truncate font-semibold text-brand-primary/80">
               {restaurant?.name || "No restaurant selected"}
             </span>
