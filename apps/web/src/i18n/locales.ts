@@ -26,6 +26,12 @@ const baseTranslations: Record<LanguageCode, TranslationDictionary> = {
       menu: "Menu",
       settings: "Settings",
     },
+    settings: {
+      language: {
+        title: "Interface language",
+        description: "Choose the language used throughout the app.",
+      },
+    },
     landing: {
       heroLive: "You’re live!",
       heroGettingLive: "Let’s get you live",
@@ -185,6 +191,12 @@ const baseTranslations: Record<LanguageCode, TranslationDictionary> = {
       recipes: "Receptenboek",
       menu: "Menu",
       settings: "Instellingen",
+    },
+    settings: {
+      language: {
+        title: "Interfacetaal",
+        description: "Kies de taal die in de app wordt gebruikt.",
+      },
     },
     landing: {
       heroLive: "Je bent live!",

@@ -37,6 +37,8 @@ import {
 import { toast } from "sonner";
 import { Restaurant } from "@/lib/api";
 import { RestaurantUpdateInput } from "@/hooks/useRestaurant";
+import { LanguageSelector } from "@/components/LanguageSelector";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   CurrencyOption,
   PriceDisplayFormat,
@@ -261,6 +263,7 @@ export const Settings = ({
   priceFormat,
   onPriceFormatChange,
 }: SettingsProps) => {
+  const { t } = useLanguage();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newRestaurantName, setNewRestaurantName] = useState("");
   const [newRestaurantDescription, setNewRestaurantDescription] = useState("");
@@ -601,6 +604,18 @@ export const Settings = ({
       <Card className="rounded-2xl p-4 sm:p-6">
         <h3 className="mb-4 text-lg font-semibold text-foreground">Menu Preferences</h3>
         <div className="space-y-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <Label className="text-base font-semibold text-foreground">
+                {t("settings.language.title")}
+              </Label>
+              <p className="text-sm text-muted-foreground">{t("settings.language.description")}</p>
+            </div>
+            <div className="flex sm:justify-end">
+              <LanguageSelector className="justify-end" />
+            </div>
+          </div>
+
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <Label htmlFor="menu-images" className="text-base font-semibold text-foreground">
