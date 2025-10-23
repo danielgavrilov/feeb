@@ -490,7 +490,13 @@ async def create_recipe(
                 substitution=substitution_payload,
                 substitution_provided=substitution_provided,
             )
-    
+            if ing.ingredient_name:
+                await dal.update_ingredient_name(
+                    session,
+                    ingredient_id=ing.ingredient_id,
+                    name=ing.ingredient_name,
+                )
+
     await session.commit()
     
     # Fetch the created recipe with details
@@ -999,9 +1005,21 @@ async def add_recipe_ingredient(
         substitution=substitution_payload,
         substitution_provided=substitution_provided,
     )
-    
+
+    if ingredient_data.ingredient_name:
+        updated = await dal.update_ingredient_name(
+            session,
+            ingredient_id=ingredient_data.ingredient_id,
+            name=ingredient_data.ingredient_name,
+        )
+        if not updated:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Ingredient with ID {ingredient_data.ingredient_id} not found",
+            )
+
     await session.commit()
-    
+
     return {"status": "success", "message": "Ingredient added to recipe"}
 
 
@@ -1048,8 +1066,21 @@ async def update_recipe_ingredient(
         substitution=substitution_payload,
         substitution_provided=substitution_provided,
     )
-    
+
+    target_ingredient_id = ingredient_data.ingredient_id or ingredient_id
+    if ingredient_data.ingredient_name:
+        updated = await dal.update_ingredient_name(
+            session,
+            ingredient_id=target_ingredient_id,
+            name=ingredient_data.ingredient_name,
+        )
+        if not updated:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Ingredient with ID {target_ingredient_id} not found",
+            )
+
     await session.commit()
-    
+
     return {"status": "success", "message": "Ingredient updated"}
 

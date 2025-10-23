@@ -549,6 +549,7 @@ class MenuResponse(BaseModel):
 class RecipeIngredientRequest(BaseModel):
     """Request model for adding ingredient to recipe."""
     ingredient_id: int
+    ingredient_name: Optional[str] = None
     quantity: Optional[float] = None
     unit: Optional[str] = None
     notes: Optional[str] = None

@@ -103,6 +103,7 @@ export interface Recipe {
 
 export interface CreateRecipeIngredient {
   ingredient_id: number;
+  ingredient_name?: string;
   quantity?: number;
   unit?: string;
   notes?: string;
@@ -111,6 +112,10 @@ export interface CreateRecipeIngredient {
     alternative: string;
     surcharge?: string | null;
   };
+}
+
+export interface UpdateRecipeIngredientRequest extends Partial<CreateRecipeIngredient> {
+  ingredient_name?: string;
 }
 
 export interface CreateRecipeRequest {
@@ -393,7 +398,7 @@ export async function addRecipeIngredient(
 export async function updateRecipeIngredient(
   recipeId: number,
   ingredientId: number,
-  updates: Partial<CreateRecipeIngredient>
+  updates: UpdateRecipeIngredientRequest
 ): Promise<void> {
   return fetchAPI(`/recipes/${recipeId}/ingredients/${ingredientId}`, {
     method: 'PUT',

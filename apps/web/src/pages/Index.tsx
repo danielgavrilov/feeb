@@ -11,7 +11,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useRestaurant } from "@/hooks/useRestaurant";
 import { useRecipes } from "@/hooks/useRecipes";
-import { Recipe, RecipeIngredient } from "@/lib/api";
+import {
+  Recipe,
+  RecipeIngredient,
+  updateRecipeIngredient as updateRecipeIngredientAPI,
+  UpdateRecipeIngredientRequest,
+} from "@/lib/api";
 import { LandingPage } from "@/components/LandingPage";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -147,6 +152,8 @@ const Index = () => {
       quantity: ing.quantity?.toString() || "",
       unit: ing.unit || "",
       confirmed: ing.confirmed,
+      ingredientId: ing.ingredient_id,
+      originalName: ing.ingredient_name,
       allergens: mapIngredientAllergens(ing.allergens),
       substitution: ing.substitution,
     })),
@@ -195,7 +202,9 @@ const Index = () => {
         quantity: ing.quantity?.toString() || "",
         unit: ing.unit || (ing.confirmed ? "" : "pcs"), // Default to "pcs" for unconfirmed ingredients with missing units
         confirmed: ing.confirmed && !!(ing.quantity?.toString().trim() && (ing.unit?.trim() || "pcs")), // Only keep confirmed if valid
-      allergens: mapIngredientAllergens(ing.allergens),
+        ingredientId: ing.ingredient_id,
+        originalName: ing.ingredient_name,
+        allergens: mapIngredientAllergens(ing.allergens),
         dietaryInfo: [],
         substitution: ing.substitution,
       }))
@@ -232,19 +241,108 @@ const Index = () => {
     setIngredients(updated);
   };
 
+  const handleUpdateIngredientName = (index: number, name: string) => {
+    setIngredients((current) =>
+      current.map((ingredient, ingredientIndex) =>
+        ingredientIndex === index ? { ...ingredient, name } : ingredient,
+      ),
+    );
+  };
+
   const handleUpdateIngredientUnit = (index: number, unit: string) => {
     const updated = [...ingredients];
     updated[index].unit = unit;
     setIngredients(updated);
   };
 
-  const handleConfirmIngredient = (index: number) => {
+  const persistIngredientChanges = useCallback(
+    async (
+      ingredient: IngredientState,
+      overrides?: {
+        name?: string;
+        quantity?: string;
+        unit?: string;
+        confirmed?: boolean;
+      },
+    ) => {
+      if (!editingDishId || !ingredient.ingredientId) {
+        return true;
+      }
+
+      const nextName = (overrides?.name ?? ingredient.name).trim();
+      if (!nextName) {
+        toast.error("Ingredient name cannot be empty");
+        return false;
+      }
+
+      const payload: UpdateRecipeIngredientRequest = {
+        ingredient_id: ingredient.ingredientId,
+        ingredient_name: nextName,
+      };
+
+      const confirmedOverride = overrides?.confirmed;
+      if (confirmedOverride !== undefined) {
+        payload.confirmed = confirmedOverride;
+      } else {
+        payload.confirmed = ingredient.confirmed;
+      }
+
+      const unitValue = overrides?.unit ?? ingredient.unit;
+      if (unitValue?.trim()) {
+        payload.unit = unitValue.trim();
+      }
+
+      const quantityValue = overrides?.quantity ?? ingredient.quantity;
+      if (quantityValue && quantityValue.trim()) {
+        const parsedQuantity = Number.parseFloat(quantityValue);
+        if (!Number.isNaN(parsedQuantity)) {
+          payload.quantity = parsedQuantity;
+        }
+      }
+
+      if (ingredient.substitution) {
+        payload.substitution = {
+          alternative: ingredient.substitution.alternative,
+          surcharge: ingredient.substitution.surcharge ?? null,
+        };
+      }
+
+      try {
+        await updateRecipeIngredientAPI(editingDishId, ingredient.ingredientId, payload);
+        return true;
+      } catch (error) {
+        console.error("Failed to update ingredient", error);
+        toast.error("Failed to update ingredient");
+        return false;
+      }
+    },
+    [editingDishId],
+  );
+
+  const handleConfirmIngredient = async (index: number) => {
     const ingredientToConfirm = ingredients[index];
     if (!ingredientToConfirm) return;
+
+    const trimmedName = ingredientToConfirm.name.trim();
+    if (!trimmedName) {
+      toast.error("Please enter an ingredient name");
+      return;
+    }
 
     // Validate that ingredient has both quantity and unit
     if (!ingredientToConfirm.quantity.trim() || !ingredientToConfirm.unit.trim()) {
       toast.error("Please specify the quantity and unit for this ingredient");
+      return;
+    }
+
+    const persisted = await persistIngredientChanges(ingredientToConfirm, {
+      name: trimmedName,
+      quantity: ingredientToConfirm.quantity,
+      unit: ingredientToConfirm.unit,
+      confirmed: true,
+    });
+
+    if (!persisted) {
       return;
     }
 
@@ -253,6 +351,8 @@ const Index = () => {
         i === index
           ? {
               ...ingredient,
+              name: trimmedName,
+              originalName: trimmedName,
               confirmed: true,
               allergens: (ingredient.allergens ?? []).map((allergen) => ({
                 ...allergen,
@@ -262,6 +362,53 @@ const Index = () => {
           : ingredient
       )
     );
+  };
+
+  const handleIngredientNameBlur = async (index: number) => {
+    const ingredient = ingredients[index];
+    if (!ingredient) {
+      return;
+    }
+
+    const trimmedName = ingredient.name.trim();
+    if (!trimmedName) {
+      toast.error("Ingredient name cannot be empty");
+      setIngredients((current) =>
+        current.map((item, i) =>
+          i === index ? { ...item, name: item.originalName ?? "" } : item
+        )
+      );
+      return;
+    }
+
+    if (ingredient.originalName && trimmedName === ingredient.originalName) {
+      if (ingredient.name !== trimmedName) {
+        setIngredients((current) =>
+          current.map((item, i) =>
+            i === index ? { ...item, name: trimmedName } : item
+          )
+        );
+      }
+      return;
+    }
+
+    const persisted = await persistIngredientChanges(ingredient, { name: trimmedName });
+
+    if (persisted) {
+      setIngredients((current) =>
+        current.map((item, i) =>
+          i === index
+            ? { ...item, name: trimmedName, originalName: trimmedName }
+            : item
+        )
+      );
+    } else if (ingredient.originalName) {
+      setIngredients((current) =>
+        current.map((item, i) =>
+          i === index ? { ...item, name: item.originalName } : item
+        )
+      );
+    }
   };
 
   const handleDeleteIngredient = (index: number) => {
@@ -275,6 +422,8 @@ const Index = () => {
       quantity,
       unit,
       confirmed: false,
+      ingredientId: null,
+      originalName: name,
       allergens: [],
       dietaryInfo: [],
       substitution: undefined,
@@ -740,6 +889,7 @@ const Index = () => {
 
                 <IngredientsList
                   ingredients={ingredients}
+                  onUpdateIngredientName={handleUpdateIngredientName}
                   onUpdateIngredient={handleUpdateIngredient}
                   onUpdateIngredientUnit={handleUpdateIngredientUnit}
                   onConfirmIngredient={handleConfirmIngredient}
@@ -747,6 +897,7 @@ const Index = () => {
                   onAddIngredient={handleAddIngredient}
                   onUpdateIngredientAllergens={handleUpdateIngredientAllergens}
                   onUpdateIngredientSubstitution={handleUpdateIngredientSubstitution}
+                  onIngredientNameBlur={handleIngredientNameBlur}
                   formatPrice={formatPrice}
                 />
 
