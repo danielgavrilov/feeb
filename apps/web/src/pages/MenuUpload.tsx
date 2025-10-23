@@ -211,6 +211,13 @@ const MenuUploadPage = () => {
 
   // No need for special handling - we'll show restaurant creation inline if needed
 
+  const hasProvidedMenu =
+    selectedMethod && selectedMethod !== "manual"
+      ? methodRequiresFile(selectedMethod)
+        ? Boolean(file)
+        : Boolean(urlValue.trim())
+      : false;
+
   return (
     <main className="min-h-screen bg-background">
       <div className="container mx-auto max-w-5xl py-12 space-y-10">
@@ -307,7 +314,7 @@ const MenuUploadPage = () => {
             </div>
 
             {selectedMethod && selectedMethod !== "manual" ? (
-              <div className="grid gap-6 md:grid-cols-[1fr,1.5fr]">
+              <div className="space-y-5">
                 <div className="space-y-3">
                   <h2 className="text-lg font-semibold text-foreground">Provide your menu</h2>
                   <p className="text-sm text-muted-foreground">
@@ -315,10 +322,10 @@ const MenuUploadPage = () => {
                   </p>
                 </div>
 
-                <div className="space-y-4">
-                  {methodRequiresFile(selectedMethod) ? (
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium text-muted-foreground">Upload file</Label>
+                {methodRequiresFile(selectedMethod) ? (
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-muted-foreground">Upload file</Label>
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center">
                       <Input
                         type="file"
                         accept={activeOption?.accept}
@@ -327,44 +334,64 @@ const MenuUploadPage = () => {
                           const selected = event.target.files?.[0] ?? null;
                           setFile(selected);
                         }}
-                        className="h-12"
+                        className="h-12 md:flex-1"
                       />
-                      <p className="text-xs text-muted-foreground">
-                        {selectedMethod === "pdf"
-                          ? "Accepted format: PDF up to 10MB"
-                          : "Accepted formats: JPG, PNG or HEIC up to 10MB"}
-                      </p>
+                      <Button
+                        type="submit"
+                        disabled={isSubmitting || !hasProvidedMenu}
+                        className="h-12 px-8 text-base font-semibold md:w-auto"
+                      >
+                        {isSubmitting ? (
+                          <span className="flex items-center gap-2">
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                            Uploading…
+                          </span>
+                        ) : (
+                          "Upload menu"
+                        )}
+                      </Button>
                     </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium text-muted-foreground">Menu URL</Label>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedMethod === "pdf"
+                        ? "Accepted format: PDF up to 10MB"
+                        : "Accepted formats: JPG, PNG or HEIC up to 10MB"}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-muted-foreground">Menu URL</Label>
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center">
                       <Input
                         type="url"
                         placeholder="https://restaurant.com/menu"
                         value={urlValue}
                         onChange={event => setUrlValue(event.target.value)}
-                        className="h-12"
+                        className="h-12 md:flex-1"
                       />
+                      <Button
+                        type="submit"
+                        disabled={isSubmitting || !hasProvidedMenu}
+                        className="h-12 px-8 text-base font-semibold md:w-auto"
+                      >
+                        {isSubmitting ? (
+                          <span className="flex items-center gap-2">
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                            Uploading…
+                          </span>
+                        ) : (
+                          "Upload menu"
+                        )}
+                      </Button>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             ) : null}
 
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
             {selectedMethod && selectedMethod !== "manual" ? (
-              <div className="flex items-center gap-3">
-                <Button type="submit" disabled={isSubmitting} className="h-12 px-8 text-base font-semibold">
-                  {isSubmitting ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                      Uploading…
-                    </span>
-                  ) : (
-                    "Upload menu"
-                  )}
-                </Button>
+              <div className="flex justify-end">
                 <Button
                   type="button"
                   variant="ghost"
