@@ -214,6 +214,7 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
   const [ingredientInputValue, setIngredientInputValue] = useState("");
   const [ingredientSearchTerms, setIngredientSearchTerms] = useState<string[]>([]);
   const [showIngredients, setShowIngredients] = useState(false);
+  const [showAllergens, setShowAllergens] = useState(false);
   const [savedSections, setSavedSections] = useState<StoredMenuSection[]>([]);
   const sectionLabelMap = useMemo(() => {
     const entries = new Map<string, string>();
@@ -492,6 +493,17 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
               <div className="flex flex-col items-start gap-3 md:items-end">
                 <div className="flex items-center gap-2">
                   <Switch
+                    id="menu-show-allergens"
+                    checked={showAllergens}
+                    onCheckedChange={setShowAllergens}
+                  />
+                  <Label htmlFor="menu-show-allergens" className="text-sm font-medium text-foreground">
+                    Show allergens
+                  </Label>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Switch
                     id="menu-show-ingredients"
                     checked={showIngredients}
                     onCheckedChange={setShowIngredients}
@@ -706,7 +718,7 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
                         showIngredients={showIngredients}
                         highlightedAllergens={highlightedAllergens}
                         highlightedIngredientTerms={highlightedIngredientTerms}
-                        allergenBadges={allergenBadges}
+                        allergenBadges={showAllergens ? allergenBadges : []}
                         formatPrice={formatPrice}
                       />
                     );
