@@ -19,7 +19,7 @@ services:
     autoDeployTrigger: commit
     healthCheckPath: /health
     buildCommand: uv sync
-    startCommand: uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: uv run alembic upgrade head && uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -39,7 +39,7 @@ services:
     staticPublishPath: ./dist
     envVars:
       - key: VITE_API_URL
-        value: https://feeb.onrender.com
+        value: https://feeb-api.onrender.com
       - key: VITE_SUPABASE_URL
         value: https://ikojeprcvldqpfyugbkp.supabase.co
       - key: VITE_SUPABASE_ANON_KEY
