@@ -15,8 +15,7 @@ dependencies = [
     "python-multipart>=0.0.12",
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
-    "greenlet>=3.2.4",
-    "psycopg2>=2.9.11",
+    "greenlet>=3.2.4"
 ]
 
 [build-system]
