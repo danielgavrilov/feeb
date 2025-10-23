@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { RestaurantProgress } from "@/data/mockRestaurant";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface NextStepBase {
   title: string;
@@ -35,15 +36,16 @@ export const useNextStep = (
   restaurant?: RestaurantProgress | null,
   options: UseNextStepOptions = {},
 ): UseNextStepResult => {
+  const { t } = useLanguage();
   const { unconfirmedRecipes } = options;
 
   return useMemo(() => {
     if (!restaurant) {
       return {
         nextStep: {
-          title: "Create your restaurant profile",
-          description: "Add your restaurant details so we can tailor your setup journey.",
-          actionLabel: "Create Restaurant",
+          title: t("nextStep.createProfile.title"),
+          description: t("nextStep.createProfile.description"),
+          actionLabel: t("nextStep.createProfile.actionLabel"),
           actionLink: "/restaurants/new",
         },
         isSetupComplete: false,
@@ -56,50 +58,49 @@ export const useNextStep = (
 
     if (!restaurant.menuUploaded) {
       nextStep = {
-        title: "Let’s get your menu live!",
-        description: "Upload your menu to start creating your digital recipe book.",
-        actionLabel: "Upload Menu",
+        title: t("nextStep.uploadMenu.title"),
+        description: t("nextStep.uploadMenu.description"),
+        actionLabel: t("nextStep.uploadMenu.actionLabel"),
         actionLink: "/upload",
       };
     } else if (!restaurant.ingredientsConfirmed) {
       nextStep = {
-        title: "Let’s review your recipes.",
-        description:
-          "Confirm the ingredients for each of the meals you have uploaded to make sure we get the allergens right.",
-        actionLabel: "Review recipe",
+        title: t("nextStep.reviewRecipes.title"),
+        description: t("nextStep.reviewRecipes.description"),
+        actionLabel: t("nextStep.reviewRecipes.actionLabel"),
         actionLink:
           unconfirmedRecipes && unconfirmedRecipes > 0 ? "/recipes?status=needs_review" : "/ingredients",
       };
     } else if (!restaurant.customisationDone) {
       nextStep = {
-        title: "Customise your menu page",
-        description: "Add your logo and colour scheme to match your restaurant.",
-        actionLabel: "Customise",
+        title: t("nextStep.customiseMenu.title"),
+        description: t("nextStep.customiseMenu.description"),
+        actionLabel: t("nextStep.customiseMenu.actionLabel"),
         actionLink: "/customise",
       };
     } else if (wantsImages && !restaurant.imagesUploaded) {
       nextStep = {
-        title: "Add photos of your dishes",
-        description: "Make your menu shine with mouth-watering pictures.",
-        actionLabel: "Upload Photos",
+        title: t("nextStep.uploadPhotos.title"),
+        description: t("nextStep.uploadPhotos.description"),
+        actionLabel: t("nextStep.uploadPhotos.actionLabel"),
         actionLink: "/photos",
       };
     } else {
       nextStep = {
         carousel: [
           {
-            title: "Add a new dish",
-            actionLabel: "Add Dish",
+            title: t("nextStep.carousel.addDishTitle"),
+            actionLabel: t("nextStep.carousel.addDishAction"),
             actionLink: "/add",
           },
           {
-            title: "Print your QR menu",
-            actionLabel: "Print QR",
+            title: t("nextStep.carousel.printQrTitle"),
+            actionLabel: t("nextStep.carousel.printQrAction"),
             actionLink: "/menu",
           },
           {
-            title: "Optimise pricing",
-            actionLabel: "Try Pricing Insights",
+            title: t("nextStep.carousel.pricingTitle"),
+            actionLabel: t("nextStep.carousel.pricingAction"),
             actionLink: "/pricing",
           },
         ],
@@ -113,5 +114,5 @@ export const useNextStep = (
       (!wantsImages || restaurant.imagesUploaded);
 
     return { nextStep, isSetupComplete };
-  }, [restaurant, unconfirmedRecipes]);
+  }, [restaurant, t, unconfirmedRecipes]);
 };

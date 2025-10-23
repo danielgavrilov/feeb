@@ -37,6 +37,8 @@ import {
 import { toast } from "sonner";
 import { Restaurant } from "@/lib/api";
 import { RestaurantUpdateInput } from "@/hooks/useRestaurant";
+import { LanguageSelector } from "@/components/LanguageSelector";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   CurrencyOption,
   PriceDisplayFormat,
@@ -88,9 +90,9 @@ interface ColorPickerProps {
 
 const ColorPicker = ({ id, label, value, onChange, onClear, description }: ColorPickerProps) => {
   const normalizedValue = normalizeHex(value);
-  const [internalHex, setInternalHex] = useState<string>(normalizedValue ?? DEFAULT_PICKER_COLOR);
-  const [hexInput, setHexInput] = useState<string>(normalizedValue ?? DEFAULT_PICKER_COLOR);
-  const [rgb, setRgb] = useState(() => hexToRgb(normalizedValue ?? DEFAULT_PICKER_COLOR) ?? { r: 37, g: 99, b: 235 });
+  const [internalHex, setInternalHex] = useState<string>(normalizedValue ?? "#2563EB");
+  const [hexInput, setHexInput] = useState<string>(normalizedValue ?? "#2563EB");
+  const [rgb, setRgb] = useState(() => hexToRgb(normalizedValue ?? "#2563EB") ?? { r: 37, g: 99, b: 235 });
 
   useEffect(() => {
     const next = normalizeHex(value);
@@ -101,17 +103,12 @@ const ColorPicker = ({ id, label, value, onChange, onClear, description }: Color
       if (rgbValue) {
         setRgb(rgbValue);
       }
-    } else if (!value) {
-      setInternalHex(DEFAULT_PICKER_COLOR);
-      setHexInput(DEFAULT_PICKER_COLOR);
-      const fallbackRgb = hexToRgb(DEFAULT_PICKER_COLOR);
-      if (fallbackRgb) {
-        setRgb(fallbackRgb);
-      }
     }
+    // Don't set internal state to default color when value is undefined/null
+    // The display will show the neutral gray color instead
   }, [value]);
 
-  const displayColor = normalizeHex(value) ?? internalHex;
+  const displayColor = normalizeHex(value) ?? "#f3f4f6"; // Light gray when no color selected
   const hasSelection = Boolean(normalizeHex(value));
 
   const handleNativeChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -152,12 +149,8 @@ const ColorPicker = ({ id, label, value, onChange, onClear, description }: Color
   };
 
   const handleClear = () => {
-    setInternalHex(DEFAULT_PICKER_COLOR);
-    setHexInput(DEFAULT_PICKER_COLOR);
-    const fallbackRgb = hexToRgb(DEFAULT_PICKER_COLOR);
-    if (fallbackRgb) {
-      setRgb(fallbackRgb);
-    }
+    // Don't set internal state to default color when clearing
+    // Just call onClear to set the value to undefined
     if (onClear) {
       onClear();
     }
@@ -261,6 +254,7 @@ export const Settings = ({
   priceFormat,
   onPriceFormatChange,
 }: SettingsProps) => {
+  const { t } = useLanguage();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newRestaurantName, setNewRestaurantName] = useState("");
   const [newRestaurantDescription, setNewRestaurantDescription] = useState("");
@@ -601,6 +595,18 @@ export const Settings = ({
       <Card className="rounded-2xl p-4 sm:p-6">
         <h3 className="mb-4 text-lg font-semibold text-foreground">Menu Preferences</h3>
         <div className="space-y-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <Label className="text-base font-semibold text-foreground">
+                {t("settings.language.title")}
+              </Label>
+              <p className="text-sm text-muted-foreground">{t("settings.language.description")}</p>
+            </div>
+            <div className="flex sm:justify-end">
+              <LanguageSelector className="justify-end" />
+            </div>
+          </div>
+
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <Label htmlFor="menu-images" className="text-base font-semibold text-foreground">

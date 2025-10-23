@@ -358,13 +358,19 @@ class MenuUploadService:
     ) -> int:
         """Persist ingredient predictions into recipe_ingredient records."""
 
-        recipe_lookup: Dict[str, int] = {}
+        # Build lookups by both recipe_id and name for flexible matching
+        recipe_id_lookup: Dict[int, int] = {}
+        recipe_name_lookup: Dict[str, int] = {}
         for recipe in recipes:
             name = self._safe_string(recipe.get("name"))
             recipe_id = recipe.get("recipe_id")
-            if not name or recipe_id is None:
+            if recipe_id is None:
                 continue
-            recipe_lookup[name.lower()] = int(recipe_id)
+            recipe_id = int(recipe_id)
+            recipe_id_lookup[recipe_id] = recipe_id
+            if name:
+                recipe_name_lookup[name.lower()] = recipe_id
+        
         added = 0
 
         recipes_data = deduction_payload.get("recipes") if isinstance(deduction_payload, dict) else None
@@ -372,10 +378,18 @@ class MenuUploadService:
             return added
 
         for recipe_entry in recipes_data:
-            recipe_name = self._safe_string(recipe_entry.get("name"))
-            if not recipe_name:
-                continue
-            recipe_id = recipe_lookup.get(recipe_name.lower())
+            # Try matching by recipe_id first (more reliable), fall back to name
+            recipe_id = None
+            llm_recipe_id = recipe_entry.get("recipe_id")
+            if llm_recipe_id is not None:
+                recipe_id = recipe_id_lookup.get(int(llm_recipe_id))
+            
+            if recipe_id is None:
+                # Fall back to name matching
+                recipe_name = self._safe_string(recipe_entry.get("name"))
+                if recipe_name:
+                    recipe_id = recipe_name_lookup.get(recipe_name.lower())
+            
             if recipe_id is None:
                 continue
 
@@ -507,10 +521,12 @@ class MenuUploadService:
             raise HTTPException(status_code=503, detail="LLM recipe deduction service not configured")
 
         payload = {"recipes": recipes}
+        
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(self.recipe_deduction_url, json=payload, headers=self._auth_headers())
             response.raise_for_status()
             data = response.json()
+        
         if not isinstance(data, dict):
             raise HTTPException(status_code=502, detail="Unexpected response from recipe deduction service")
         return data

@@ -156,6 +156,18 @@ _CANONICAL_DATA: tuple[CanonicalAllergen, ...] = (
         legacy_codes=("en:molluscs", "en:mussels", "en:oysters", "en:squid", "en:octopus"),
         aliases=("mollusc", "molluscs", "mussel", "mussels", "oyster", "oysters", "clam", "octopus", "squid", "scallop", "snail"),
     ),
+    CanonicalAllergen(
+        slug="vegan",
+        label="Not plant-based (vegan)",
+        legacy_codes=(),
+        aliases=("vegan", "not vegan", "non-vegan", "animal product", "animal-derived"),
+    ),
+    CanonicalAllergen(
+        slug="vegetarian",
+        label="Not plant-based (vegetarian)",
+        legacy_codes=(),
+        aliases=("vegetarian", "not vegetarian", "non-vegetarian", "meat", "seafood product"),
+    ),
 )
 
 

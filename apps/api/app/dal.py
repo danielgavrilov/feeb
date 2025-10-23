@@ -15,6 +15,10 @@ from .allergen_canonical import (
     canonicalize_allergen,
     certainty_to_ui,
 )
+
+# Default brand colours kept in sync with the frontend theme (apps/web/src/index.css)
+DEFAULT_RESTAURANT_PRIMARY_COLOR = "#23001E"
+DEFAULT_RESTAURANT_ACCENT_COLOR = "#FE7F2D"
 from .models import (
     Ingredient, Allergen, AllergenBadge, IngredientAllergen, Product, ProductIngredient, ProductAllergen,
     ProductNutrition,
@@ -622,7 +626,12 @@ async def create_restaurant(
     """
     from .models import Restaurant, UserRestaurant
     
-    restaurant = Restaurant(name=name, description=description)
+    restaurant = Restaurant(
+        name=name,
+        description=description,
+        primary_color=DEFAULT_RESTAURANT_PRIMARY_COLOR,
+        accent_color=DEFAULT_RESTAURANT_ACCENT_COLOR,
+    )
     session.add(restaurant)
     await session.flush()
     

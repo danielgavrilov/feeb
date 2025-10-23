@@ -1,4 +1,4 @@
-import { type MouseEvent, useEffect, useMemo, useState } from "react";
+import { type ElementType, type MouseEvent, useEffect, useMemo, useState } from "react";
 
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Trash2, Edit, AlertTriangle, ArrowDown, ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -47,6 +56,7 @@ import {
   isVeganFriendly,
   isVegetarianFriendly,
 } from "@/lib/allergen-utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export type RecipeBulkAction =
   | "delete"
@@ -121,6 +131,14 @@ const ensureArchiveSection = (sections: SectionDefinition[]): SectionDefinition[
   archive.id = "archive";
   archive.numericId = null;
   return [...sections, archive];
+};
+
+const getDishStatus = (dish: SavedDish): "live" | "reviewed" | "needs_review" => {
+  if (dish.isOnMenu) {
+    return "live";
+  }
+
+  return dish.confirmed ? "reviewed" : "needs_review";
 };
 
 export const getDishAllergenDefinitions = (
@@ -213,6 +231,7 @@ export const RecipeBook = ({
   formatPrice,
   restaurantId,
 }: RecipeBookProps) => {
+  const isMobile = useIsMobile();
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [recipeStatusFilter, setRecipeStatusFilter] =
     useState<"all" | "reviewed" | "needs_review" | "live">("all");
@@ -334,19 +353,11 @@ export const RecipeBook = ({
   const statusFilteredDishes = useMemo(
     () =>
       dishes.filter((dish) => {
-        if (recipeStatusFilter === "live") {
-          return Boolean(dish.isOnMenu);
+        if (recipeStatusFilter === "all") {
+          return true;
         }
 
-        if (recipeStatusFilter === "reviewed") {
-          return dish.confirmed && !dish.isOnMenu;
-        }
-
-        if (recipeStatusFilter === "needs_review") {
-          return !dish.confirmed;
-        }
-
-        return true;
+        return getDishStatus(dish) === recipeStatusFilter;
       }),
     [dishes, recipeStatusFilter],
   );
@@ -757,6 +768,125 @@ export const RecipeBook = ({
   const sectionPendingDeletion =
     sectionPendingDeletionIndex !== null ? editingSections[sectionPendingDeletionIndex] : null;
 
+  const renderManageSectionsContent = (
+    HeaderComponent: ElementType,
+    TitleComponent: ElementType,
+    DescriptionComponent: ElementType,
+    FooterComponent: ElementType,
+  ) => (
+    <>
+      <HeaderComponent>
+        <TitleComponent>Manage sections</TitleComponent>
+        <DescriptionComponent>
+          Rename, reorder, or add sections to organize your recipe book.
+        </DescriptionComponent>
+      </HeaderComponent>
+      <div className="space-y-3 pb-2">
+        {sectionManageError && (
+          <Alert variant="destructive" className="flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 mt-0.5" />
+            <AlertDescription>{sectionManageError}</AlertDescription>
+          </Alert>
+        )}
+        {editingSections.length === 0 && (
+          <p className="text-sm text-muted-foreground">There are no sections to manage yet.</p>
+        )}
+        {editingSections.map((section, index) => {
+          const isArchive = isArchiveSection(section);
+
+          return (
+            <div key={section.id} className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-muted-foreground w-6 text-right">{index + 1}.</span>
+              <Input
+                value={section.label}
+                onChange={(event) => handleSectionLabelChange(index, event.target.value)}
+                aria-label={`Rename section ${section.label || section.id}`}
+                className="flex-1 min-w-[180px]"
+              />
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => moveEditingSection(index, index - 1)}
+                  disabled={index === 0}
+                  aria-label="Move section up"
+                >
+                  <ArrowUp className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => moveEditingSection(index, index + 1)}
+                  disabled={index === editingSections.length - 1}
+                  aria-label="Move section down"
+                >
+                  <ArrowDown className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="icon"
+                  onClick={() => setSectionPendingDeletionIndex(index)}
+                  disabled={isArchive}
+                  aria-label={`Delete section ${section.label || section.id}`}
+                  title={isArchive ? "The Archive section cannot be deleted" : undefined}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+        <div className="space-y-2 border-t pt-3">
+          <Label htmlFor="new-section-label" className="text-sm font-medium">
+            Add a section
+          </Label>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              id="new-section-label"
+              value={newSectionLabel}
+              onChange={(event) => setNewSectionLabel(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  handleAddNewSection();
+                }
+              }}
+              placeholder="e.g. Seasonal Specials"
+              aria-label="New section name"
+              className="flex-1 min-w-[180px]"
+            />
+            <Button type="button" onClick={handleAddNewSection} disabled={!newSectionLabel.trim()}>
+              Add
+            </Button>
+          </div>
+        </div>
+      </div>
+      <FooterComponent className={cn("pt-2", isMobile ? "gap-2" : undefined)}>
+        <Button variant="outline" onClick={() => handleManageSectionsOpenChange(false)}>
+          Cancel
+        </Button>
+        <Button onClick={handleSaveSectionChanges} disabled={editingSections.length === 0 || isSavingSections}>
+          {isSavingSections ? "Saving..." : "Save changes"}
+        </Button>
+      </FooterComponent>
+    </>
+  );
+
+  const manageSectionsContent = renderManageSectionsContent(
+    isMobile ? SheetHeader : DialogHeader,
+    isMobile ? SheetTitle : DialogTitle,
+    isMobile ? SheetDescription : DialogDescription,
+    isMobile ? SheetFooter : DialogFooter,
+  );
+
+  const manageSectionsContainerClassName = cn(
+    "max-h-[85vh] overflow-y-auto",
+    isMobile ? "h-[85vh] rounded-t-[1.75rem]" : "sm:max-h-[80vh]",
+  );
+
   const actionLabels: Record<RecipeBulkAction, string> = {
     delete: "Delete",
     markForReview: "Mark for review",
@@ -951,145 +1081,53 @@ export const RecipeBook = ({
                 <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Sections</h3>
                 <p className="text-xs text-muted-foreground">Choose which section of your recipe book to view.</p>
               </div>
-              <Dialog open={isManageSectionsOpen} onOpenChange={handleManageSectionsOpenChange}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="w-full sm:w-auto">
-                    Manage sections
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Manage sections</DialogTitle>
-                    <DialogDescription>
-                      Rename, reorder, or add sections to organize your recipe book.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-3">
-                    {sectionManageError && (
-                      <Alert variant="destructive" className="flex items-start gap-2">
-                        <AlertTriangle className="h-4 w-4 mt-0.5" />
-                        <AlertDescription>{sectionManageError}</AlertDescription>
-                      </Alert>
-                    )}
-                    {editingSections.length === 0 && (
-                      <p className="text-sm text-muted-foreground">There are no sections to manage yet.</p>
-                    )}
-                    {editingSections.map((section, index) => {
-                      const isArchive = isArchiveSection(section);
-
-                      return (
-                        <div key={section.id} className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm text-muted-foreground w-6 text-right">{index + 1}.</span>
-                          <Input
-                            value={section.label}
-                            onChange={(event) => handleSectionLabelChange(index, event.target.value)}
-                            aria-label={`Rename section ${section.label || section.id}`}
-                            className="flex-1 min-w-[180px]"
-                          />
-                          <div className="flex items-center gap-1">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              onClick={() => moveEditingSection(index, index - 1)}
-                              disabled={index === 0}
-                              aria-label="Move section up"
-                            >
-                              <ArrowUp className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              onClick={() => moveEditingSection(index, index + 1)}
-                              disabled={index === editingSections.length - 1}
-                              aria-label="Move section down"
-                            >
-                              <ArrowDown className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="destructive"
-                              size="icon"
-                              onClick={() => setSectionPendingDeletionIndex(index)}
-                              disabled={isArchive}
-                              aria-label={`Delete section ${section.label || section.id}`}
-                              title={isArchive ? "The Archive section cannot be deleted" : undefined}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    <div className="space-y-2 pt-3 border-t">
-                      <Label htmlFor="new-section-label" className="text-sm font-medium">
-                        Add a section
-                      </Label>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Input
-                          id="new-section-label"
-                          value={newSectionLabel}
-                          onChange={(event) => setNewSectionLabel(event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              handleAddNewSection();
-                            }
-                          }}
-                          placeholder="e.g. Seasonal Specials"
-                          aria-label="New section name"
-                          className="flex-1 min-w-[180px]"
-                        />
-                        <Button
-                          type="button"
-                          onClick={handleAddNewSection}
-                          disabled={!newSectionLabel.trim()}
-                        >
-                          Add
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                  <DialogFooter className="pt-2">
-                    <Button variant="outline" onClick={() => handleManageSectionsOpenChange(false)}>
-                      Cancel
+              {isMobile ? (
+                <Sheet open={isManageSectionsOpen} onOpenChange={handleManageSectionsOpenChange}>
+                  <SheetTrigger asChild>
+                    <Button variant="outline" size="sm" className="w-full sm:w-auto">
+                      Manage sections
                     </Button>
-                    <Button
-                      onClick={handleSaveSectionChanges}
-                      disabled={editingSections.length === 0 || isSavingSections}
-                    >
-                      {isSavingSections ? "Saving..." : "Save changes"}
+                  </SheetTrigger>
+                  <SheetContent side="bottom" className={manageSectionsContainerClassName}>
+                    {manageSectionsContent}
+                  </SheetContent>
+                </Sheet>
+              ) : (
+                <Dialog open={isManageSectionsOpen} onOpenChange={handleManageSectionsOpenChange}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm" className="w-full sm:w-auto">
+                      Manage sections
                     </Button>
-                  </DialogFooter>
-                </DialogContent>
-                {sectionPendingDeletion && (
-                  <AlertDialog
-                    open={sectionPendingDeletionIndex !== null}
-                    onOpenChange={(open) => {
-                      if (!open) {
-                        setSectionPendingDeletionIndex(null);
-                      }
-                    }}
-                  >
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete section</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Are you sure that you want to delete this section? Recipes in this sections will automatically be
-                          saved under "Archive".
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setSectionPendingDeletionIndex(null)}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleConfirmDeleteSection} disabled={isSavingSections}>
-                          Delete section
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                )}
-              </Dialog>
+                  </DialogTrigger>
+                  <DialogContent className={manageSectionsContainerClassName}>{manageSectionsContent}</DialogContent>
+                </Dialog>
+              )}
+              {sectionPendingDeletion && (
+                <AlertDialog
+                  open={sectionPendingDeletionIndex !== null}
+                  onOpenChange={(open) => {
+                    if (!open) {
+                      setSectionPendingDeletionIndex(null);
+                    }
+                  }}
+                >
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete section</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Are you sure that you want to delete this section? Recipes in this sections will automatically be
+                        saved under "Archive".
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel onClick={() => setSectionPendingDeletionIndex(null)}>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleConfirmDeleteSection} disabled={isSavingSections}>
+                        Delete section
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
             </div>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -1244,13 +1282,8 @@ export const RecipeBook = ({
               <div className="grid gap-4">
                 {sectionDishes.map((dish) => {
                   const isSelected = selectedIds.includes(dish.id);
-                  const isOnMenu = Boolean(dish.isOnMenu);
                   const isMenuUpdating = menuUpdatingIds.includes(dish.id);
-                  const statusKey: "live" | "reviewed" | "needs_review" = isOnMenu
-                    ? "live"
-                    : dish.confirmed
-                      ? "reviewed"
-                      : "needs_review";
+                  const statusKey = getDishStatus(dish);
 
                   const statusButtonBaseClass =
                     "inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60";

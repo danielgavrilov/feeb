@@ -13,6 +13,8 @@ import { useRestaurant } from "@/hooks/useRestaurant";
 import { useRecipes } from "@/hooks/useRecipes";
 import { Recipe, RecipeIngredient } from "@/lib/api";
 import { LandingPage } from "@/components/LandingPage";
+import { LanguageSelector } from "@/components/LanguageSelector";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { useSearchParams } from "react-router-dom";
 import {
   CurrencyOption,
@@ -24,6 +26,7 @@ import {
 import { ARCHIVE_SECTION_ID, ARCHIVE_SECTION_LABEL, loadSavedMenuSections } from "@/lib/menu-sections";
 
 const Index = () => {
+  const { t } = useLanguage();
   const {
     restaurant,
     restaurants,
@@ -163,9 +166,7 @@ const Index = () => {
 
   const reviewNoticeMessage =
     unconfirmedRecipeCount > 0
-      ? `${unconfirmedRecipeCount} ${
-          unconfirmedRecipeCount === 1 ? "menu item" : "menu items"
-        } still need confirmation`
+      ? t("landing.reviewStatus.pending", { count: unconfirmedRecipeCount })
       : null;
 
   const handleStartNew = useCallback(() => {
@@ -632,6 +633,10 @@ const Index = () => {
     return true;
   };
 
+  const tabTriggerClass =
+    "min-w-[120px] flex-shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-colors " +
+    "data-[state=active]:bg-background data-[state=active]:shadow sm:min-w-[140px] sm:text-base sm:flex-1 snap-start";
+
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 border-b border-border/70 bg-card/95 shadow-sm backdrop-blur">
@@ -641,7 +646,7 @@ const Index = () => {
             <h1 className="text-xl font-bold text-brand-primary sm:text-2xl">Feeb</h1>
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground sm:text-base">
-            <span className="font-medium text-foreground">Current restaurant:</span>
+            <span className="font-medium text-foreground"></span>
             <span className="truncate font-semibold text-brand-primary/80">
               {restaurant?.name || "No restaurant selected"}
             </span>
@@ -651,41 +656,31 @@ const Index = () => {
 
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-3 pb-10 pt-6 sm:px-4 lg:gap-10">
         <Tabs value={activeTab} onValueChange={handleTabsValueChange} className="w-full">
-          <TabsList className="mb-6 flex w-full flex-nowrap gap-2 overflow-x-auto rounded-xl border border-border/60 bg-muted/40 p-1 sm:gap-3">
-            <TabsTrigger
-              value="landing"
-              className="flex-1 min-w-[120px] flex-shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-colors data-[state=active]:bg-background data-[state=active]:shadow sm:min-w-[140px] sm:text-base"
-            >
-              Landing
-            </TabsTrigger>
-            <TabsTrigger
-              value="add"
-              className="flex-1 min-w-[120px] flex-shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-colors data-[state=active]:bg-background data-[state=active]:shadow sm:min-w-[140px] sm:text-base"
-              onClick={() => {
-                manualAddTabSelectionRef.current = true;
-              }}
-            >
-              Ingredients
-            </TabsTrigger>
-            <TabsTrigger
-              value="recipes"
-              className="flex-1 min-w-[120px] flex-shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-colors data-[state=active]:bg-background data-[state=active]:shadow sm:min-w-[140px] sm:text-base"
-            >
-              Recipe Book
-            </TabsTrigger>
-            <TabsTrigger
-              value="menu"
-              className="flex-1 min-w-[120px] flex-shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-colors data-[state=active]:bg-background data-[state=active]:shadow sm:min-w-[140px] sm:text-base"
-            >
-              Menu
-            </TabsTrigger>
-            <TabsTrigger
-              value="settings"
-              className="flex-1 min-w-[120px] flex-shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-colors data-[state=active]:bg-background data-[state=active]:shadow sm:min-w-[140px] sm:text-base"
-            >
-              Settings
-            </TabsTrigger>
-          </TabsList>
+          <div className="mb-6 overflow-x-auto overflow-y-hidden scroll-smooth snap-x snap-mandatory">
+            <TabsList className="flex min-w-full flex-nowrap items-center justify-start gap-2 rounded-xl border border-border/60 bg-muted/40 p-1.5 sm:gap-3">
+              <TabsTrigger value="landing" className={tabTriggerClass}>
+                {t("navigation.landing")}
+              </TabsTrigger>
+              <TabsTrigger
+                value="add"
+                className={tabTriggerClass}
+                onClick={() => {
+                  manualAddTabSelectionRef.current = true;
+                }}
+              >
+                {t("navigation.add")}
+              </TabsTrigger>
+              <TabsTrigger value="recipes" className={tabTriggerClass}>
+                {t("navigation.recipes")}
+              </TabsTrigger>
+              <TabsTrigger value="menu" className={tabTriggerClass}>
+                {t("navigation.menu")}
+              </TabsTrigger>
+              <TabsTrigger value="settings" className={tabTriggerClass}>
+                {t("navigation.settings")}
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="landing">
             <LandingPage
@@ -715,7 +710,7 @@ const Index = () => {
                       {reviewNoticeMessage}
                     </span>
                     <span className="mt-1 block text-xs text-muted-foreground">
-                      Click to open the most recent dish awaiting review
+                      {t("index.reviewHelper")}
                     </span>
                   </button>
                 )}
