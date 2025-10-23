@@ -200,6 +200,9 @@ async def create_restaurant(
         id=restaurant.id,
         name=restaurant.name,
         description=restaurant.description,
+        logo_data_url=restaurant.logo_data_url,
+        primary_color=restaurant.primary_color,
+        accent_color=restaurant.accent_color,
         created_at=restaurant.created_at
     )
 
