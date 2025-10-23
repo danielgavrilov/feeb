@@ -122,6 +122,22 @@ const ANIMAL_PRODUCT_ALLERGENS = new Set([
 
 const HIDDEN_DIET_BADGES = new Set(["vegan", "vegetarian"]);
 
+export const getSortedAllergenCategories = () =>
+  [...ALLERGEN_CATEGORIES].sort((a, b) => {
+    const aDefinition = allergenFilterMap.get(a.id);
+    const bDefinition = allergenFilterMap.get(b.id);
+    const aLabel = (aDefinition?.name ?? a.label ?? a.id).toLowerCase();
+    const bLabel = (bDefinition?.name ?? b.label ?? b.id).toLowerCase();
+    const aHasChildren = Array.isArray(a.children) && a.children.length > 0;
+    const bHasChildren = Array.isArray(b.children) && b.children.length > 0;
+
+    if (aHasChildren !== bHasChildren) {
+      return aHasChildren ? 1 : -1;
+    }
+
+    return aLabel.localeCompare(bLabel);
+  });
+
 export interface IngredientState {
   name: string;
   quantity: string;
@@ -195,20 +211,7 @@ export const IngredientsList = ({
   const [substitutionDraft, setSubstitutionDraft] = useState({ alternative: "", surcharge: "" });
   const [expandedAllergenCategory, setExpandedAllergenCategory] = useState<string | null>(null);
 
-  const sortedAllergenCategories = [...ALLERGEN_CATEGORIES].sort((a, b) => {
-    const aDefinition = allergenFilterMap.get(a.id);
-    const bDefinition = allergenFilterMap.get(b.id);
-    const aLabel = (aDefinition?.name ?? a.label ?? a.id).toLowerCase();
-    const bLabel = (bDefinition?.name ?? b.label ?? b.id).toLowerCase();
-    const aHasChildren = Array.isArray(a.children) && a.children.length > 0;
-    const bHasChildren = Array.isArray(b.children) && b.children.length > 0;
-
-    if (aHasChildren !== bHasChildren) {
-      return aHasChildren ? 1 : -1;
-    }
-
-    return aLabel.localeCompare(bLabel);
-  });
+  const sortedAllergenCategories = getSortedAllergenCategories();
 
   const matchesDefinitionValue = (definition: AllergenFilterDefinition, value?: string) => {
     if (!value) {
