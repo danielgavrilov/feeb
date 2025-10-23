@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { parsePriceInput } from "@/lib/price-format";
 import type { AllergenConfidence } from "@/lib/api";
 
+
 const LEGACY_ALLERGEN_ALIASES: Record<string, string[]> = {
   cereals_gluten: [
     "gluten",
@@ -110,6 +111,163 @@ const LEGACY_ALLERGEN_ALIASES: Record<string, string[]> = {
   animal_product: ["animal product", "honey", "gelatin", "animal fat", "lard"],
   vegan: ["vegan", "not vegan", "not plant-based"],
   vegetarian: ["vegetarian", "not vegetarian", "not plant-based"],
+};
+
+const CHILD_ALIAS_OVERRIDES: Record<string, string[]> = {
+  "cereals_gluten:wheat": ["durum", "semolina", "farina"],
+  "cereals_gluten:rye": ["pumpernickel", "secale"],
+  "cereals_gluten:barley": ["malt", "hordeum", "hordeum-vulgare"],
+  "cereals_gluten:oats": ["avena"],
+  "cereals_gluten:spelt": ["dinkel"],
+  "tree_nuts:hazelnuts": ["filbert", "gianduja", "praline"],
+};
+
+const sanitizeAllergenToken = (value: string) => value.replace(/[^a-z0-9]/g, "");
+
+type ChildAllergenMetadata = {
+  parentId: string;
+  aliasSet: Set<string>;
+};
+
+const buildChildAllergenMetadata = () => {
+  const metadata = new Map<string, ChildAllergenMetadata>();
+
+  const addAlias = (set: Set<string>, alias: string) => {
+    if (!alias) {
+      return;
+    }
+    const normalized = alias.toLowerCase();
+    if (!normalized) {
+      return;
+    }
+    set.add(normalized);
+    set.add(sanitizeAllergenToken(normalized));
+  };
+
+  for (const category of ALLERGEN_CATEGORIES) {
+    if (!Array.isArray(category.children) || category.children.length === 0) {
+      continue;
+    }
+
+    const parentId = category.id.toLowerCase();
+    const parentAliases = LEGACY_ALLERGEN_ALIASES[parentId] ?? [];
+
+    for (const child of category.children) {
+      const childId = child.id.toLowerCase();
+      const aliasSet = new Set<string>();
+      const [, childKey = ""] = childId.split(":");
+      const childLabel = child.label.toLowerCase();
+      const childTokens = new Set(
+        [
+          childKey,
+          childKey.replace(/_/g, " "),
+          childLabel,
+          childLabel.replace(/\s+/g, " "),
+          childLabel.endsWith("s") ? childLabel.slice(0, -1) : "",
+          childLabel.endsWith("es") ? childLabel.slice(0, -2) : "",
+        ].filter(Boolean),
+      );
+
+      addAlias(aliasSet, childId);
+      addAlias(aliasSet, childKey);
+      addAlias(aliasSet, childLabel);
+
+      const overrideAliases = CHILD_ALIAS_OVERRIDES[childId] ?? [];
+      for (const override of overrideAliases) {
+        addAlias(aliasSet, override);
+      }
+
+      for (const alias of parentAliases) {
+        const normalizedAlias = alias.toLowerCase();
+        const sanitizedAlias = sanitizeAllergenToken(normalizedAlias);
+        const spacedAlias = normalizedAlias.replace(/[^a-z0-9]/g, " ");
+
+        for (const token of childTokens) {
+          const sanitizedToken = sanitizeAllergenToken(token);
+          if (
+            normalizedAlias.includes(token) ||
+            spacedAlias.includes(token) ||
+            sanitizedAlias.includes(sanitizedToken)
+          ) {
+            addAlias(aliasSet, alias);
+            break;
+          }
+        }
+      }
+
+      metadata.set(childId, {
+        parentId,
+        aliasSet,
+      });
+    }
+  }
+
+  return metadata;
+};
+
+const CHILD_ALLERGEN_METADATA = buildChildAllergenMetadata();
+
+const matchesChildAllergenSelection = (
+  allergen: { code?: string; name?: string },
+  normalizedChildId: string,
+  normalizedFallback?: string,
+) => {
+  const meta = CHILD_ALLERGEN_METADATA.get(normalizedChildId);
+  const aliasSet = meta?.aliasSet;
+  const candidateValues = [
+    allergen.code?.toLowerCase(),
+    allergen.name?.toLowerCase(),
+    normalizedFallback,
+  ].filter((value): value is string => Boolean(value));
+
+  if (candidateValues.length === 0) {
+    return false;
+  }
+
+  if (aliasSet) {
+    for (const candidate of candidateValues) {
+      if (aliasSet.has(candidate)) {
+        return true;
+      }
+
+      const sanitizedCandidate = sanitizeAllergenToken(candidate);
+      if (aliasSet.has(sanitizedCandidate)) {
+        return true;
+      }
+
+      const segments = candidate.split(/[:_]/);
+      const lastSegment = segments[segments.length - 1];
+      if (
+        aliasSet.has(lastSegment) ||
+        aliasSet.has(sanitizeAllergenToken(lastSegment))
+      ) {
+        return true;
+      }
+    }
+  }
+
+  const [, childKey = ""] = normalizedChildId.split(":");
+  if (!childKey) {
+    return false;
+  }
+
+  const fallbackSet = new Set<string>([
+    childKey,
+    sanitizeAllergenToken(childKey),
+  ]);
+
+  for (const candidate of candidateValues) {
+    if (fallbackSet.has(candidate)) {
+      return true;
+    }
+
+    const sanitizedCandidate = sanitizeAllergenToken(candidate);
+    if (fallbackSet.has(sanitizedCandidate)) {
+      return true;
+    }
+  }
+
+  return false;
 };
 
 const ANIMAL_PRODUCT_ALLERGENS = new Set([
@@ -243,6 +401,25 @@ export const IngredientsList = ({
       }
     }
 
+    const tryParentLookup = (value?: string) => {
+      const normalized = value?.toLowerCase();
+      if (!normalized || !normalized.includes(":")) {
+        return undefined;
+      }
+      const [parentId] = normalized.split(":");
+      return allergenFilterMap.get(parentId) ?? allergenFilterMap.get(parentId.toLowerCase());
+    };
+
+    const parentFromCode = tryParentLookup(code);
+    if (parentFromCode) {
+      return parentFromCode;
+    }
+
+    const parentFromName = tryParentLookup(name);
+    if (parentFromName) {
+      return parentFromName;
+    }
+
     return undefined;
   };
 
@@ -265,6 +442,10 @@ export const IngredientsList = ({
       (normalizedCode === normalizedFallback || normalizedName === normalizedFallback)
     ) {
       return true;
+    }
+
+    if (normalizedId.includes(":")) {
+      return matchesChildAllergenSelection(allergen, normalizedId, normalizedFallback);
     }
 
     const definition =
