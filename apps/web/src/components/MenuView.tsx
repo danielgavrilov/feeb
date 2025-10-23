@@ -684,6 +684,15 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
                     const ingredientMatch = ingredientMatchResults.get(dish.id);
                     const summary = getDishAllergenSummary(dish);
                     const allergenDefinitions = getDishAllergenDefinitions(dish, summary);
+                    const formatMemberName = (value: string) =>
+                      value
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .map((segment) =>
+                          segment.charAt(0).toUpperCase() + segment.slice(1).toLowerCase(),
+                        )
+                        .join(" ");
+
                     const allergenBadges = allergenDefinitions.map((definition) => {
                       const memberNames = getDefinitionMemberNames(summary, definition)
                         .map((name) => name.trim())
@@ -693,9 +702,7 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
                       );
                       const label =
                         definition.category === "allergen" && sortedMembers.length > 0
-                          ? `Contains: ${sortedMembers
-                              .map((name) => name.toLowerCase())
-                              .join(", ")}`
+                          ? sortedMembers.map(formatMemberName).join(", ")
                           : definition.name;
 
                       return { definition, label };
