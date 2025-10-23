@@ -177,6 +177,29 @@ const dishContainsAllergen = (dish: SavedDish, allergenId: string) => {
   return false;
 };
 
+function ingredientMatches(
+  term: string,
+  ingredient: string,
+  synonymMap: Record<string, string[]> = {},
+) {
+  const t = term.toLowerCase().trim();
+  const ing = ingredient.toLowerCase().trim();
+
+  if (!t || !ing) {
+    return false;
+  }
+
+  if (ing.includes(t) || t.includes(ing)) {
+    return true;
+  }
+
+  if (synonymMap[t]) {
+    return synonymMap[t].some((syn) => ing.includes(syn));
+  }
+
+  return false;
+}
+
 interface MenuViewProps {
   dishes: SavedDish[];
   restaurantName: string;
@@ -265,146 +288,71 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
 
           return {
             raw: term,
-            normalized,
             expansion: expandIngredientSearchTerms(normalized),
           };
         })
         .filter((entry): entry is {
           raw: string;
-          normalized: string;
           expansion: ReturnType<typeof expandIngredientSearchTerms>;
         } => Boolean(entry)),
     [ingredientSearchTerms],
   );
 
   const ingredientMatchEvaluator = useMemo(() => {
-    // Lightweight scoring keeps the search client-side. When we outgrow this,
-    // consider wiring up the API-backed trigram/taxonomy approaches captured in
-    // the ingredient-search data helpers.
-    const computeDiceCoefficient = (a: string, b: string) => {
-      if (a === b) {
-        return 1;
-      }
-      if (a.length < 2 || b.length < 2) {
-        return a[0] === b[0] ? 0.5 : 0;
+    const synonymMap: Record<string, string[]> = {};
+
+    ingredientMatchers.forEach((matcher) => {
+      const key = matcher.raw.toLowerCase().trim();
+      if (!key) {
+        return;
       }
 
-      const bigrams = (value: string) => {
-        const grams: string[] = [];
-        for (let index = 0; index < value.length - 1; index += 1) {
-          grams.push(value.slice(index, index + 2));
-        }
-        return grams;
-      };
-
-      const aBigrams = bigrams(a);
-      const bBigrams = bigrams(b);
-      const bGramCounts = new Map<string, number>();
-
-      bBigrams.forEach((gram) => {
-        bGramCounts.set(gram, (bGramCounts.get(gram) ?? 0) + 1);
-      });
-
-      let overlap = 0;
-      aBigrams.forEach((gram) => {
-        const count = bGramCounts.get(gram) ?? 0;
-        if (count > 0) {
-          overlap += 1;
-          bGramCounts.set(gram, count - 1);
+      const synonyms = new Set<string>();
+      if (matcher.expansion.phrase) {
+        synonyms.add(matcher.expansion.phrase.toLowerCase());
+      }
+      matcher.expansion.terms.forEach((term) => {
+        if (term) {
+          synonyms.add(term.toLowerCase());
         }
       });
-
-      return (2 * overlap) / (aBigrams.length + bBigrams.length);
-    };
-
-    const computeTermScore = (ingredientName: string, term: string) => {
-      if (!ingredientName || !term) {
-        return 0;
+      if (synonyms.size > 0) {
+        synonymMap[key] = Array.from(synonyms);
       }
+    });
 
-      if (ingredientName === term) {
-        return 1.25;
-      }
-
-      if (ingredientName.includes(term)) {
-        const positionBoost = 1 - ingredientName.indexOf(term) / (ingredientName.length + 1);
-        return 1 + positionBoost * 0.25 + (term.length / ingredientName.length) * 0.25;
-      }
-
-      const parts = ingredientName.split(/[\s-]+/);
-      let best = 0;
-
-      parts.forEach((part) => {
-        if (!part) {
-          return;
-        }
-
-        if (part.includes(term)) {
-          const coverage = term.length / part.length;
-          best = Math.max(best, 0.6 + coverage * 0.4);
-          return;
-        }
-
-        if (term.includes(part)) {
-          best = Math.max(best, (part.length / term.length) * 0.5);
-          return;
-        }
-
-        best = Math.max(best, computeDiceCoefficient(part, term) * 0.5);
-      });
-
-      return best;
-    };
-
-    const computeScore = (dishId: string) => {
+    const evaluateMatches = (dishId: string) => {
       const ingredients = normalizedIngredientMap.get(dishId) ?? [];
       if (!ingredients.length || ingredientMatchers.length === 0) {
-        return { score: 0, matches: [] as string[] };
+        return { matches: [] as string[] };
       }
 
-      let bestOverallScore = 0;
       const matches = new Set<string>();
 
       ingredientMatchers.forEach((matcher) => {
-        let bestScoreForMatcher = 0;
-        const { expansion } = matcher;
-
-        if (expansion.phrase) {
-          ingredients.forEach((ingredient) => {
-            if (ingredient.includes(expansion.phrase!)) {
-              const coverage = expansion.phrase!.length / ingredient.length;
-              bestScoreForMatcher = Math.max(bestScoreForMatcher, 1 + coverage * 0.3);
-            }
-          });
+        const term = matcher.raw;
+        if (!term.trim()) {
+          return;
         }
 
-        expansion.terms.forEach((term) => {
-          ingredients.forEach((ingredient) => {
-            const score = computeTermScore(ingredient, term);
-            if (score > bestScoreForMatcher) {
-              bestScoreForMatcher = score;
-            }
-          });
-        });
-
-        if (bestScoreForMatcher > 0) {
-          matches.add(matcher.raw);
-          if (bestScoreForMatcher > bestOverallScore) {
-            bestOverallScore = bestScoreForMatcher;
+        for (const ingredient of ingredients) {
+          if (ingredientMatches(term, ingredient, synonymMap)) {
+            matches.add(matcher.raw);
+            break;
           }
         }
       });
 
       return {
-        score: bestOverallScore,
         matches: Array.from(matches),
       };
     };
-    return computeScore;
+
+    return evaluateMatches;
   }, [ingredientMatchers, normalizedIngredientMap]);
 
   const ingredientMatchResults = useMemo(() => {
-    const results = new Map<string, { score: number; matches: string[] }>();
+    const results = new Map<string, { matches: string[] }>();
     menuDishes.forEach((dish) => {
       results.set(dish.id, ingredientMatchEvaluator(dish.id));
     });
@@ -431,8 +379,7 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
 
       return allergenProcessedMenuDishes
         .map((dish) => ({ dish, match: ingredientMatchResults.get(dish.id) }))
-        .filter((entry) => (entry.match?.score ?? 0) > 0)
-        .sort((a, b) => (b.match?.score ?? 0) - (a.match?.score ?? 0))
+        .filter((entry) => (entry.match?.matches.length ?? 0) > 0)
         .map((entry) => entry.dish);
     }
 
@@ -445,7 +392,7 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
 
     allergenProcessedMenuDishes.forEach((dish) => {
       const match = ingredientMatchResults.get(dish.id);
-      if (match && match.score > 0) {
+      if (match && match.matches.length > 0) {
         matching.push(dish);
       } else {
         nonMatching.push(dish);
