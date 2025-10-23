@@ -120,6 +120,8 @@ const ANIMAL_PRODUCT_ALLERGENS = new Set([
   "molluscs",
 ]);
 
+const HIDDEN_DIET_BADGES = new Set(["vegan", "vegetarian"]);
+
 export interface IngredientState {
   name: string;
   quantity: string;
@@ -362,6 +364,21 @@ export const IngredientsList = ({
       <div className="space-y-3">
         {ingredients.map((ingredient, index) => {
           const selectedAllergens = ingredient.allergens ?? [];
+          const visibleAllergens = selectedAllergens.filter((allergen) => {
+            const definition = findDefinitionForAllergen(allergen.code, allergen.name);
+            const definitionId = definition?.id?.toLowerCase();
+
+            if (definitionId && HIDDEN_DIET_BADGES.has(definitionId)) {
+              return false;
+            }
+
+            const normalizedCode = allergen.code?.toLowerCase();
+            const normalizedName = allergen.name?.toLowerCase();
+            return (
+              (normalizedCode ? !HIDDEN_DIET_BADGES.has(normalizedCode) : true) &&
+              (normalizedName ? !HIDDEN_DIET_BADGES.has(normalizedName) : true)
+            );
+          });
           const substitution = ingredient.substitution;
           const isSubstitutionDialogOpen = activeSubstitutionIndex === index;
           const substitutionSurchargeLabel = formatSurchargeLabel(substitution?.surcharge);
@@ -483,7 +500,7 @@ export const IngredientsList = ({
                         <button
                           type="button"
                           className={`rounded-lg border text-left transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary ${
-                            selectedAllergens.length > 0
+                            visibleAllergens.length > 0
                               ? "border-border bg-background"
                               : "border-border/60 bg-background/60"
                           } p-4 w-full`}
@@ -494,9 +511,9 @@ export const IngredientsList = ({
                                 <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                                   Allergens
                                 </p>
-                                {selectedAllergens.length > 0 ? (
+                                {visibleAllergens.length > 0 ? (
                                   <div className="mt-3 flex flex-wrap gap-2">
-                                    {[...selectedAllergens]
+                                    {[...visibleAllergens]
                                       .sort((a, b) => {
                                         const aDefinition = findDefinitionForAllergen(
                                           a.code,
@@ -718,7 +735,7 @@ export const IngredientsList = ({
                               })}
                             </div>
                           </div>
-                          {selectedAllergens.length > 0 && (
+                          {visibleAllergens.length > 0 && (
                             <button
                               type="button"
                               onClick={(event) => {
