@@ -152,11 +152,55 @@ export const getDishAllergenDefinitions = (
   const seen = new Set<string>();
   const veganDefinition = allergenFilterMap.get("vegan");
   const vegetarianDefinition = allergenFilterMap.get("vegetarian");
+  const meatDefinition = allergenFilterMap.get("meat");
 
-  if (veganDefinition && isVeganFriendly(summary)) {
+  const vegetarianFriendly = isVegetarianFriendly(summary);
+  const veganFriendly = isVeganFriendly(summary);
+
+  const shouldIncludeMeatDefinition = (() => {
+    if (!meatDefinition) {
+      return false;
+    }
+
+    const normalizedMeatCodes = new Set<string>();
+    const addNormalizedCode = (value?: string) => {
+      if (!value) {
+        return;
+      }
+
+      const normalized = value.toLowerCase();
+      normalizedMeatCodes.add(normalized);
+
+      if (normalized.includes(":")) {
+        const unprefixed = normalized.split(":").pop();
+        if (unprefixed) {
+          normalizedMeatCodes.add(unprefixed);
+        }
+      }
+    };
+
+    addNormalizedCode(meatDefinition.id);
+    meatDefinition.codes.forEach(addNormalizedCode);
+
+    let hasMeatCode = false;
+    for (const code of summary.canonicalCodes) {
+      if (normalizedMeatCodes.has(code.toLowerCase())) {
+        hasMeatCode = true;
+        break;
+      }
+    }
+    const hasMeatMarker = summary.markerTypes.has("meat");
+
+    return !vegetarianFriendly || hasMeatCode || hasMeatMarker;
+  })();
+
+  if (shouldIncludeMeatDefinition && meatDefinition) {
+    results.push(meatDefinition);
+    seen.add(meatDefinition.id);
+  } else if (veganDefinition && veganFriendly) {
     results.push(veganDefinition);
     seen.add(veganDefinition.id);
-  } else if (vegetarianDefinition && isVegetarianFriendly(summary)) {
+  } else if (vegetarianDefinition && vegetarianFriendly) {
     results.push(vegetarianDefinition);
     seen.add(vegetarianDefinition.id);
   }
