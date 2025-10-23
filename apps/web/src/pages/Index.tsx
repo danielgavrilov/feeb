@@ -633,6 +633,10 @@ const Index = () => {
     return true;
   };
 
+  const tabTriggerClass =
+    "min-w-[120px] flex-shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-colors " +
+    "data-[state=active]:bg-background data-[state=active]:shadow sm:min-w-[140px] sm:text-base sm:flex-1";
+
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 border-b border-border/70 bg-card/95 shadow-sm backdrop-blur">
@@ -652,39 +656,27 @@ const Index = () => {
 
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-3 pb-10 pt-6 sm:px-4 lg:gap-10">
         <Tabs value={activeTab} onValueChange={handleTabsValueChange} className="w-full">
-          <TabsList className="mb-6 flex w-full flex-nowrap gap-2 overflow-x-auto rounded-xl border border-border/60 bg-muted/40 p-1 sm:gap-3">
-            <TabsTrigger
-              value="landing"
-              className="flex-1 min-w-[120px] flex-shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-colors data-[state=active]:bg-background data-[state=active]:shadow sm:min-w-[140px] sm:text-base"
-            >
-              Landing
+          <TabsList className="mb-6 flex w-full flex-nowrap items-center gap-2 overflow-x-auto overflow-y-visible rounded-xl border border-border/60 bg-muted/40 p-1.5 sm:gap-3">
+            <TabsTrigger value="landing" className={tabTriggerClass}>
+              {t("navigation.landing")}
             </TabsTrigger>
             <TabsTrigger
               value="add"
-              className="flex-1 min-w-[120px] flex-shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-colors data-[state=active]:bg-background data-[state=active]:shadow sm:min-w-[140px] sm:text-base"
+              className={tabTriggerClass}
               onClick={() => {
                 manualAddTabSelectionRef.current = true;
               }}
             >
               {t("navigation.add")}
             </TabsTrigger>
-            <TabsTrigger
-              value="recipes"
-              className="flex-1 min-w-[120px] flex-shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-colors data-[state=active]:bg-background data-[state=active]:shadow sm:min-w-[140px] sm:text-base"
-            >
-              Recipe Book
+            <TabsTrigger value="recipes" className={tabTriggerClass}>
+              {t("navigation.recipes")}
             </TabsTrigger>
-            <TabsTrigger
-              value="menu"
-              className="flex-1 min-w-[120px] flex-shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-colors data-[state=active]:bg-background data-[state=active]:shadow sm:min-w-[140px] sm:text-base"
-            >
-              Menu
+            <TabsTrigger value="menu" className={tabTriggerClass}>
+              {t("navigation.menu")}
             </TabsTrigger>
-            <TabsTrigger
-              value="settings"
-              className="flex-1 min-w-[120px] flex-shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-colors data-[state=active]:bg-background data-[state=active]:shadow sm:min-w-[140px] sm:text-base"
-            >
-              Settings
+            <TabsTrigger value="settings" className={tabTriggerClass}>
+              {t("navigation.settings")}
             </TabsTrigger>
           </TabsList>
 
