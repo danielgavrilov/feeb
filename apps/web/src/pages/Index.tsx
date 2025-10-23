@@ -635,7 +635,7 @@ const Index = () => {
 
   const tabTriggerClass =
     "min-w-[120px] flex-shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-colors " +
-    "data-[state=active]:bg-background data-[state=active]:shadow sm:min-w-[140px] sm:text-base sm:flex-1";
+    "data-[state=active]:bg-background data-[state=active]:shadow sm:min-w-[140px] sm:text-base sm:flex-1 snap-start";
 
   return (
     <div className="min-h-screen bg-background">
@@ -656,29 +656,31 @@ const Index = () => {
 
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-3 pb-10 pt-6 sm:px-4 lg:gap-10">
         <Tabs value={activeTab} onValueChange={handleTabsValueChange} className="w-full">
-          <TabsList className="mb-6 flex w-full flex-nowrap items-center gap-2 overflow-x-auto overflow-y-visible rounded-xl border border-border/60 bg-muted/40 p-1.5 sm:gap-3">
-            <TabsTrigger value="landing" className={tabTriggerClass}>
-              {t("navigation.landing")}
-            </TabsTrigger>
-            <TabsTrigger
-              value="add"
-              className={tabTriggerClass}
-              onClick={() => {
-                manualAddTabSelectionRef.current = true;
-              }}
-            >
-              {t("navigation.add")}
-            </TabsTrigger>
-            <TabsTrigger value="recipes" className={tabTriggerClass}>
-              {t("navigation.recipes")}
-            </TabsTrigger>
-            <TabsTrigger value="menu" className={tabTriggerClass}>
-              {t("navigation.menu")}
-            </TabsTrigger>
-            <TabsTrigger value="settings" className={tabTriggerClass}>
-              {t("navigation.settings")}
-            </TabsTrigger>
-          </TabsList>
+          <div className="mb-6 overflow-x-auto overflow-y-hidden scroll-smooth snap-x snap-mandatory">
+            <TabsList className="flex min-w-full flex-nowrap items-center justify-start gap-2 rounded-xl border border-border/60 bg-muted/40 p-1.5 sm:gap-3">
+              <TabsTrigger value="landing" className={tabTriggerClass}>
+                {t("navigation.landing")}
+              </TabsTrigger>
+              <TabsTrigger
+                value="add"
+                className={tabTriggerClass}
+                onClick={() => {
+                  manualAddTabSelectionRef.current = true;
+                }}
+              >
+                {t("navigation.add")}
+              </TabsTrigger>
+              <TabsTrigger value="recipes" className={tabTriggerClass}>
+                {t("navigation.recipes")}
+              </TabsTrigger>
+              <TabsTrigger value="menu" className={tabTriggerClass}>
+                {t("navigation.menu")}
+              </TabsTrigger>
+              <TabsTrigger value="settings" className={tabTriggerClass}>
+                {t("navigation.settings")}
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="landing">
             <LandingPage
