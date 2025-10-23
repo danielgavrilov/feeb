@@ -123,4 +123,55 @@ test("vegan and vegetarian badges are omitted when meat markers exist", () => {
 
   assert.equal(definitionIds.includes("vegan"), false);
   assert.equal(definitionIds.includes("vegetarian"), false);
+  assert.equal(definitionIds.includes("meat"), true);
+});
+
+test("menu view badge mapping includes meat definition", () => {
+  const meatDish: SavedDish = {
+    id: "steak",
+    name: "Steak",
+    menuSectionId: "",
+    description: "",
+    servingSize: "1",
+    price: "",
+    ingredients: [
+      {
+        name: "Beef",
+        quantity: "",
+        unit: "",
+        allergens: [
+          {
+            code: "en:meat",
+            name: "Meat",
+            canonicalCode: "en:meat",
+            canonicalName: "Meat",
+          },
+        ],
+      },
+    ],
+    prepMethod: "",
+    compliance: {},
+    confirmed: true,
+    isOnMenu: true,
+  };
+
+  const summary = summarizeDishAllergens(meatDish.ingredients);
+  const allergenDefinitions = getDishAllergenDefinitions(meatDish, summary);
+  const allergenBadges = allergenDefinitions.map((definition) => {
+    const memberNames = summary.canonicalAllergens
+      .map((allergen) => allergen.name?.trim())
+      .filter((name): name is string => Boolean(name));
+    const label =
+      definition.category === "allergen" && memberNames.length > 0
+        ? `Contains: ${memberNames.map((name) => name.toLowerCase()).join(", ")}`
+        : definition.name;
+
+    return { definition, label };
+  });
+
+  const meatBadge = allergenBadges.find((badge) => badge.definition.id === "meat");
+
+  assert.ok(meatBadge, "Meat badge should be present in menu view badge mapping");
+  assert.equal(meatBadge?.definition.name, "Meat");
+  assert.equal(meatBadge?.label, "Meat");
 });
