@@ -100,7 +100,7 @@ const baseTranslations: Record<LanguageCode, TranslationDictionary> = {
         actionLabel: "Upload Menu",
       },
       reviewRecipes: {
-        title: "Let’s review your recipes.",
+        title: "Next step: review your recipes.",
         description:
           "Confirm the ingredients for each of the meals you have uploaded to make sure we get the allergens right.",
         actionLabel: "Review recipe",

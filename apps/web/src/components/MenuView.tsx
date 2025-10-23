@@ -138,34 +138,14 @@ const dishContainsAllergen = (dish: SavedDish, allergenId: string) => {
   }
 
   const summary = getDishAllergenSummary(dish);
-  const { codes, keywords, category } = definition;
-  const normalizedCodeSet = new Set<string>([definition.id.toLowerCase(), ...codes.map((code) => code.toLowerCase())]);
-  const normalizedNameSet = new Set<string>([
-    definition.name.toLowerCase(),
-    ...keywords.map((keyword) => keyword.toLowerCase()),
-  ]);
-  const normalizedKeywords = keywords.map((keyword) => keyword.toLowerCase());
 
   if (definition.id === "vegan") {
-    const summary = getDishAllergenSummary(dish);
     return !isVeganFriendly(summary);
   }
 
   if (definition.id === "vegetarian") {
     return !isVegetarianFriendly(summary);
   }
-
-  return dish.ingredients.some((ingredient) => {
-    const ingredientName = ingredient.name?.toLowerCase() ?? "";
-    const allergens = ingredient.allergens ?? [];
-
-    const matchesAllergenList = allergens.some((allergen) => {
-      const code = allergen.code?.toLowerCase() ?? "";
-      const name = allergen.name?.toLowerCase() ?? "";
-
-      if (normalizedCodeSet.has(code) || normalizedCodeSet.has(name)) {
-        return true;
-      }
 
   const normalizedCodeSet = buildNormalizedCodeSet(definition);
   const normalizedKeywordSet = buildNormalizedKeywordSet(definition);
