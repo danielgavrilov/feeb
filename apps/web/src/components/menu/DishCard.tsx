@@ -74,7 +74,8 @@ export const DishCard = ({
         )}
 
         {allergenBadges.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-muted-foreground">Contains:</span>
             {allergenBadges.map(({ definition, label }) => {
               const Icon = definition.Icon;
               return (
@@ -125,7 +126,8 @@ export const DishCard = ({
             />
             <div className="flex flex-col gap-2">
               {allergenHighlights.length > 0 && (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold text-amber-900">Contains</span>
                   {allergenHighlights.map((definition) => {
                     const Icon = definition.Icon;
                     return (

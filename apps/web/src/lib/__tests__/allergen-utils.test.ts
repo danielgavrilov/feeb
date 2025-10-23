@@ -157,13 +157,22 @@ test("menu view badge mapping includes meat definition", () => {
 
   const summary = summarizeDishAllergens(meatDish.ingredients);
   const allergenDefinitions = getDishAllergenDefinitions(meatDish, summary);
+  const formatMemberName = (value: string) =>
+    value
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1).toLowerCase())
+      .join(" ");
   const allergenBadges = allergenDefinitions.map((definition) => {
     const memberNames = summary.canonicalAllergens
       .map((allergen) => allergen.name?.trim())
       .filter((name): name is string => Boolean(name));
+    const sortedMembers = [...memberNames].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" }),
+    );
     const label =
-      definition.category === "allergen" && memberNames.length > 0
-        ? `Contains: ${memberNames.map((name) => name.toLowerCase()).join(", ")}`
+      definition.category === "allergen" && sortedMembers.length > 0
+        ? sortedMembers.map(formatMemberName).join(", ")
         : definition.name;
 
     return { definition, label };
@@ -174,4 +183,64 @@ test("menu view badge mapping includes meat definition", () => {
   assert.ok(meatBadge, "Meat badge should be present in menu view badge mapping");
   assert.equal(meatBadge?.definition.name, "Meat");
   assert.equal(meatBadge?.label, "Meat");
+});
+
+test("menu view allergen badge labels are capitalized without prefix", () => {
+  const fishDish: SavedDish = {
+    id: "salmon",
+    name: "Salmon",
+    menuSectionId: "",
+    description: "",
+    servingSize: "1",
+    price: "",
+    ingredients: [
+      {
+        name: "Salmon",
+        quantity: "",
+        unit: "",
+        allergens: [
+          {
+            code: "en:fish",
+            name: "fish",
+            canonicalCode: "en:fish",
+            canonicalName: "fish",
+          },
+        ],
+      },
+    ],
+    prepMethod: "",
+    compliance: {},
+    confirmed: true,
+    isOnMenu: true,
+  };
+
+  const summary = summarizeDishAllergens(fishDish.ingredients);
+  const allergenDefinitions = getDishAllergenDefinitions(fishDish, summary);
+
+  const formatMemberName = (value: string) =>
+    value
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1).toLowerCase())
+      .join(" ");
+
+  const allergenBadges = allergenDefinitions.map((definition) => {
+    const memberNames = summary.canonicalAllergens
+      .map((allergen) => allergen.name?.trim())
+      .filter((name): name is string => Boolean(name));
+    const sortedMembers = [...memberNames].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" }),
+    );
+    const label =
+      definition.category === "allergen" && sortedMembers.length > 0
+        ? sortedMembers.map(formatMemberName).join(", ")
+        : definition.name;
+
+    return { definition, label };
+  });
+
+  const fishBadge = allergenBadges.find((badge) => badge.definition.id === "fish");
+
+  assert.ok(fishBadge, "Fish badge should be present in menu view badge mapping");
+  assert.equal(fishBadge?.label, "Fish");
 });
