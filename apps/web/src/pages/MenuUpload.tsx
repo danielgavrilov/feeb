@@ -315,16 +315,6 @@ const MenuUploadPage = () => {
           </p>
         </div>
 
-  const hasProvidedMenu =
-    selectedMethod && selectedMethod !== "manual"
-      ? methodRequiresFile(selectedMethod)
-        ? Boolean(file)
-        : Boolean(urlValue.trim())
-      : false;
-
-  return (
-    <main className="min-h-screen bg-background">
-      <div className="container mx-auto max-w-5xl py-12 space-y-10">
         <div className="space-y-3">
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>Estimated progress</span>
@@ -357,6 +347,13 @@ const MenuUploadPage = () => {
       </Card>
     );
   };
+
+  const hasProvidedMenu =
+    selectedMethod && selectedMethod !== "manual"
+      ? methodRequiresFile(selectedMethod)
+        ? Boolean(file)
+        : Boolean(urlValue.trim())
+      : false;
 
   const summarySteps: ProgressStep[] = useMemo(
     () => [
@@ -398,98 +395,6 @@ const MenuUploadPage = () => {
 
   const renderSummary = () => {
     if (!result) return null;
-            {selectedMethod && selectedMethod !== "manual" ? (
-              <div className="space-y-5">
-                <div className="space-y-3">
-                  <h2 className="text-lg font-semibold text-foreground">Provide your menu</h2>
-                  <p className="text-sm text-muted-foreground">
-                    We’ll store a copy securely, send it to our LLM extraction service, and return structured dishes within minutes.
-                  </p>
-                </div>
-
-                {methodRequiresFile(selectedMethod) ? (
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-muted-foreground">Upload file</Label>
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                      <Input
-                        type="file"
-                        accept={activeOption?.accept}
-                        capture={selectedMethod === "image" ? "environment" : undefined}
-                        onChange={event => {
-                          const selected = event.target.files?.[0] ?? null;
-                          setFile(selected);
-                        }}
-                        className="h-12 md:flex-1"
-                      />
-                      <Button
-                        type="submit"
-                        disabled={isSubmitting || !hasProvidedMenu}
-                        className="h-12 px-8 text-base font-semibold md:w-auto"
-                      >
-                        {isSubmitting ? (
-                          <span className="flex items-center gap-2">
-                            <Loader2 className="h-5 w-5 animate-spin" />
-                            Uploading…
-                          </span>
-                        ) : (
-                          "Upload menu"
-                        )}
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {selectedMethod === "pdf"
-                        ? "Accepted format: PDF up to 10MB"
-                        : "Accepted formats: JPG, PNG or HEIC up to 10MB"}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-muted-foreground">Menu URL</Label>
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                      <Input
-                        type="url"
-                        placeholder="https://restaurant.com/menu"
-                        value={urlValue}
-                        onChange={event => setUrlValue(event.target.value)}
-                        className="h-12 md:flex-1"
-                      />
-                      <Button
-                        type="submit"
-                        disabled={isSubmitting || !hasProvidedMenu}
-                        className="h-12 px-8 text-base font-semibold md:w-auto"
-                      >
-                        {isSubmitting ? (
-                          <span className="flex items-center gap-2">
-                            <Loader2 className="h-5 w-5 animate-spin" />
-                            Uploading…
-                          </span>
-                        ) : (
-                          "Upload menu"
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : null}
-
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-
-            {selectedMethod && selectedMethod !== "manual" ? (
-              <div className="flex justify-end">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => navigate("/?tab=add")}
-                  className="h-12 px-6"
-                >
-                  Add dishes manually
-                </Button>
-              </div>
-            ) : null}
-          </Card>
-        </form>
-
     return (
       <div className="space-y-8">
         <Card className="space-y-6 border-primary/40 bg-primary/5 p-6">
