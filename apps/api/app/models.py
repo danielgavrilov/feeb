@@ -3,7 +3,7 @@ SQLAlchemy ORM models for ingredients, allergens, and products.
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from enum import Enum
 from sqlalchemy import (
     Column, Integer, String, TIMESTAMP, ForeignKey,
@@ -555,6 +555,7 @@ class RecipeIngredientRequest(BaseModel):
     notes: Optional[str] = None
     confirmed: Optional[bool] = None
     substitution: Optional["IngredientSubstitutionRequest"] = None
+    allergens: Optional[List[Dict[str, Any]]] = None
 
 
 class IngredientSubstitutionRequest(BaseModel):

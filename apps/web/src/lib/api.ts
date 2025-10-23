@@ -116,6 +116,16 @@ export interface CreateRecipeIngredient {
 
 export interface UpdateRecipeIngredientRequest extends Partial<CreateRecipeIngredient> {
   ingredient_name?: string;
+  allergens?: Array<{
+    code: string;
+    name: string;
+    certainty?: string;
+    canonical_code?: string | null;
+    canonical_name?: string | null;
+    family_code?: string | null;
+    family_name?: string | null;
+    marker_type?: string | null;
+  }>;
 }
 
 export interface CreateRecipeRequest {

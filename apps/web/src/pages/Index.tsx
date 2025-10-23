@@ -307,6 +307,18 @@ const Index = () => {
         };
       }
 
+      // Include allergen data in the payload (always send, even if empty to clear allergens)
+      payload.allergens = (ingredient.allergens ?? []).map((allergen) => ({
+        code: allergen.code,
+        name: allergen.name,
+        certainty: allergen.certainty,
+        canonical_code: allergen.canonicalCode ?? null,
+        canonical_name: allergen.canonicalName ?? null,
+        family_code: allergen.familyCode ?? null,
+        family_name: allergen.familyName ?? null,
+        marker_type: allergen.markerType ?? null,
+      }));
+
       try {
         await updateRecipeIngredientAPI(editingDishId, ingredient.ingredientId, payload);
         return true;

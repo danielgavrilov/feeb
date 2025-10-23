@@ -5,7 +5,7 @@ All functions use SQLAlchemy async sessions and return Pydantic models.
 
 
 from datetime import datetime
-from typing import Optional, Optional as _Optional, Dict, List, Sequence
+from typing import Optional, Optional as _Optional, Dict, List, Sequence, Any
 
 from sqlalchemy import select, or_, func
 from sqlalchemy.orm import selectinload
@@ -1226,7 +1226,7 @@ async def add_recipe_ingredient(
     quantity: Optional[float] = None,
     unit: Optional[str] = None,
     notes: Optional[str] = None,
-    allergens: Optional[str] = None,
+    allergens: Optional[List[Dict[str, Any]]] = None,
     confirmed: bool = False,
     substitution: Optional[dict] = None,
     substitution_provided: bool = False,
@@ -1253,12 +1253,18 @@ async def add_recipe_ingredient(
     )
     link = result.scalar_one_or_none()
     
+    # Serialize allergens to JSON string
+    allergens_json = None
+    if allergens is not None:
+        import json
+        allergens_json = json.dumps(allergens) if allergens else None
+
     if link:
         # Update existing
         link.quantity = quantity
         link.unit = unit
         link.notes = notes
-        link.allergens = allergens
+        link.allergens = allergens_json
         link.confirmed = confirmed
     else:
         # Insert new
@@ -1268,7 +1274,7 @@ async def add_recipe_ingredient(
             quantity=quantity,
             unit=unit,
             notes=notes,
-            allergens=allergens,
+            allergens=allergens_json,
             confirmed=confirmed
         )
         session.add(link)
