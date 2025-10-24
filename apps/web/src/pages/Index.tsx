@@ -13,8 +13,8 @@ import { useRestaurant } from "@/hooks/useRestaurant";
 import { useRecipes } from "@/hooks/useRecipes";
 import {
   Recipe,
-  RecipeIngredient,
   updateRecipeIngredient as updateRecipeIngredientAPI,
+  deleteRecipeIngredient as deleteRecipeIngredientAPI,
   UpdateRecipeIngredientRequest,
 } from "@/lib/api";
 import { LandingPage } from "@/components/LandingPage";
@@ -29,6 +29,7 @@ import {
   formatPriceDisplay,
 } from "@/lib/price-format";
 import { ARCHIVE_SECTION_ID, ARCHIVE_SECTION_LABEL, loadSavedMenuSections } from "@/lib/menu-sections";
+import { mapIngredientAllergens, mapRecipesToSavedDishes } from "./recipe-mappers";
 
 const Index = () => {
   const { t } = useLanguage();
@@ -126,43 +127,7 @@ const Index = () => {
   );
 
   // Convert API recipes to SavedDish format for existing components
-  const mapIngredientAllergens = (
-    allergens: RecipeIngredient["allergens"] | undefined,
-  ) =>
-    (allergens ?? []).map((allergen) => ({
-      code: allergen.code,
-      name: allergen.name,
-      certainty: allergen.certainty,
-      canonicalCode: allergen.canonical_code ?? null,
-      canonicalName: allergen.canonical_name ?? null,
-      familyCode: allergen.family_code ?? null,
-      familyName: allergen.family_name ?? null,
-      markerType: allergen.marker_type ?? null,
-    }));
-
-  const savedDishes: SavedDish[] = recipes.map((recipe: Recipe) => ({
-    id: recipe.id.toString(),
-    name: recipe.name,
-    menuSectionId: deriveMenuSectionKey(recipe),
-    description: recipe.description || "",
-    servingSize: recipe.serving_size || "1",
-    price: recipe.price || "",
-    ingredients: recipe.ingredients.map(ing => ({
-      name: ing.ingredient_name,
-      quantity: ing.quantity?.toString() || "",
-      unit: ing.unit || "",
-      confirmed: ing.confirmed,
-      ingredientId: ing.ingredient_id,
-      originalName: ing.ingredient_name,
-      allergens: mapIngredientAllergens(ing.allergens),
-      substitution: ing.substitution,
-    })),
-    prepMethod: recipe.instructions || "",
-    compliance: {}, // We'll compute this from ingredients
-    image: recipe.image || "",
-    confirmed: recipe.confirmed,
-    isOnMenu: recipe.is_on_menu,
-  }));
+  const savedDishes: SavedDish[] = mapRecipesToSavedDishes(recipes, deriveMenuSectionKey);
 
   const totalRecipes = recipes.length;
   const unconfirmedRecipeCount = recipes.filter(recipe => !recipe.confirmed).length;
@@ -423,10 +388,27 @@ const Index = () => {
     }
   };
 
-  const handleDeleteIngredient = (index: number) => {
-    const updated = ingredients.filter((_, i) => i !== index);
-    setIngredients(updated);
-  };
+  const handleDeleteIngredient = useCallback(
+    async (index: number) => {
+      const ingredient = ingredients[index];
+      if (!ingredient) {
+        return;
+      }
+
+      if (editingDishId && ingredient.ingredientId) {
+        try {
+          await deleteRecipeIngredientAPI(editingDishId, ingredient.ingredientId);
+        } catch (error) {
+          console.error("Failed to delete ingredient from recipe", error);
+          toast.error("Failed to delete ingredient. Please try again.");
+          return;
+        }
+      }
+
+      setIngredients((current) => current.filter((_, i) => i !== index));
+    },
+    [editingDishId, ingredients],
+  );
 
   const handleAddIngredient = (name: string, quantity: string, unit: string) => {
     const newIngredient: IngredientState = {

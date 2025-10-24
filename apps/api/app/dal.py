@@ -1305,6 +1305,40 @@ async def add_recipe_ingredient(
     await session.flush()
 
 
+async def delete_recipe_ingredient(
+    session: AsyncSession,
+    recipe_id: int,
+    ingredient_id: int,
+) -> bool:
+    """Delete a recipe ingredient link.
+
+    Args:
+        session: Database session
+        recipe_id: Recipe ID
+        ingredient_id: Ingredient ID
+
+    Returns:
+        True if a row was deleted, False if nothing matched
+    """
+
+    from .models import RecipeIngredient
+
+    result = await session.execute(
+        select(RecipeIngredient).where(
+            RecipeIngredient.recipe_id == recipe_id,
+            RecipeIngredient.ingredient_id == ingredient_id,
+        )
+    )
+    link = result.scalar_one_or_none()
+
+    if not link:
+        return False
+
+    await session.delete(link)
+    await session.flush()
+    return True
+
+
 async def get_or_create_allergen(
     session: AsyncSession,
     code: str,

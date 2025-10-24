@@ -1091,3 +1091,30 @@ async def update_recipe_ingredient(
 
     return {"status": "success", "message": "Ingredient updated"}
 
+
+@router.delete("/recipes/{recipe_id}/ingredients/{ingredient_id}")
+async def delete_recipe_ingredient(
+    recipe_id: int,
+    ingredient_id: int,
+    session: AsyncSession = Depends(get_db),
+):
+    """Remove an ingredient from a recipe."""
+
+    recipe = await dal.get_recipe_by_id(session, recipe_id)
+    if not recipe:
+        raise HTTPException(status_code=404, detail=f"Recipe with ID {recipe_id} not found")
+
+    deleted = await dal.delete_recipe_ingredient(session, recipe_id, ingredient_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Ingredient link not found for recipe"
+                f" {recipe_id} and ingredient {ingredient_id}"
+            ),
+        )
+
+    await session.commit()
+
+    return {"status": "success", "message": "Ingredient removed from recipe"}
+
