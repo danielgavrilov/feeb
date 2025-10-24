@@ -82,6 +82,25 @@ const getDefinitionMemberNames = (
   summary: DishAllergenSummary,
   definition: AllergenFilterDefinition,
 ) => {
+  // Special handling for cereals_gluten to extract subspecies
+  if (definition.id === "cereals_gluten") {
+    const subspecies = new Set<string>();
+    
+    summary.canonicalAllergens.forEach((allergen) => {
+      const familyCode = allergen.familyCode?.toLowerCase() ?? "";
+      
+      // Look for allergens that belong to the cereals_gluten family
+      if (familyCode === "cereals_gluten") {
+        const displayName = allergen.name?.trim();
+        if (displayName) {
+          subspecies.add(displayName);
+        }
+      }
+    });
+    
+    return Array.from(subspecies);
+  }
+
   const normalizedCodes = buildNormalizedCodeSet(definition);
   const normalizedKeywords = buildNormalizedKeywordSet(definition);
   const members = new Set<string>();
