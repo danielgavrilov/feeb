@@ -619,26 +619,22 @@ export const Settings = ({
             <Switch id="menu-images" checked={showMenuImages} onCheckedChange={onToggleMenuImages} />
           </div>
 
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <Label htmlFor="currency-toggle" className="text-base font-semibold text-foreground">
-                Currency
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                Toggle between Euro and US Dollar price displays.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-muted-foreground">
-                {currency === "EUR" ? "Euro (€)" : "US Dollar ($)"}
-              </span>
-              <Switch
-                id="currency-toggle"
-                checked={currency === "EUR"}
-                onCheckedChange={(checked) => onCurrencyChange(checked ? "EUR" : "USD")}
-                aria-label="Toggle currency"
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="currency-select" className="text-base font-semibold text-foreground">
+              Currency
+            </Label>
+            <Select value={currency} onValueChange={(value) => onCurrencyChange(value as CurrencyOption)}>
+              <SelectTrigger id="currency-select" className="h-12">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="EUR">Euro (€)</SelectItem>
+                <SelectItem value="USD">US Dollar ($)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-muted-foreground">
+              Choose the currency used to display prices in the app.
+            </p>
           </div>
 
           <div className="space-y-2">
