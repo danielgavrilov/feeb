@@ -694,6 +694,13 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
                     const ingredientMatch = ingredientMatchResults.get(dish.id);
                     const summary = getDishAllergenSummary(dish);
                     const allergenDefinitions = getDishAllergenDefinitions(dish, summary);
+                    const dietDefinitionIds = new Set(["vegan", "vegetarian"]);
+                    const dietBadges = allergenDefinitions.filter((definition) =>
+                      dietDefinitionIds.has(definition.id),
+                    );
+                    const allergenBadgeDefinitions = allergenDefinitions.filter(
+                      (definition) => !dietDefinitionIds.has(definition.id),
+                    );
                     const formatMemberName = (value: string) =>
                       value
                         .split(/\s+/)
@@ -703,17 +710,30 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
                         )
                         .join(" ");
 
-                    const allergenBadges = allergenDefinitions.map((definition) => {
+                    const allergenBadges = allergenBadgeDefinitions.map((definition) => {
                       const memberNames = getDefinitionMemberNames(summary, definition)
                         .map((name) => name.trim())
                         .filter((name): name is string => Boolean(name));
                       const sortedMembers = [...memberNames].sort((a, b) =>
                         a.localeCompare(b, undefined, { sensitivity: "base" }),
                       );
-                      const label =
-                        definition.category === "allergen" && sortedMembers.length > 0
-                          ? sortedMembers.map(formatMemberName).join(", ")
-                          : definition.name;
+                      const label = (() => {
+                        if (definition.id === "cereals_gluten" && sortedMembers.length > 0) {
+                          return `Cereals containing gluten: ${sortedMembers
+                            .map(formatMemberName)
+                            .join(", ")}`;
+                        }
+
+                        if (definition.id === "tree_nuts" && sortedMembers.length > 0) {
+                          return `Tree nuts: ${sortedMembers.map(formatMemberName).join(", ")}`;
+                        }
+
+                        if (definition.category === "allergen" && sortedMembers.length > 0) {
+                          return sortedMembers.map(formatMemberName).join(", ");
+                        }
+
+                        return definition.name;
+                      })();
 
                       return { definition, label };
                     });
@@ -736,6 +756,7 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
                         highlightedAllergens={highlightedAllergens}
                         highlightedIngredientTerms={highlightedIngredientTerms}
                         allergenBadges={showAllergens ? allergenBadges : []}
+                        dietBadges={showAllergens ? dietBadges : []}
                         formatPrice={formatPrice}
                       />
                     );

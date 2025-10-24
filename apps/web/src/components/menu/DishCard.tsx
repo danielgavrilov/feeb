@@ -2,6 +2,7 @@ import { AlertTriangle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AllergenFilterDefinition } from "@/data/allergen-filters";
 import { SavedDish } from "../RecipeBook";
 
@@ -12,6 +13,7 @@ interface DishCardProps {
   highlightedAllergens?: AllergenFilterDefinition[];
   highlightedIngredientTerms?: string[];
   allergenBadges?: Array<{ definition: AllergenFilterDefinition; label: string }>;
+  dietBadges?: AllergenFilterDefinition[];
   formatPrice: (value: string | number | null | undefined) => string;
 }
 
@@ -22,6 +24,7 @@ export const DishCard = ({
   highlightedAllergens = [],
   highlightedIngredientTerms = [],
   allergenBadges = [],
+  dietBadges = [],
   formatPrice,
 }: DishCardProps) => {
   const shouldShowImage = showImage && Boolean(dish.image);
@@ -59,13 +62,36 @@ export const DishCard = ({
       )}
 
       <div className="flex-1 space-y-3 p-4">
-        <div>
-          <h3 className="font-semibold text-lg text-foreground break-words">{dish.name}</h3>
-          {dish.description && (
-            <p className="text-sm text-muted-foreground mt-1">{dish.description}</p>
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="font-semibold text-lg text-foreground break-words flex-1">{dish.name}</h3>
+          {dietBadges.length > 0 && (
+            <div className="flex items-center gap-2">
+              {dietBadges.map((definition) => {
+                const Icon = definition.Icon;
+                return (
+                  <Tooltip key={`diet-${definition.id}`}>
+                    <TooltipTrigger asChild>
+                      <span
+                        role="img"
+                        aria-label={definition.name}
+                        tabIndex={0}
+                        className="inline-flex shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                      >
+                        <Icon className="h-10 w-10" />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" align="center">
+                      {definition.name}
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })}
+            </div>
           )}
         </div>
-
+        {dish.description && (
+          <p className="text-sm text-muted-foreground mt-1">{dish.description}</p>
+        )}
         {(priceLabel || servingLabel) && (
           <div className="text-sm text-muted-foreground flex flex-wrap gap-3">
             {priceLabel && <span className="font-medium text-foreground">{priceLabel}</span>}
