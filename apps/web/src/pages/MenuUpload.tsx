@@ -133,6 +133,7 @@ const MenuUploadPage = () => {
   const [progressIndex, setProgressIndex] = useState(0);
   const [progressPercent, setProgressPercent] = useState(0);
   const [progressComplete, setProgressComplete] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
     if (restaurant?.id && restaurant.id !== selectedRestaurantId) {
@@ -175,6 +176,7 @@ const MenuUploadPage = () => {
     setSelectedMethod(null);
     setFile(null);
     setUrlValue("");
+    setShowDetails(false);
   };
 
   const activeOption = useMemo(
@@ -283,6 +285,7 @@ const MenuUploadPage = () => {
       }
 
       window.setTimeout(() => {
+        setShowDetails(false);
         setPhase("summary");
       }, 800);
     } catch (err) {
@@ -395,6 +398,7 @@ const MenuUploadPage = () => {
 
   const renderSummary = () => {
     if (!result) return null;
+    const detailsId = "menu-upload-summary-details";
     return (
       <div className="space-y-8">
         <Card className="space-y-6 border-primary/40 bg-primary/5 p-6">
@@ -414,7 +418,6 @@ const MenuUploadPage = () => {
             </div>
             <div className="flex items-center gap-3">
               <Button onClick={() => navigate("/?tab=recipes")}>Review extracted dishes</Button>
-              <Button variant="outline" onClick={() => navigate("/?tab=add")}>Add another dish</Button>
             </div>
           </div>
 
@@ -426,75 +429,62 @@ const MenuUploadPage = () => {
           </Alert>
         </Card>
 
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card className="p-6 space-y-5">
-            <div className="space-y-2">
-              <h3 className="text-lg font-semibold text-foreground">What happened</h3>
-              <p className="text-sm text-muted-foreground">
-                Here’s a quick summary of the steps our system took to prepare your menu upload.
-              </p>
-            </div>
-            <div className="space-y-3">
-              {result.stages.map(stage => {
-                const tone = statusTone[stage.status] ?? statusTone.pending;
-                const label = stageLabels[stage.stage] ?? stage.stage;
-                const parsed = parseDetails(stage.details);
-                return (
-                  <div key={stage.stage} className="rounded-xl border border-border/70 bg-card/70 p-4 space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-foreground">{label}</p>
-                      <Badge variant={tone.variant}>{tone.label}</Badge>
-                    </div>
-                    {parsed ? (
-                      <div className="text-xs text-muted-foreground space-y-1">
-                        {typeof parsed === "string" ? (
-                          <p>{parsed}</p>
-                        ) : (
-                          Object.entries(parsed).map(([key, value]) => (
-                            <p key={key} className="capitalize">
-                              {key.replace(/_/g, " ")}: <span className="font-medium">{String(value)}</span>
-                            </p>
-                          ))
-                        )}
+        <div className="space-y-4">
+          <ProgressTracker steps={summarySteps} summary="1/5 steps complete" />
+
+          <button
+            type="button"
+            onClick={() => setShowDetails(prev => !prev)}
+            className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+            aria-expanded={showDetails}
+            aria-controls={detailsId}
+          >
+            {showDetails ? "Hide details" : "More details"}
+          </button>
+
+          {showDetails ? (
+            <Card id={detailsId} className="p-6 space-y-5">
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold text-foreground">What happened</h3>
+                <p className="text-sm text-muted-foreground">
+                  Here’s a quick summary of the steps our system took to prepare your menu upload.
+                </p>
+              </div>
+              <div className="space-y-3">
+                {result.stages.map(stage => {
+                  const tone = statusTone[stage.status] ?? statusTone.pending;
+                  const label = stageLabels[stage.stage] ?? stage.stage;
+                  const parsed = parseDetails(stage.details);
+                  return (
+                    <div key={stage.stage} className="rounded-xl border border-border/70 bg-card/70 p-4 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-foreground">{label}</p>
+                        <Badge variant={tone.variant}>{tone.label}</Badge>
                       </div>
-                    ) : null}
-                    <div className="text-[11px] text-muted-foreground space-y-1">
-                      {formatDate(stage.started_at) ? <p>Started: {formatDate(stage.started_at)}</p> : null}
-                      {formatDate(stage.completed_at) ? <p>Completed: {formatDate(stage.completed_at)}</p> : null}
-                      {stage.error_message ? <p className="text-destructive">{stage.error_message}</p> : null}
+                      {parsed ? (
+                        <div className="text-xs text-muted-foreground space-y-1">
+                          {typeof parsed === "string" ? (
+                            <p>{parsed}</p>
+                          ) : (
+                            Object.entries(parsed).map(([key, value]) => (
+                              <p key={key} className="capitalize">
+                                {key.replace(/_/g, " ")}: <span className="font-medium">{String(value)}</span>
+                              </p>
+                            ))
+                          )}
+                        </div>
+                      ) : null}
+                      <div className="text-[11px] text-muted-foreground space-y-1">
+                        {formatDate(stage.started_at) ? <p>Started: {formatDate(stage.started_at)}</p> : null}
+                        {formatDate(stage.completed_at) ? <p>Completed: {formatDate(stage.completed_at)}</p> : null}
+                        {stage.error_message ? <p className="text-destructive">{stage.error_message}</p> : null}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-
-          <div className="space-y-5">
-            <ProgressTracker steps={summarySteps} summary="1/5 steps complete" />
-
-            <Card className="p-6 space-y-4">
-              <h3 className="text-lg font-semibold text-foreground">Next best actions</h3>
-              <ul className="space-y-3 text-sm text-muted-foreground">
-                <li>
-                  <span className="font-medium text-foreground">Confirm ingredients:</span> Review each recipe and tick off confirmed allergen information.
-                </li>
-                <li>
-                  <span className="font-medium text-foreground">Customise your menu:</span> Add your branding so the guest-facing view feels on-brand.
-                </li>
-                <li>
-                  <span className="font-medium text-foreground">Add photos (optional):</span> Upload imagery to help guests visualise each dish.
-                </li>
-                <li>
-                  <span className="font-medium text-foreground">Set the menu live:</span> Publish once everything has been reviewed and confirmed.
-                </li>
-              </ul>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="outline" onClick={handleReset}>
-                  Upload another menu
-                </Button>
+                  );
+                })}
               </div>
             </Card>
-          </div>
+          ) : null}
         </div>
       </div>
     );
@@ -518,13 +508,15 @@ const MenuUploadPage = () => {
   return (
     <main className="min-h-screen bg-background">
       <div className="container mx-auto max-w-5xl py-12 space-y-10">
-        <div className="space-y-3">
-          <h1 className="text-3xl font-semibold text-foreground">Upload your menu</h1>
-          <p className="text-muted-foreground max-w-2xl">
-            Choose how you’d like to share your menu. We’ll extract each dish, infer ingredients, and place everything into your
-            recipe book ready for review.
-          </p>
-        </div>
+        {phase !== "summary" ? (
+          <div className="space-y-3">
+            <h1 className="text-3xl font-semibold text-foreground">Upload your menu</h1>
+            <p className="text-muted-foreground max-w-2xl">
+              Choose how you’d like to share your menu. We’ll extract each dish, infer ingredients, and place everything into
+              your recipe book ready for review.
+            </p>
+          </div>
+        ) : null}
         {phase === "form" ? (
           <form onSubmit={handleSubmit} className="space-y-8">
             <Card className="p-6 space-y-4">
