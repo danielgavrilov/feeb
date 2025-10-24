@@ -93,7 +93,7 @@ interface IngredientsListProps {
       familyName?: string | null;
       markerType?: string | null;
     }>
-  ) => Promise<void> | void;
+  ) => void;
   onUpdateIngredientSubstitution: (
     index: number,
     substitution?: IngredientState["substitution"],
