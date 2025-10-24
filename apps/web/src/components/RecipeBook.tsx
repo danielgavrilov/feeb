@@ -150,62 +150,8 @@ export const getDishAllergenDefinitions = (
   const summary = summaryOverride ?? summarizeDishAllergens(dish.ingredients);
   const results: AllergenFilterDefinition[] = [];
   const seen = new Set<string>();
-  const veganDefinition = allergenFilterMap.get("vegan");
-  const vegetarianDefinition = allergenFilterMap.get("vegetarian");
-  const meatDefinition = allergenFilterMap.get("meat");
 
-  const vegetarianFriendly = isVegetarianFriendly(summary);
-  const veganFriendly = isVeganFriendly(summary);
-
-  const shouldIncludeMeatDefinition = (() => {
-    if (!meatDefinition) {
-      return false;
-    }
-
-    // Check for meat marker type
-    const hasMeatMarker = summary.markerTypes.has("meat");
-    if (hasMeatMarker) {
-      return true;
-    }
-
-    // Check for meat canonical codes
-    const normalizedMeatCodes = new Set<string>();
-    const addNormalizedCode = (value?: string) => {
-      if (!value) return;
-      const normalized = value.toLowerCase();
-      normalizedMeatCodes.add(normalized);
-      if (normalized.includes(":")) {
-        const unprefixed = normalized.split(":").pop();
-        if (unprefixed) {
-          normalizedMeatCodes.add(unprefixed);
-        }
-      }
-    };
-
-    addNormalizedCode(meatDefinition.id);
-    meatDefinition.codes.forEach(addNormalizedCode);
-
-    for (const code of summary.canonicalCodes) {
-      if (normalizedMeatCodes.has(code.toLowerCase())) {
-        return true;
-      }
-    }
-
-    // If no meat markers or codes found, don't show meat badge
-    return false;
-  })();
-
-  if (shouldIncludeMeatDefinition && meatDefinition) {
-    results.push(meatDefinition);
-    seen.add(meatDefinition.id);
-  } else if (veganDefinition && veganFriendly) {
-    results.push(veganDefinition);
-    seen.add(veganDefinition.id);
-  } else if (vegetarianDefinition && vegetarianFriendly) {
-    results.push(vegetarianDefinition);
-    seen.add(vegetarianDefinition.id);
-  }
-
+  // First, add all factual allergen definitions that match the dish
   for (const definition of ALLERGEN_FILTERS) {
     if (definition.category !== "allergen") {
       continue;
@@ -220,6 +166,25 @@ export const getDishAllergenDefinitions = (
     if ((hasFamilyMatch || hasCodeMatch) && !seen.has(definition.id)) {
       results.push(definition);
       seen.add(definition.id);
+    }
+  }
+
+  // Then, add dietary badges based on ingredient composition
+  const vegetarianFriendly = isVegetarianFriendly(summary);
+  const veganFriendly = isVeganFriendly(summary);
+
+  // Add dietary badges if the dish is friendly to those diets
+  if (veganFriendly) {
+    const veganDefinition = allergenFilterMap.get("vegan");
+    if (veganDefinition && !seen.has(veganDefinition.id)) {
+      results.push(veganDefinition);
+      seen.add(veganDefinition.id);
+    }
+  } else if (vegetarianFriendly) {
+    const vegetarianDefinition = allergenFilterMap.get("vegetarian");
+    if (vegetarianDefinition && !seen.has(vegetarianDefinition.id)) {
+      results.push(vegetarianDefinition);
+      seen.add(vegetarianDefinition.id);
     }
   }
 

@@ -18,72 +18,91 @@ class CanonicalAllergen:
 
 _CANONICAL_DATA: tuple[CanonicalAllergen, ...] = (
     CanonicalAllergen(
-        slug="cereals_gluten",
-        label="Cereals containing gluten",
-        legacy_codes=("en:gluten", "en:wheat", "en:barley", "en:rye", "en:oats", "en:spelt", "en:triticale"),
+        slug="wheat",
+        label="Wheat",
+        legacy_codes=(),
         aliases=(
-            "gluten",
             "wheat",
-            "rye",
-            "barley",
-            "oats",
-            "spelt",
-            "triticale",
+            "gluten",
+            "durum wheat",
+            "semolina",
+            "farina",
+            "flour",
+            "bread",
             "cereal",
             "cereals",
-            "cereals containing gluten",
         ),
+    ),
+    CanonicalAllergen(
+        slug="barley",
+        label="Barley",
+        legacy_codes=(),
+        aliases=("barley", "malt", "hordeum"),
+    ),
+    CanonicalAllergen(
+        slug="rye",
+        label="Rye",
+        legacy_codes=(),
+        aliases=("rye", "pumpernickel", "secale"),
+    ),
+    CanonicalAllergen(
+        slug="oats",
+        label="Oats",
+        legacy_codes=(),
+        aliases=("oats", "oatmeal", "rolled oats"),
+    ),
+    CanonicalAllergen(
+        slug="spelt",
+        label="Spelt",
+        legacy_codes=(),
+        aliases=("spelt", "dinkel", "spelt flour"),
+    ),
+    CanonicalAllergen(
+        slug="triticale",
+        label="Triticale",
+        legacy_codes=(),
+        aliases=("triticale", "triticale flour"),
     ),
     CanonicalAllergen(
         slug="crustaceans",
         label="Crustaceans",
-        legacy_codes=("en:crustaceans", "en:shrimps", "en:crab", "en:lobster"),
+        legacy_codes=(),
         aliases=("crustacean", "shrimp", "prawn", "crab", "lobster", "crayfish", "shellfish"),
     ),
     CanonicalAllergen(
         slug="eggs",
         label="Eggs",
-        legacy_codes=("en:eggs", "en:egg", "en:albumen"),
+        legacy_codes=(),
         aliases=("egg", "eggs", "albumen", "meringue"),
     ),
     CanonicalAllergen(
         slug="fish",
         label="Fish",
-        legacy_codes=("en:fish", "en:salmon", "en:cod"),
-        aliases=("fish", "salmon", "cod", "trout", "haddock"),
+        legacy_codes=(),
+        aliases=("fish", "salmon", "cod", "trout", "haddock", "tuna", "bass"),
     ),
     CanonicalAllergen(
         slug="peanuts",
         label="Peanuts",
-        legacy_codes=("en:peanuts", "en:groundnuts", "en:arachis"),
+        legacy_codes=(),
         aliases=("peanut", "peanuts", "groundnut", "groundnuts", "satay", "arachis"),
     ),
     CanonicalAllergen(
         slug="soybeans",
         label="Soybeans",
-        legacy_codes=("en:soybeans", "en:soya", "en:soy"),
+        legacy_codes=(),
         aliases=("soy", "soya", "soybean", "soybeans", "edamame", "tofu", "tempeh", "lecithin"),
     ),
     CanonicalAllergen(
         slug="milk",
         label="Milk",
-        legacy_codes=("en:milk", "en:lactose", "en:dairy"),
-        aliases=("milk", "dairy", "lactose", "cheese", "butter", "cream"),
+        legacy_codes=(),
+        aliases=("milk", "dairy", "lactose", "cheese", "butter", "cream", "yogurt"),
     ),
     CanonicalAllergen(
         slug="tree_nuts",
         label="Tree nuts",
-        legacy_codes=(
-            "en:nuts",
-            "en:almonds",
-            "en:hazelnuts",
-            "en:walnuts",
-            "en:cashews",
-            "en:pecans",
-            "en:brazil-nuts",
-            "en:pistachio",
-            "en:macadamia-nut",
-        ),
+        legacy_codes=(),
         aliases=(
             "nut",
             "nuts",
@@ -108,25 +127,25 @@ _CANONICAL_DATA: tuple[CanonicalAllergen, ...] = (
     CanonicalAllergen(
         slug="celery",
         label="Celery",
-        legacy_codes=("en:celery", "en:celeriac"),
+        legacy_codes=(),
         aliases=("celery", "celeriac", "apium"),
     ),
     CanonicalAllergen(
         slug="mustard",
         label="Mustard",
-        legacy_codes=("en:mustard", "en:mustard-seeds"),
+        legacy_codes=(),
         aliases=("mustard", "dijon", "wholegrain", "yellow mustard", "brown mustard"),
     ),
     CanonicalAllergen(
         slug="sesame",
         label="Sesame seeds",
-        legacy_codes=("en:sesame", "en:sesame-seeds", "en:tahini"),
+        legacy_codes=(),
         aliases=("sesame", "sesame seed", "sesame seeds", "tahini", "gomasio"),
     ),
     CanonicalAllergen(
         slug="sulphites",
         label="Sulphur dioxide & sulphites",
-        legacy_codes=("en:sulphur-dioxide-and-sulphites", "en:sulphur-dioxide", "en:sulfites"),
+        legacy_codes=(),
         aliases=(
             "sulphite",
             "sulfite",
@@ -147,26 +166,26 @@ _CANONICAL_DATA: tuple[CanonicalAllergen, ...] = (
     CanonicalAllergen(
         slug="lupin",
         label="Lupin",
-        legacy_codes=("en:lupin", "en:lupine"),
+        legacy_codes=(),
         aliases=("lupin", "lupine", "lupini", "lupin flour"),
     ),
     CanonicalAllergen(
         slug="molluscs",
         label="Molluscs",
-        legacy_codes=("en:molluscs", "en:mussels", "en:oysters", "en:squid", "en:octopus"),
+        legacy_codes=(),
         aliases=("mollusc", "molluscs", "mussel", "mussels", "oyster", "oysters", "clam", "octopus", "squid", "scallop", "snail"),
     ),
     CanonicalAllergen(
-        slug="vegan",
-        label="Not plant-based (vegan)",
+        slug="meat",
+        label="Meat or animal derivative",
         legacy_codes=(),
-        aliases=("vegan", "not vegan", "non-vegan", "animal product", "animal-derived"),
+        aliases=("meat", "beef", "pork", "chicken", "lamb", "steak", "bacon", "ham", "sausage", "gelatin", "gelatine", "lard", "animal fat", "animal derivative"),
     ),
     CanonicalAllergen(
-        slug="vegetarian",
-        label="Not plant-based (vegetarian)",
+        slug="honey",
+        label="Honey",
         legacy_codes=(),
-        aliases=("vegetarian", "not vegetarian", "non-vegetarian", "meat", "seafood product"),
+        aliases=("honey", "bee honey", "raw honey"),
     ),
 )
 
@@ -180,8 +199,6 @@ for entry in _CANONICAL_DATA:
     _ALIAS_LOOKUP[entry.label.lower()] = entry
     for alias in entry.aliases:
         _ALIAS_LOOKUP[alias.lower()] = entry
-    for code in entry.legacy_codes:
-        _ALIAS_LOOKUP[code.lower()] = entry
 
 
 _CERTAINTY_NORMALIZATION_RULES: Dict[str, str] = {

@@ -39,7 +39,12 @@ from .services.gemini_client import GeminiClient
 
 
 CANONICAL_ALLERGEN_MARKERS_PROMPT = """[
-  {"id": "cereals_gluten", "label": "Cereals containing gluten"},
+  {"id": "wheat", "label": "Wheat"},
+  {"id": "barley", "label": "Barley"},
+  {"id": "rye", "label": "Rye"},
+  {"id": "oats", "label": "Oats"},
+  {"id": "spelt", "label": "Spelt"},
+  {"id": "triticale", "label": "Triticale"},
   {"id": "crustaceans", "label": "Crustaceans"},
   {"id": "eggs", "label": "Eggs"},
   {"id": "fish", "label": "Fish"},
@@ -53,8 +58,8 @@ CANONICAL_ALLERGEN_MARKERS_PROMPT = """[
   {"id": "sulphites", "label": "Sulphur dioxide & sulphites"},
   {"id": "lupin", "label": "Lupin"},
   {"id": "molluscs", "label": "Molluscs"},
-  {"id": "vegan", "label": "Not plant-based (vegan)"},
-  {"id": "vegetarian", "label": "Not plant-based (vegetarian)"}
+  {"id": "meat", "label": "Meat or animal derivative"},
+  {"id": "honey", "label": "Honey"}
 ]"""
 
 router = APIRouter()
@@ -936,8 +941,8 @@ async def deduce_recipe_ingredients(request: dict):
         - Each ingredient's "allergens" must be a JSON array of objects shaped exactly like {{"allergen": "<marker>", "certainty": "<certain|probable>"}}
         - Allowed markers are ONLY the canonical ids listed above
         - Use "certain" when the allergen or marker is definitely present in the ingredient; use "probable" when it is likely but not guaranteed (e.g., shared fryers or garnish risk)
-        - Include the "vegan" marker whenever an ingredient uses any animal-derived product (dairy, eggs, honey, meat, seafood, gelatin, etc.)
-        - Include the "vegetarian" marker only when an ingredient contains meat, seafood, or gelatin that makes it unsuitable for vegetarians
+        - Use specific allergen markers: "meat" for any meat or animal derivative (beef, pork, chicken, gelatin, lard, etc.), "milk" for dairy products, "eggs" for egg products, "honey" for honey, "fish" for fish, "crustaceans" for shellfish, etc.
+        - Do not use dietary markers like "vegan" or "vegetarian" - use factual allergen labels instead
         - Don't infer anything else and return only valid JSON with no prose
 
         Recipe entries:
