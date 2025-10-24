@@ -116,6 +116,10 @@ export interface CreateRecipeIngredient {
 
 export interface UpdateRecipeIngredientRequest extends Partial<CreateRecipeIngredient> {
   ingredient_name?: string;
+  substitution?: {
+    alternative: string;
+    surcharge?: string | null;
+  } | null;
   allergens?: Array<{
     code: string;
     name: string;
