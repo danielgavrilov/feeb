@@ -445,7 +445,16 @@ const Index = () => {
 
   const handleUpdateIngredientAllergens = async (
     index: number,
-    allergens: Array<{ code: string; name: string; certainty?: string; canonicalCode?: string | null; canonicalName?: string | null; familyCode?: string | null; familyName?: string | null; markerType?: string | null }>
+    allergens: Array<{
+      code: string;
+      name: string;
+      certainty?: string;
+      canonicalCode?: string | null;
+      canonicalName?: string | null;
+      familyCode?: string | null;
+      familyName?: string | null;
+      markerType?: string | null;
+    }>,
   ) => {
     const ingredient = ingredients[index];
     if (!ingredient) {
@@ -457,9 +466,20 @@ const Index = () => {
       certainty: allergen.certainty ?? (ingredient.confirmed ? "confirmed" : undefined),
     }));
 
-    const persisted = await persistIngredientChanges(ingredient, {
+    const shouldClearSubstitution = normalizedAllergens.length === 0 && Boolean(ingredient.substitution);
+
+    const overrides: {
+      allergens: IngredientState["allergens"];
+      substitution?: IngredientState["substitution"] | null;
+    } = {
       allergens: normalizedAllergens,
-    });
+    };
+
+    if (shouldClearSubstitution) {
+      overrides.substitution = null;
+    }
+
+    const persisted = await persistIngredientChanges(ingredient, overrides);
 
     if (!persisted) {
       return;
@@ -471,57 +491,13 @@ const Index = () => {
           return currentIngredient;
         }
 
-        const next: IngredientState = {
+        return {
           ...currentIngredient,
           allergens: normalizedAllergens,
+          substitution: shouldClearSubstitution ? undefined : currentIngredient.substitution,
         };
-
-        if (normalizedAllergens.length === 0) {
-          next.substitution = undefined;
-        }
-
-        return next;
-      })
+      }),
     );
-
-    if (!currentIngredient.ingredientId) {
-      return;
-    }
-
-    const ingredientForPersist: IngredientState = {
-      ...currentIngredient,
-      allergens,
-      substitution: shouldClearSubstitution ? undefined : currentIngredient.substitution,
-    };
-
-    const overrides: {
-      allergens: IngredientState["allergens"];
-      substitution?: IngredientState["substitution"] | null;
-    } = {
-      allergens,
-    };
-
-    if (shouldClearSubstitution) {
-      overrides.substitution = null;
-    }
-
-    const persisted = await persistIngredientChanges(ingredientForPersist, overrides);
-
-    if (!persisted) {
-      setIngredients((current) =>
-        current.map((ingredient, i) => {
-          if (i !== index) {
-            return ingredient;
-          }
-
-          return {
-            ...ingredient,
-            allergens: previousAllergens,
-            substitution: previousSubstitution,
-          };
-        })
-      );
-    }
   };
 
   const handleUpdateIngredientSubstitution = (
