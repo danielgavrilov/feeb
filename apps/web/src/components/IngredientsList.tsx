@@ -33,6 +33,43 @@ const ANIMAL_PRODUCT_ALLERGENS = new Set([
 
 const HIDDEN_DIET_BADGES = new Set(["vegan", "vegetarian"]);
 
+const CATEGORY_CHILDREN_MAP = new Map(
+  ALLERGEN_CATEGORIES.map((category) => [category.id, category.children ?? []]),
+);
+
+const deriveCanonicalMetadata = (definition: AllergenFilterDefinition | undefined | null) => {
+  if (!definition) {
+    return {
+      canonicalCode: null as string | null,
+      canonicalName: null as string | null,
+      familyCode: null as string | null,
+      familyName: null as string | null,
+    };
+  }
+
+  const canonicalCode = definition.codes.find((code) => code.startsWith("en:")) ?? null;
+  const canonicalName = definition.name ?? null;
+
+  if (!definition.id.includes(":")) {
+    return {
+      canonicalCode,
+      canonicalName,
+      familyCode: definition.id,
+      familyName: definition.name,
+    };
+  }
+
+  const [familyId] = definition.id.split(":");
+  const familyDefinition = allergenFilterMap.get(familyId);
+
+  return {
+    canonicalCode,
+    canonicalName,
+    familyCode: familyId,
+    familyName: familyDefinition?.name ?? familyId,
+  };
+};
+
 export const getSortedAllergenCategories = () =>
   [...ALLERGEN_CATEGORIES].sort((a, b) => {
     const aDefinition = allergenFilterMap.get(a.id);
@@ -274,7 +311,7 @@ export const IngredientsList = ({
 
           const toggleAllergen = (allergenId: string, fallbackLabel?: string) => {
             const definition = allergenFilterMap.get(allergenId);
-            
+
             let entryCode = allergenId;
             let entryName = fallbackLabel ?? allergenId;
 
@@ -289,22 +326,85 @@ export const IngredientsList = ({
               allergenId,
               selectionLabel,
             );
+
             const updatedAllergens = alreadySelected
               ? selectedAllergens.filter(
                   (existing) =>
                     !matchesAllergenSelection(existing, allergenId, selectionLabel),
                 )
-              : [
-                  ...selectedAllergens,
+              : (() => {
+                  const { canonicalCode, canonicalName, familyCode, familyName } =
+                    deriveCanonicalMetadata(definition);
+
+                  return [
+                    ...selectedAllergens,
+                    {
+                      code: entryCode,
+                      name: entryName,
+                      certainty: "confirmed",
+                      canonicalCode,
+                      canonicalName: canonicalName ?? entryName,
+                      familyCode,
+                      familyName,
+                    },
+                  ];
+                })();
+
+            onUpdateIngredientAllergens(index, updatedAllergens);
+            if (updatedAllergens.length === 0 && ingredient.substitution) {
+              onUpdateIngredientSubstitution(index, undefined);
+            }
+          };
+
+          const toggleCategoryWithChildren = (
+            categoryId: string,
+            label: string,
+            children: Array<{ id: string; label: string }> = [],
+          ) => {
+            const allChildrenSelected = children.every((child) =>
+              isAllergenSelected(selectedAllergens, child.id, child.label),
+            );
+
+            let next = selectedAllergens.filter(
+              (existing) => !matchesAllergenSelection(existing, categoryId, label),
+            );
+
+            if (allChildrenSelected) {
+              next = next.filter(
+                (existing) =>
+                  !children.some((child) =>
+                    matchesAllergenSelection(existing, child.id, child.label),
+                  ),
+              );
+            } else {
+              children.forEach((child) => {
+                if (isAllergenSelected(next, child.id, child.label)) {
+                  return;
+                }
+
+                const childDefinition = allergenFilterMap.get(child.id);
+                const entryCode = childDefinition?.id ?? child.id;
+                const entryName = childDefinition?.name ?? child.label ?? child.id;
+                const { canonicalCode, canonicalName, familyCode, familyName } =
+                  deriveCanonicalMetadata(childDefinition);
+
+                next = [
+                  ...next,
                   {
                     code: entryCode,
                     name: entryName,
                     certainty: "confirmed",
+                    canonicalCode,
+                    canonicalName: canonicalName ?? entryName,
+                    familyCode,
+                    familyName,
                   },
                 ];
+              });
+            }
 
-            onUpdateIngredientAllergens(index, updatedAllergens);
-            if (updatedAllergens.length === 0 && ingredient.substitution) {
+            onUpdateIngredientAllergens(index, next);
+            if (next.length === 0 && ingredient.substitution) {
               onUpdateIngredientSubstitution(index, undefined);
             }
           };
@@ -466,11 +566,11 @@ export const IngredientsList = ({
                                 const definition = allergenFilterMap.get(category.id);
                                 const label = definition?.name ?? category.label ?? category.id;
                                 const Icon = definition?.Icon;
-                                const hasChildren =
-                                  Array.isArray(category.children) && category.children.length > 0;
+                                const categoryChildren = CATEGORY_CHILDREN_MAP.get(category.id) ?? [];
+                                const hasChildren = categoryChildren.length > 0;
                                 const isExpanded = expandedAllergenCategory === category.id;
                                 const selectedChildCount = hasChildren
-                                  ? category.children?.reduce((count, child) => {
+                                  ? categoryChildren.reduce((count, child) => {
                                       const childDefinition = allergenFilterMap.get(child.id);
                                       const childLabel =
                                         childDefinition?.name ?? child.label ?? child.id;
@@ -481,7 +581,7 @@ export const IngredientsList = ({
                                       )
                                         ? count + 1
                                         : count;
-                                    }, 0) ?? 0
+                                    }, 0)
                                   : 0;
 
                                 if (hasChildren) {
@@ -577,11 +677,11 @@ export const IngredientsList = ({
                                   );
                                 }
 
-                                const isChecked = isAllergenSelected(
-                                  selectedAllergens,
-                                  category.id,
-                                  label,
-                                );
+                                const isChecked = categoryChildren.length > 0
+                                  ? categoryChildren.every((child) =>
+                                      isAllergenSelected(selectedAllergens, child.id, child.label),
+                                    )
+                                  : isAllergenSelected(selectedAllergens, category.id, label);
                                 const checkboxId = `ingredient-${index}-allergen-${toInputId(
                                   category.id,
                                 )}`;
@@ -597,7 +697,15 @@ export const IngredientsList = ({
                                     <span className="flex items-center gap-2">
                                       <Checkbox
                                         checked={isChecked}
-                                        onCheckedChange={() => toggleAllergen(category.id, label)}
+                                        onCheckedChange={() =>
+                                          categoryChildren.length > 0
+                                            ? toggleCategoryWithChildren(
+                                                category.id,
+                                                label,
+                                                categoryChildren,
+                                              )
+                                            : toggleAllergen(category.id, label)
+                                        }
                                         id={checkboxId}
                                       />
                                       {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}

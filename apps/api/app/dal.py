@@ -5,7 +5,8 @@ All functions use SQLAlchemy async sessions and return Pydantic models.
 
 
 from datetime import datetime
-from typing import Optional, Optional as _Optional, Dict, List, Sequence, Any
+from typing import Optional, Optional as _Optional, Dict, List, Sequence, Any, Mapping, Iterable
+import json
 
 from sqlalchemy import select, or_, func
 from sqlalchemy.orm import selectinload
@@ -14,6 +15,7 @@ from .allergen_canonical import (
     canonical_allergen_from_label,
     canonicalize_allergen,
     certainty_to_ui,
+    normalize_certainty,
 )
 
 # Default brand colours kept in sync with the frontend theme (apps/web/src/index.css)
@@ -32,6 +34,211 @@ from .models import (
     MenuSectionUpsert,
     Recipe,
 )
+
+
+_MANUAL_ALLERGEN_SOURCE = "user"
+
+_DISPLAY_CODE_TO_CANONICAL: Dict[str, str] = {
+    "cereals_gluten:wheat": "en:wheat",
+    "cereals_gluten:rye": "en:rye",
+    "cereals_gluten:barley": "en:barley",
+    "cereals_gluten:oats": "en:oats",
+    "cereals_gluten:spelt": "en:spelt",
+    "cereals_gluten:triticale": "en:triticale",
+    "tree_nuts:almonds": "en:almonds",
+    "tree_nuts:hazelnuts": "en:hazelnuts",
+    "tree_nuts:walnuts": "en:walnuts",
+    "tree_nuts:cashews": "en:cashews",
+    "tree_nuts:pecans": "en:pecans",
+    "tree_nuts:brazil_nuts": "en:brazil-nut",
+    "tree_nuts:pistachios": "en:pistachio",
+    "tree_nuts:macadamia": "en:macadamia-nut",
+}
+
+_CANONICAL_TO_DISPLAY_CODE: Dict[str, str] = {
+    canonical: display for display, canonical in _DISPLAY_CODE_TO_CANONICAL.items()
+}
+
+_CODE_NORMALIZATION: Dict[str, str] = {
+    "en:brazil-nuts": "en:brazil-nut",
+    "en:pistachios": "en:pistachio",
+    "en:macadamia-nuts": "en:macadamia-nut",
+}
+
+_FAMILY_LABELS: Dict[str, str] = {
+    "cereals_gluten": "Cereals containing gluten",
+    "tree_nuts": "Tree nuts",
+}
+
+_FAMILY_METADATA_BY_CODE: Dict[str, tuple[str, str]] = {
+    "en:wheat": ("cereals_gluten", _FAMILY_LABELS["cereals_gluten"]),
+    "en:rye": ("cereals_gluten", _FAMILY_LABELS["cereals_gluten"]),
+    "en:barley": ("cereals_gluten", _FAMILY_LABELS["cereals_gluten"]),
+    "en:oats": ("cereals_gluten", _FAMILY_LABELS["cereals_gluten"]),
+    "en:spelt": ("cereals_gluten", _FAMILY_LABELS["cereals_gluten"]),
+    "en:triticale": ("cereals_gluten", _FAMILY_LABELS["cereals_gluten"]),
+    "en:durum-wheat": ("cereals_gluten", _FAMILY_LABELS["cereals_gluten"]),
+    "en:semolina": ("cereals_gluten", _FAMILY_LABELS["cereals_gluten"]),
+    "en:farina": ("cereals_gluten", _FAMILY_LABELS["cereals_gluten"]),
+    "en:malt": ("cereals_gluten", _FAMILY_LABELS["cereals_gluten"]),
+    "en:hordeum-vulgare": ("cereals_gluten", _FAMILY_LABELS["cereals_gluten"]),
+    "en:almonds": ("tree_nuts", _FAMILY_LABELS["tree_nuts"]),
+    "en:hazelnuts": ("tree_nuts", _FAMILY_LABELS["tree_nuts"]),
+    "en:walnuts": ("tree_nuts", _FAMILY_LABELS["tree_nuts"]),
+    "en:cashews": ("tree_nuts", _FAMILY_LABELS["tree_nuts"]),
+    "en:pecans": ("tree_nuts", _FAMILY_LABELS["tree_nuts"]),
+    "en:brazil-nut": ("tree_nuts", _FAMILY_LABELS["tree_nuts"]),
+    "en:pistachio": ("tree_nuts", _FAMILY_LABELS["tree_nuts"]),
+    "en:macadamia-nut": ("tree_nuts", _FAMILY_LABELS["tree_nuts"]),
+}
+
+
+def _normalize_code(value: Optional[str]) -> str:
+    return (value or "").strip().lower()
+
+
+def _fallback_name_from_code(code: str) -> str:
+    if not code:
+        return ""
+    raw = code.split(":")[-1]
+    return " ".join(segment.capitalize() for segment in raw.replace("-", " ").split())
+
+
+def _canonical_code_from_payload(code: Optional[str], name: Optional[str]) -> Optional[str]:
+    normalized_code = _normalize_code(code)
+    if normalized_code in _DISPLAY_CODE_TO_CANONICAL:
+        normalized_code = _DISPLAY_CODE_TO_CANONICAL[normalized_code]
+    if normalized_code in _CODE_NORMALIZATION:
+        normalized_code = _CODE_NORMALIZATION[normalized_code]
+    if normalized_code.startswith("en:"):
+        return normalized_code
+    if ":" in normalized_code:
+        family, specific = normalized_code.split(":", 1)
+        if family in {"cereals_gluten", "tree_nuts"} and specific:
+            candidate = f"en:{specific}"
+            return _CODE_NORMALIZATION.get(candidate, candidate)
+    if normalized_code and normalized_code not in {"cereals_gluten", "tree_nuts"}:
+        candidate = f"en:{normalized_code}"
+        return _CODE_NORMALIZATION.get(candidate, candidate)
+    if name:
+        sanitized = name.strip().lower().replace(" ", "-")
+        if sanitized:
+            candidate = f"en:{sanitized}"
+            return _CODE_NORMALIZATION.get(candidate, candidate)
+    return None
+
+
+def _family_metadata_for_code(code: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+    normalized_code = _normalize_code(code)
+    if not normalized_code:
+        return None, None
+    if normalized_code in _FAMILY_METADATA_BY_CODE:
+        family_code, family_name = _FAMILY_METADATA_BY_CODE[normalized_code]
+        return family_code, family_name
+    if normalized_code in _FAMILY_LABELS:
+        return normalized_code, _FAMILY_LABELS[normalized_code]
+    return None, None
+
+
+def _display_code_for_canonical(code: Optional[str]) -> Optional[str]:
+    if not code:
+        return None
+    normalized_code = _normalize_code(code)
+    return _CANONICAL_TO_DISPLAY_CODE.get(normalized_code, code)
+
+
+def _normalize_allergen_entry(entry: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    canonical_code = _canonical_code_from_payload(
+        entry.get("canonical_code") or entry.get("code"),
+        entry.get("canonical_name") or entry.get("name") or entry.get("allergen"),
+    )
+    if not canonical_code:
+        return None
+    display_name = (
+        (entry.get("canonical_name") or entry.get("name") or entry.get("allergen") or "").strip()
+        or _fallback_name_from_code(canonical_code)
+    )
+    family_code, family_name = _family_metadata_for_code(canonical_code)
+    marker_type = entry.get("marker_type")
+    return {
+        "display_code": _display_code_for_canonical(canonical_code) or canonical_code,
+        "canonical_code": canonical_code,
+        "display_name": display_name,
+        "family_code": family_code,
+        "family_name": family_name,
+        "marker_type": marker_type.strip().lower() if isinstance(marker_type, str) else None,
+        "certainty": entry.get("certainty"),
+    }
+
+
+def _serialize_allergen_for_response(
+    canonical_code: Optional[str],
+    name: Optional[str],
+    certainty: Optional[str],
+    *,
+    marker_type: Optional[str] = None,
+) -> Dict[str, Any]:
+    family_code, family_name = _family_metadata_for_code(canonical_code)
+    canonical_name = name or _fallback_name_from_code(canonical_code or "")
+    return {
+        "code": _display_code_for_canonical(canonical_code) or canonical_code or "",
+        "name": canonical_name,
+        "certainty": certainty_to_ui(certainty),
+        "canonical_code": canonical_code,
+        "canonical_name": canonical_name,
+        "family_code": family_code,
+        "family_name": family_name,
+        "marker_type": marker_type,
+    }
+
+
+async def _sync_manual_ingredient_allergens(
+    session: AsyncSession,
+    ingredient_id: int,
+    allergens: Optional[List[Dict[str, Any]]],
+) -> None:
+    if allergens is None:
+        return
+
+    existing_result = await session.execute(
+        select(IngredientAllergen).where(
+            IngredientAllergen.ingredient_id == ingredient_id,
+            IngredientAllergen.source == _MANUAL_ALLERGEN_SOURCE,
+        )
+    )
+    for link in existing_result.scalars().all():
+        await session.delete(link)
+
+    if not allergens:
+        return
+
+    seen_codes: set[str] = set()
+
+    for entry in allergens:
+        if not isinstance(entry, Mapping):
+            continue
+        normalized = _normalize_allergen_entry(entry)
+        if not normalized:
+            continue
+        canonical_code = normalized.get("canonical_code")
+        if not canonical_code or canonical_code in seen_codes:
+            continue
+
+        seen_codes.add(canonical_code)
+        display_name = normalized.get("display_name") or _fallback_name_from_code(canonical_code)
+        allergen_id = await get_or_create_allergen(
+            session,
+            code=canonical_code,
+            name=display_name,
+        )
+        certainty_internal = normalize_certainty(normalized.get("certainty")) or "direct"
+        await link_ingredient_allergen(
+            session,
+            ingredient_id=ingredient_id,
+            allergen_id=allergen_id,
+            certainty=certainty_internal,
+            source=_MANUAL_ALLERGEN_SOURCE,
+        )
 
 
 async def get_ingredient_by_name(
@@ -74,9 +281,7 @@ async def get_ingredient_by_name(
     # Build response
     allergens = [
         AllergenResponse(
-            code=ia.allergen.code,
-            name=ia.allergen.name,
-            certainty=certainty_to_ui(ia.certainty),
+            **_serialize_allergen_for_response(ia.allergen.code, ia.allergen.name, ia.certainty)
         )
         for ia in ingredient.allergens
     ]
@@ -1256,7 +1461,6 @@ async def add_recipe_ingredient(
     # Serialize allergens to JSON string
     allergens_json = None
     if allergens is not None:
-        import json
         allergens_json = json.dumps(allergens) if allergens else None
 
     if link:
@@ -1297,6 +1501,9 @@ async def add_recipe_ingredient(
         else:
             if link.substitution:
                 link.substitution = None
+
+    manual_allergens = allergens if isinstance(allergens, list) else None
+    await _sync_manual_ingredient_allergens(session, ingredient_id, manual_allergens)
 
     await session.flush()
 
@@ -1423,82 +1630,87 @@ async def get_recipe_with_details(
     
     # Build ingredient list with allergens
     ingredients = []
-    import json
 
     for ri in recipe.ingredients:
-        allergens = [
-            {
-                "code": ia.allergen.code,
-                "name": ia.allergen.name,
-                "certainty": certainty_to_ui(ia.certainty),
-            }
-            for ia in ri.ingredient.allergens
-        ]
+        allergens: List[Dict[str, Any]] = []
+        known_codes: set[str] = set()
 
-        known_codes = {entry["code"].lower() for entry in allergens if entry.get("code")}
+        for ia in ri.ingredient.allergens:
+            serialized = _serialize_allergen_for_response(
+                ia.allergen.code,
+                ia.allergen.name,
+                ia.certainty,
+            )
+            allergens.append(serialized)
+            for key in ("code", "canonical_code"):
+                value = serialized.get(key)
+                if value:
+                    known_codes.add(str(value).lower())
 
         if ri.allergens:
             try:
-                predicted = json.loads(ri.allergens)
+                decoded = json.loads(ri.allergens)
             except json.JSONDecodeError:
-                predicted = None
+                decoded = None
 
-            if isinstance(predicted, list):
-                for entry in predicted:
-                    if isinstance(entry, dict):
-                        raw_label = entry.get("allergen") or entry.get("name") or entry.get("code")
-                        certainty_value = entry.get("certainty")
-                    else:
-                        raw_label = entry
-                        certainty_value = None
+            if isinstance(decoded, list):
+                raw_entries: Iterable[Any] = decoded
+            elif isinstance(decoded, (dict, str)):
+                raw_entries = [decoded]
+            else:
+                raw_entries = []
 
+            appended = False
+
+            for entry in raw_entries:
+                normalized = None
+                marker_type = None
+                certainty_value = None
+                raw_label = None
+
+                if isinstance(entry, Mapping):
+                    normalized = _normalize_allergen_entry(entry)
+                    certainty_value = normalized.get("certainty") if normalized else entry.get("certainty")
+                    marker_type = normalized.get("marker_type") if normalized else entry.get("marker_type")
+                    raw_label = entry.get("allergen") or entry.get("name") or entry.get("code")
+                else:
+                    raw_label = str(entry) if entry is not None else None
+
+                if normalized:
+                    serialized = _serialize_allergen_for_response(
+                        normalized.get("canonical_code"),
+                        normalized.get("display_name"),
+                        normalize_certainty(normalized.get("certainty")),
+                        marker_type=normalized.get("marker_type"),
+                    )
+                else:
                     canonical = canonical_allergen_from_label(raw_label) or canonicalize_allergen(raw_label)
                     if not canonical:
                         continue
+                    serialized = _serialize_allergen_for_response(
+                        canonical.slug,
+                        canonical.label,
+                        normalize_certainty(certainty_value),
+                        marker_type=marker_type,
+                    )
 
-                    code = canonical.slug
-                    if code.lower() in known_codes:
-                        continue
-                    known_codes.add(code.lower())
+                keys = [serialized.get("code"), serialized.get("canonical_code")]
+                if any(code and str(code).lower() in known_codes for code in keys):
+                    continue
+                for code in keys:
+                    if code:
+                        known_codes.add(str(code).lower())
+                allergens.append(serialized)
+                appended = True
 
-                    allergens.append(
-                        {
-                            "code": code,
-                            "name": canonical.label,
-                            "certainty": certainty_to_ui(certainty_value),
-                        }
-                    )
-            elif isinstance(predicted, dict):
-                canonical = canonical_allergen_from_label(predicted.get("allergen"))
-                if canonical and canonical.slug.lower() not in known_codes:
-                    known_codes.add(canonical.slug.lower())
-                    allergens.append(
-                        {
-                            "code": canonical.slug,
-                            "name": canonical.label,
-                            "certainty": certainty_to_ui(predicted.get("certainty")),
-                        }
-                    )
-            elif isinstance(predicted, str):
-                canonical = canonical_allergen_from_label(predicted) or canonicalize_allergen(predicted)
-                if canonical and canonical.slug.lower() not in known_codes:
-                    known_codes.add(canonical.slug.lower())
-                    allergens.append(
-                        {
-                            "code": canonical.slug,
-                            "name": canonical.label,
-                            "certainty": certainty_to_ui(None),
-                        }
-                    )
-            elif predicted is None:
-                if ri.allergens:
-                    allergens.append(
-                        {
-                            "code": "predicted",
-                            "name": ri.allergens,
-                            "certainty": "predicted",
-                        }
-                    )
+            if not appended and decoded is None:
+                allergens.append(
+                    {
+                        "code": "predicted",
+                        "name": ri.allergens,
+                        "certainty": "predicted",
+                    }
+                )
 
         substitution_data = None
         if ri.substitution:
