@@ -229,7 +229,6 @@ const Index = () => {
         unit?: string;
         confirmed?: boolean;
         allergens?: IngredientState["allergens"];
-        substitution?: IngredientState["substitution"] | null;
       },
     ) => {
       if (!editingDishId || !ingredient.ingredientId) {
@@ -287,10 +286,9 @@ const Index = () => {
         };
       }
 
-      const nextAllergens = overrides?.allergens ?? ingredient.allergens ?? [];
-
+      const allergensToPersist = overrides?.allergens ?? ingredient.allergens ?? [];
       // Include allergen data in the payload (always send, even if empty to clear allergens)
-      payload.allergens = nextAllergens.map((allergen) => ({
+      payload.allergens = allergensToPersist.map((allergen) => ({
         code: allergen.code,
         name: allergen.name,
         certainty: allergen.certainty,
@@ -329,11 +327,17 @@ const Index = () => {
       return;
     }
 
+    const confirmedAllergens = (ingredientToConfirm.allergens ?? []).map((allergen) => ({
+      ...allergen,
+      certainty: "confirmed",
+    }));
+
     const persisted = await persistIngredientChanges(ingredientToConfirm, {
       name: trimmedName,
       quantity: ingredientToConfirm.quantity,
       unit: ingredientToConfirm.unit,
       confirmed: true,
+      allergens: confirmedAllergens,
     });
 
     if (!persisted) {
@@ -348,10 +352,7 @@ const Index = () => {
               name: trimmedName,
               originalName: trimmedName,
               confirmed: true,
-              allergens: (ingredient.allergens ?? []).map((allergen) => ({
-                ...allergen,
-                certainty: "confirmed",
-              })),
+              allergens: confirmedAllergens,
             }
           : ingredient
       )
@@ -446,27 +447,36 @@ const Index = () => {
     index: number,
     allergens: Array<{ code: string; name: string; certainty?: string; canonicalCode?: string | null; canonicalName?: string | null; familyCode?: string | null; familyName?: string | null; markerType?: string | null }>
   ) => {
-    const currentIngredient = ingredients[index];
-    if (!currentIngredient) {
+    const ingredient = ingredients[index];
+    if (!ingredient) {
       return;
     }
 
-    const previousAllergens = currentIngredient.allergens ?? [];
-    const previousSubstitution = currentIngredient.substitution;
-    const shouldClearSubstitution = allergens.length === 0;
+    const normalizedAllergens = allergens.map((allergen) => ({
+      ...allergen,
+      certainty: allergen.certainty ?? (ingredient.confirmed ? "confirmed" : undefined),
+    }));
+
+    const persisted = await persistIngredientChanges(ingredient, {
+      allergens: normalizedAllergens,
+    });
+
+    if (!persisted) {
+      return;
+    }
 
     setIngredients((current) =>
-      current.map((ingredient, i) => {
+      current.map((currentIngredient, i) => {
         if (i !== index) {
-          return ingredient;
+          return currentIngredient;
         }
 
         const next: IngredientState = {
-          ...ingredient,
-          allergens,
+          ...currentIngredient,
+          allergens: normalizedAllergens,
         };
 
-        if (shouldClearSubstitution) {
+        if (normalizedAllergens.length === 0) {
           next.substitution = undefined;
         }
 
