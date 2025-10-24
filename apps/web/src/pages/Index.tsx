@@ -229,6 +229,7 @@ const Index = () => {
         unit?: string;
         confirmed?: boolean;
         allergens?: IngredientState["allergens"];
+        substitution?: IngredientState["substitution"] | null;
       },
     ) => {
       if (!editingDishId || !ingredient.ingredientId) {
@@ -266,7 +267,20 @@ const Index = () => {
         }
       }
 
-      if (ingredient.substitution) {
+      const hasSubstitutionOverride =
+        overrides ? Object.prototype.hasOwnProperty.call(overrides, "substitution") : false;
+
+      if (hasSubstitutionOverride) {
+        const substitutionValue = overrides?.substitution ?? null;
+        if (substitutionValue) {
+          payload.substitution = {
+            alternative: substitutionValue.alternative,
+            surcharge: substitutionValue.surcharge ?? null,
+          };
+        } else {
+          payload.substitution = null;
+        }
+      } else if (ingredient.substitution) {
         payload.substitution = {
           alternative: ingredient.substitution.alternative,
           surcharge: ingredient.substitution.surcharge ?? null,
@@ -432,8 +446,16 @@ const Index = () => {
 
   const handleUpdateIngredientAllergens = async (
     index: number,
-    allergens: Array<{ code: string; name: string; certainty?: string }>
+    allergens: Array<{ code: string; name: string; certainty?: string; canonicalCode?: string | null; canonicalName?: string | null; familyCode?: string | null; familyName?: string | null; markerType?: string | null }>
   ) => {
+    const currentIngredient = ingredients[index];
+    if (!currentIngredient) {
+      return;
+    }
+
+    const previousAllergens = currentIngredient.allergens ?? [];
+    const previousSubstitution = currentIngredient.substitution;
+    const shouldClearSubstitution = allergens.length === 0;
     const ingredient = ingredients[index];
     if (!ingredient) {
       return;
@@ -463,13 +485,52 @@ const Index = () => {
           allergens: normalizedAllergens,
         };
 
-        if (normalizedAllergens.length === 0) {
+        if (shouldClearSubstitution) {
           next.substitution = undefined;
         }
 
         return next;
       })
     );
+
+    if (!currentIngredient.ingredientId) {
+      return;
+    }
+
+    const ingredientForPersist: IngredientState = {
+      ...currentIngredient,
+      allergens,
+      substitution: shouldClearSubstitution ? undefined : currentIngredient.substitution,
+    };
+
+    const overrides: {
+      allergens: IngredientState["allergens"];
+      substitution?: IngredientState["substitution"] | null;
+    } = {
+      allergens,
+    };
+
+    if (shouldClearSubstitution) {
+      overrides.substitution = null;
+    }
+
+    const persisted = await persistIngredientChanges(ingredientForPersist, overrides);
+
+    if (!persisted) {
+      setIngredients((current) =>
+        current.map((ingredient, i) => {
+          if (i !== index) {
+            return ingredient;
+          }
+
+          return {
+            ...ingredient,
+            allergens: previousAllergens,
+            substitution: previousSubstitution,
+          };
+        })
+      );
+    }
   };
 
   const handleUpdateIngredientSubstitution = (
@@ -538,6 +599,21 @@ const Index = () => {
     if (!restaurant) {
       toast.error("Please create a restaurant first");
       return;
+    }
+
+    for (const ingredient of ingredients) {
+      const persisted = await persistIngredientChanges(ingredient, {
+        name: ingredient.name.trim(),
+        quantity: ingredient.quantity,
+        unit: ingredient.unit,
+        confirmed: ingredient.confirmed,
+        allergens: ingredient.allergens ?? [],
+        substitution: ingredient.substitution ?? null,
+      });
+
+      if (!persisted) {
+        return;
+      }
     }
 
     try {
