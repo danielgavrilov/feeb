@@ -44,6 +44,13 @@ const getFallbackCategoryLabel = (categoryId: string) =>
 
 const allergenSummaryCache = new WeakMap<SavedDish, ReturnType<typeof summarizeDishAllergens>>();
 
+const MENU_FILTER_EXCLUDED_PREFIXES = ["cereals_gluten:", "tree_nuts:"];
+
+const MENU_FILTER_DEFINITIONS = ALLERGEN_FILTERS.filter(
+  (definition) =>
+    !MENU_FILTER_EXCLUDED_PREFIXES.some((prefix) => definition.id.startsWith(prefix)),
+);
+
 type DishAllergenSummary = ReturnType<typeof summarizeDishAllergens>;
 
 const buildNormalizedCodeSet = (definition: AllergenFilterDefinition) => {
@@ -545,7 +552,7 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
                       <SelectValue placeholder="Select an allergen or dietary tag" />
                     </SelectTrigger>
                     <SelectContent>
-                      {ALLERGEN_FILTERS.map((definition) => (
+                      {MENU_FILTER_DEFINITIONS.map((definition) => (
                         <SelectItem
                           key={definition.id}
                           value={definition.id}
