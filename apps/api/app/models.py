@@ -401,15 +401,9 @@ class RecipeIngredientSubstitution(Base):
 
 class AllergenResponse(BaseModel):
     """Allergen information in API responses."""
-
     code: str
     name: str
     certainty: Optional[str] = None
-    canonical_code: Optional[str] = None
-    canonical_name: Optional[str] = None
-    family_code: Optional[str] = None
-    family_name: Optional[str] = None
-    marker_type: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
