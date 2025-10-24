@@ -646,17 +646,27 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
         </section>
 
         {visibleMenuDishes.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-xl text-muted-foreground">
-              {menuDishes.length === 0
-                ? "No dishes have been added to the menu yet."
-                : "No dishes match your current filters."}
-            </p>
-            <p className="text-sm text-muted-foreground mt-2">
-              {menuDishes.length === 0
-                ? 'Mark dishes as "Added to menu" in the Recipe Book to see them here.'
-                : "Try adjusting your allergen or ingredient filters to bring dishes back."}
-            </p>
+          <div className="text-center py-16 space-y-2">
+            {menuDishes.length === 0 ? (
+              <>
+                <p className="text-xl text-muted-foreground">
+                  This is how customers will see your menu.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  No dishes here? Please review the recipes in the recipe book and then mark them as
+                  "Live". Only dishes with confirmed ingredients can be displayed up on this menu.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-xl text-muted-foreground">
+                  No dishes match your current filters.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Try adjusting your allergen or ingredient filters to bring dishes back.
+                </p>
+              </>
+            )}
           </div>
         ) : (
           categoryOrder.map((categoryId) => {
