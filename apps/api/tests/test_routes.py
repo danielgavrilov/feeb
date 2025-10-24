@@ -362,3 +362,56 @@ async def test_update_menu_sections_endpoint(client, test_session):
     assert "Archive" in names
     assert "Drinks" not in names
 
+
+@pytest.mark.asyncio
+async def test_delete_recipe_ingredient_removes_link(client, test_session):
+    """Deleting a recipe ingredient removes it from subsequent loads."""
+
+    user_id = await dal.upsert_app_user(
+        test_session,
+        supabase_uid="test-user",
+        email="user@example.com",
+        name="Test User",
+    )
+    restaurant_id = await dal.create_restaurant(
+        test_session,
+        name="Test Bistro",
+        user_id=user_id,
+    )
+    recipe_id = await dal.create_recipe(
+        test_session,
+        restaurant_id=restaurant_id,
+        name="Tomato Soup",
+    )
+    ingredient_id = await dal.insert_ingredient(
+        test_session,
+        code="en:tomato",
+        name="Tomato",
+    )
+
+    await dal.add_recipe_ingredient(
+        test_session,
+        recipe_id=recipe_id,
+        ingredient_id=ingredient_id,
+        quantity=2,
+        unit="pcs",
+        confirmed=True,
+    )
+    await test_session.commit()
+
+    recipe_before = await dal.get_recipe_with_details(test_session, recipe_id)
+    assert recipe_before is not None
+    assert len(recipe_before["ingredients"]) == 1
+
+    response = await client.delete(
+        f"/recipes/{recipe_id}/ingredients/{ingredient_id}"
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "success"
+
+    await test_session.expire_all()
+    recipe_after = await dal.get_recipe_with_details(test_session, recipe_id)
+    assert recipe_after is not None
+    assert recipe_after["ingredients"] == []
+

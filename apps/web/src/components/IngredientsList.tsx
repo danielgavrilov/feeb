@@ -79,7 +79,7 @@ interface IngredientsListProps {
   onUpdateIngredient: (index: number, quantity: string) => void;
   onUpdateIngredientUnit: (index: number, unit: string) => void;
   onConfirmIngredient: (index: number) => Promise<void> | void;
-  onDeleteIngredient: (index: number) => void;
+  onDeleteIngredient: (index: number) => Promise<void> | void;
   onAddIngredient: (name: string, quantity: string, unit: string) => void;
   onUpdateIngredientAllergens: (
     index: number,

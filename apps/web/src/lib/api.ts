@@ -416,6 +416,15 @@ export async function updateRecipeIngredient(
   });
 }
 
+export async function deleteRecipeIngredient(
+  recipeId: number,
+  ingredientId: number,
+): Promise<void> {
+  return fetchAPI(`/recipes/${recipeId}/ingredients/${ingredientId}`, {
+    method: 'DELETE',
+  });
+}
+
 // ============================================================================
 // Menu upload API
 // ============================================================================
