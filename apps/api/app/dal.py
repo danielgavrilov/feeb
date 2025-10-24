@@ -1253,11 +1253,15 @@ async def add_recipe_ingredient(
     )
     link = result.scalar_one_or_none()
     
-    # Serialize allergens to JSON string
+    # Serialize allergens to JSON string, preserving explicit empty lists
     allergens_json = None
     if allergens is not None:
         import json
-        allergens_json = json.dumps(allergens) if allergens else None
+
+        if isinstance(allergens, str):
+            allergens_json = allergens
+        else:
+            allergens_json = json.dumps(allergens)
 
     if link:
         # Update existing

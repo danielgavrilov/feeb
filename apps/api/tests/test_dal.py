@@ -5,6 +5,7 @@ Tests for data access layer (DAL).
 import json
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from app.database import Base
 from app import dal
@@ -308,4 +309,73 @@ async def test_get_recipe_with_details_normalizes_predicted_allergens(test_sessi
     peanut_entry = next((a for a in ingredient["allergens"] if a["code"] == "peanuts"), None)
     assert milk_entry is not None and milk_entry["certainty"] == "likely"
     assert peanut_entry is not None and peanut_entry["certainty"] == "possible"
+
+
+@pytest.mark.asyncio
+async def test_clear_recipe_ingredient_allergens_retains_empty_list(test_session):
+    """Explicitly clearing allergens should persist an empty array instead of null."""
+
+    user_id = await dal.upsert_user(
+        test_session,
+        supabase_uid="uid-321",
+        email="owner4@example.com",
+        name="Owner 4",
+    )
+    restaurant_id = await dal.create_restaurant(
+        test_session,
+        name="Reset Bistro",
+        user_id=user_id,
+    )
+
+    recipe_id = await dal.create_recipe(
+        test_session,
+        restaurant_id=restaurant_id,
+        name="Creamy Soup",
+    )
+    ingredient_id = await dal.insert_ingredient(
+        test_session,
+        code="llm:cream",
+        name="Cream",
+        source="llm",
+    )
+
+    await dal.add_recipe_ingredient(
+        test_session,
+        recipe_id=recipe_id,
+        ingredient_id=ingredient_id,
+        allergens=[{"name": "Milk", "certainty": "high"}],
+        confirmed=False,
+    )
+    await test_session.commit()
+
+    recipe = await dal.get_recipe_with_details(test_session, recipe_id)
+    assert recipe is not None
+    ingredient = recipe["ingredients"][0]
+    assert any(allergen["code"] == "milk" for allergen in ingredient["allergens"])
+
+    await dal.add_recipe_ingredient(
+        test_session,
+        recipe_id=recipe_id,
+        ingredient_id=ingredient_id,
+        allergens=[],
+        confirmed=False,
+    )
+    await test_session.commit()
+
+    from app.models import RecipeIngredient
+
+    result = await test_session.execute(
+        select(RecipeIngredient).where(
+            RecipeIngredient.recipe_id == recipe_id,
+            RecipeIngredient.ingredient_id == ingredient_id,
+        )
+    )
+    link = result.scalar_one_or_none()
+    assert link is not None
+    assert link.allergens == "[]"
+
+    cleared_recipe = await dal.get_recipe_with_details(test_session, recipe_id)
+    assert cleared_recipe is not None
+    cleared_ingredient = cleared_recipe["ingredients"][0]
+    assert cleared_ingredient["allergens"] == []
 
