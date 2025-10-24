@@ -266,7 +266,20 @@ const Index = () => {
         }
       }
 
-      if (ingredient.substitution) {
+      const hasSubstitutionOverride =
+        overrides ? Object.prototype.hasOwnProperty.call(overrides, "substitution") : false;
+
+      if (hasSubstitutionOverride) {
+        const substitutionValue = overrides?.substitution ?? null;
+        if (substitutionValue) {
+          payload.substitution = {
+            alternative: substitutionValue.alternative,
+            surcharge: substitutionValue.surcharge ?? null,
+          };
+        } else {
+          payload.substitution = null;
+        }
+      } else if (ingredient.substitution) {
         payload.substitution = {
           alternative: ingredient.substitution.alternative,
           surcharge: ingredient.substitution.surcharge ?? null,
@@ -432,7 +445,7 @@ const Index = () => {
 
   const handleUpdateIngredientAllergens = async (
     index: number,
-    allergens: Array<{ code: string; name: string; certainty?: string }>
+    allergens: Array<{ code: string; name: string; certainty?: string; canonicalCode?: string | null; canonicalName?: string | null; familyCode?: string | null; familyName?: string | null; markerType?: string | null }>
   ) => {
     const ingredient = ingredients[index];
     if (!ingredient) {
@@ -470,6 +483,45 @@ const Index = () => {
         return next;
       })
     );
+
+    if (!currentIngredient.ingredientId) {
+      return;
+    }
+
+    const ingredientForPersist: IngredientState = {
+      ...currentIngredient,
+      allergens,
+      substitution: shouldClearSubstitution ? undefined : currentIngredient.substitution,
+    };
+
+    const overrides: {
+      allergens: IngredientState["allergens"];
+      substitution?: IngredientState["substitution"] | null;
+    } = {
+      allergens,
+    };
+
+    if (shouldClearSubstitution) {
+      overrides.substitution = null;
+    }
+
+    const persisted = await persistIngredientChanges(ingredientForPersist, overrides);
+
+    if (!persisted) {
+      setIngredients((current) =>
+        current.map((ingredient, i) => {
+          if (i !== index) {
+            return ingredient;
+          }
+
+          return {
+            ...ingredient,
+            allergens: previousAllergens,
+            substitution: previousSubstitution,
+          };
+        })
+      );
+    }
   };
 
   const handleUpdateIngredientSubstitution = (
@@ -539,6 +591,46 @@ const Index = () => {
       toast.error("Please create a restaurant first");
       return;
     }
+
+    const ingredientsToPersist = ingredients.map((ingredient) => {
+      const sanitizedName = ingredient.name.trim();
+      const sanitizedQuantity = ingredient.quantity.trim();
+      const sanitizedUnit = ingredient.unit.trim();
+      const normalizedAllergens = ingredient.allergens ?? [];
+      const substitutionOverride = ingredient.substitution ?? null;
+
+      const sanitizedState: IngredientState = {
+        ...ingredient,
+        name: sanitizedName,
+        quantity: sanitizedQuantity,
+        unit: sanitizedUnit,
+        allergens: normalizedAllergens,
+        substitution: substitutionOverride ?? undefined,
+      };
+
+      return {
+        ingredient,
+        overrides: {
+          name: sanitizedName,
+          quantity: sanitizedQuantity,
+          unit: sanitizedUnit,
+          confirmed: ingredient.confirmed,
+          allergens: normalizedAllergens,
+          substitution: substitutionOverride,
+        },
+        sanitizedState,
+      };
+    });
+
+    for (const { ingredient, overrides } of ingredientsToPersist) {
+      const persisted = await persistIngredientChanges(ingredient, overrides);
+
+      if (!persisted) {
+        return;
+      }
+    }
+
+    setIngredients(ingredientsToPersist.map(({ sanitizedState }) => sanitizedState));
 
     try {
       // For now, we're saving recipes without ingredient links
