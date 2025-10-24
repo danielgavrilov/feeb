@@ -22,95 +22,6 @@ import { toast } from "sonner";
 import { parsePriceInput } from "@/lib/price-format";
 import type { AllergenConfidence } from "@/lib/api";
 
-const LEGACY_ALLERGEN_ALIASES: Record<string, string[]> = {
-  cereals_gluten: [
-    "gluten",
-    "gluten_wheat",
-    "gluten_barley",
-    "gluten_rye",
-    "gluten_oats",
-    "gluten_spelt",
-    "gluten_triticale",
-    "cereals_gluten:wheat",
-    "cereals_gluten:rye",
-    "cereals_gluten:barley",
-    "cereals_gluten:oats",
-    "cereals_gluten:spelt",
-    "cereals_gluten:triticale",
-    "wheat",
-    "farina",
-    "semolina",
-    "durum",
-    "rye",
-    "pumpernickel",
-    "secale",
-    "barley",
-    "malt",
-    "hordeum",
-    "oat",
-    "oats",
-    "avena",
-    "spelt",
-    "dinkel",
-    "triticale",
-  ],
-  crustaceans: ["shellfish"],
-  eggs: ["egg", "eggs"],
-  fish: ["fish"],
-  peanuts: ["peanut", "peanuts"],
-  soybeans: ["soy", "soya"],
-  milk: ["dairy", "lactose"],
-  tree_nuts: [
-    "nuts",
-    "tree nuts",
-    "nuts_almond",
-    "nuts_hazelnut",
-    "nuts_walnut",
-    "nuts_cashew",
-    "nuts_pecan",
-    "nuts_brazil_nut",
-    "nuts_pistachio",
-    "nuts_macadamia",
-    "tree_nuts:almonds",
-    "tree_nuts:hazelnuts",
-    "tree_nuts:walnuts",
-    "tree_nuts:cashews",
-    "tree_nuts:pecans",
-    "tree_nuts:brazil_nuts",
-    "tree_nuts:pistachios",
-    "tree_nuts:macadamia",
-    "almond",
-    "almonds",
-    "hazelnut",
-    "hazelnuts",
-    "filbert",
-    "walnut",
-    "walnuts",
-    "cashew",
-    "cashews",
-    "pecan",
-    "pecans",
-    "brazil nut",
-    "brazil nuts",
-    "pistachio",
-    "pistachios",
-    "macadamia",
-    "macadamia nut",
-    "macadamia nuts",
-    "praline",
-    "gianduja",
-  ],
-  celery: ["celery", "celeriac"],
-  mustard: ["mustard"],
-  sesame: ["sesame", "tahini"],
-  sulphites: ["sulphites", "sulfites"],
-  lupin: ["lupin"],
-  molluscs: ["shellfish"],
-  meat: ["meat", "contains meat"],
-  animal_product: ["animal product", "honey", "gelatin", "animal fat", "lard"],
-  vegan: ["vegan", "not vegan", "not plant-based"],
-  vegetarian: ["vegetarian", "not vegetarian", "not plant-based"],
-};
 
 const ANIMAL_PRODUCT_ALLERGENS = new Set([
   "crustaceans",
@@ -213,38 +124,6 @@ export const IngredientsList = ({
 
   const sortedAllergenCategories = getSortedAllergenCategories();
 
-  const matchesDefinitionValue = (definition: AllergenFilterDefinition, value?: string) => {
-    if (!value) {
-      return false;
-    }
-    const normalizedId = definition.id.toLowerCase();
-    const normalizedValue = value.toLowerCase();
-
-    if (normalizedId === normalizedValue) {
-      return true;
-    }
-
-    if (definition.name.toLowerCase() === normalizedValue) {
-      return true;
-    }
-
-    const aliases = LEGACY_ALLERGEN_ALIASES[normalizedId] ?? [];
-    return aliases.includes(normalizedValue);
-  };
-
-  const findDefinitionForAllergen = (code?: string, name?: string) => {
-    if (!code && !name) {
-      return undefined;
-    }
-
-    for (const definition of allergenFilterMap.values()) {
-      if (matchesDefinitionValue(definition, code) || matchesDefinitionValue(definition, name)) {
-        return definition;
-      }
-    }
-
-    return undefined;
-  };
 
   const matchesAllergenSelection = (
     allergen: { code?: string; name?: string },
@@ -256,46 +135,18 @@ export const IngredientsList = ({
     const normalizedCode = allergen.code?.toLowerCase();
     const normalizedName = allergen.name?.toLowerCase();
 
+    // Direct ID match
     if (normalizedCode === normalizedId || normalizedName === normalizedId) {
       return true;
     }
 
-    if (
-      normalizedFallback &&
-      (normalizedCode === normalizedFallback || normalizedName === normalizedFallback)
-    ) {
+    // Direct label match
+    if (normalizedFallback && 
+        (normalizedCode === normalizedFallback || normalizedName === normalizedFallback)) {
       return true;
     }
 
-    const definition =
-      allergenFilterMap.get(allergenId) ??
-      allergenFilterMap.get(allergenId.toLowerCase()) ??
-      findDefinitionForAllergen(allergenId, fallbackLabel);
-
-    if (!definition) {
-      return false;
-    }
-
-    const idMatchesDefinition = matchesDefinitionValue(definition, allergenId);
-    const fallbackMatchesDefinition = normalizedFallback
-      ? matchesDefinitionValue(definition, fallbackLabel)
-      : false;
-
-    if (idMatchesDefinition && !fallbackMatchesDefinition) {
-      return (
-        matchesDefinitionValue(definition, allergen.code) ||
-        matchesDefinitionValue(definition, allergen.name)
-      );
-    }
-
-    if (!idMatchesDefinition && fallbackMatchesDefinition) {
-      return false;
-    }
-
-    return (
-      matchesDefinitionValue(definition, allergen.code) ||
-      matchesDefinitionValue(definition, allergen.name)
-    );
+    return false;
   };
 
   const isAllergenSelected = (
@@ -396,7 +247,7 @@ export const IngredientsList = ({
         {ingredients.map((ingredient, index) => {
           const selectedAllergens = ingredient.allergens ?? [];
           const visibleAllergens = selectedAllergens.filter((allergen) => {
-            const definition = findDefinitionForAllergen(allergen.code, allergen.name);
+            const definition = allergenFilterMap.get(allergen.code || '');
             const definitionId = definition?.id?.toLowerCase();
 
             if (definitionId && HIDDEN_DIET_BADGES.has(definitionId)) {
@@ -422,21 +273,13 @@ export const IngredientsList = ({
           };
 
           const toggleAllergen = (allergenId: string, fallbackLabel?: string) => {
-            const definition =
-              allergenFilterMap.get(allergenId) ??
-              allergenFilterMap.get(allergenId.toLowerCase());
-            const normalizedId = allergenId.toLowerCase();
-            const definitionMatchesId = definition
-              ? definition.id.toLowerCase() === normalizedId
-              : false;
-
+            const definition = allergenFilterMap.get(allergenId);
+            
             let entryCode = allergenId;
             let entryName = fallbackLabel ?? allergenId;
 
-            if (definitionMatchesId && definition) {
+            if (definition) {
               entryCode = definition.id;
-              entryName = definition.name;
-            } else if (!fallbackLabel && definition?.name) {
               entryName = definition.name;
             }
 
@@ -562,14 +405,8 @@ export const IngredientsList = ({
                                   <div className="mt-3 flex flex-wrap gap-2">
                                     {[...visibleAllergens]
                                       .sort((a, b) => {
-                                        const aDefinition = findDefinitionForAllergen(
-                                          a.code,
-                                          a.name,
-                                        );
-                                        const bDefinition = findDefinitionForAllergen(
-                                          b.code,
-                                          b.name,
-                                        );
+                                        const aDefinition = allergenFilterMap.get(a.code || '');
+                                        const bDefinition = allergenFilterMap.get(b.code || '');
                                         const aLabel = (
                                           aDefinition?.name ?? a.name ?? a.code ?? ""
                                         ).toLowerCase();
@@ -579,10 +416,7 @@ export const IngredientsList = ({
                                         return aLabel.localeCompare(bLabel);
                                       })
                                       .map((allergen, allergenIndex) => {
-                                        const definition = findDefinitionForAllergen(
-                                          allergen.code,
-                                          allergen.name,
-                                        );
+                                        const definition = allergenFilterMap.get(allergen.code || '');
                                       const certaintyLabel = (
                                         allergen.certainty || (ingredient.confirmed ? "confirmed" : "predicted")
                                       ).toLowerCase();

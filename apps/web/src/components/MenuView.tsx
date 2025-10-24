@@ -653,8 +653,8 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
                   This is how customers will see your menu.
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  No dishes here? Please review the recipes in the recipe book and then mark them as
-                  "Live". Only dishes with confirmed ingredients can be displayed up on this menu.
+                  It looks like there are no dishes here yet! Please review the recipes in the recipe book and then mark them as
+                  "Live". Only dishes with confirmed ingredients can be displayed on this menu.
                 </p>
               </>
             ) : (
