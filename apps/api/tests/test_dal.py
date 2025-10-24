@@ -379,3 +379,93 @@ async def test_clear_recipe_ingredient_allergens_retains_empty_list(test_session
     cleared_ingredient = cleared_recipe["ingredients"][0]
     assert cleared_ingredient["allergens"] == []
 
+
+@pytest.mark.asyncio
+async def test_recipe_allergen_override_blocks_gemini_regressions(test_session):
+    """User overrides suppress fallback allergen tags once predictions are cleared."""
+
+    user_id = await dal.upsert_user(
+        test_session,
+        supabase_uid="uid-654",
+        email="owner5@example.com",
+        name="Owner 5",
+    )
+    restaurant_id = await dal.create_restaurant(
+        test_session,
+        name="Override Cafe",
+        user_id=user_id,
+    )
+    recipe_id = await dal.create_recipe(
+        test_session,
+        restaurant_id=restaurant_id,
+        name="Milky Tea",
+    )
+
+    allergen_id = await dal.insert_allergen(
+        test_session,
+        code="en:milk",
+        name="Milk",
+    )
+    ingredient_id = await dal.insert_ingredient(
+        test_session,
+        code="llm:milk-base",
+        name="Milk Base",
+        source="llm",
+    )
+    await dal.link_ingredient_allergen(
+        test_session,
+        ingredient_id=ingredient_id,
+        allergen_id=allergen_id,
+        certainty="direct",
+    )
+    await test_session.commit()
+
+    # Baseline: without overrides we fall back to the ingredient association.
+    await dal.add_recipe_ingredient(
+        test_session,
+        recipe_id=recipe_id,
+        ingredient_id=ingredient_id,
+        confirmed=False,
+    )
+    await test_session.commit()
+
+    baseline = await dal.get_recipe_with_details(test_session, recipe_id)
+    assert baseline is not None
+    baseline_allergens = baseline["ingredients"][0]["allergens"]
+    assert {entry["code"] for entry in baseline_allergens} == {"milk"}
+
+    # Gemini prediction adds a badge which should be canonicalised.
+    predicted_payload = json.dumps([
+        {"allergen": "Milk", "certainty": "high"},
+    ])
+    await dal.add_recipe_ingredient(
+        test_session,
+        recipe_id=recipe_id,
+        ingredient_id=ingredient_id,
+        allergens=predicted_payload,
+        confirmed=False,
+    )
+    await test_session.commit()
+
+    predicted_recipe = await dal.get_recipe_with_details(test_session, recipe_id)
+    assert predicted_recipe is not None
+    predicted_allergens = predicted_recipe["ingredients"][0]["allergens"]
+    assert {entry["code"] for entry in predicted_allergens} == {"milk"}
+    milk_entry = predicted_allergens[0]
+    assert milk_entry["certainty"] == "likely"
+
+    # User override clears the badge and it should not reappear from ingredient data.
+    await dal.add_recipe_ingredient(
+        test_session,
+        recipe_id=recipe_id,
+        ingredient_id=ingredient_id,
+        allergens=[],
+        confirmed=False,
+    )
+    await test_session.commit()
+
+    overridden_recipe = await dal.get_recipe_with_details(test_session, recipe_id)
+    assert overridden_recipe is not None
+    overridden_allergens = overridden_recipe["ingredients"][0]["allergens"]
+    assert overridden_allergens == []
+

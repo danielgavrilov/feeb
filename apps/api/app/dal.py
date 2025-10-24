@@ -1430,79 +1430,102 @@ async def get_recipe_with_details(
     import json
 
     for ri in recipe.ingredients:
-        allergens = [
-            {
-                "code": ia.allergen.code,
-                "name": ia.allergen.name,
-                "certainty": certainty_to_ui(ia.certainty),
-            }
-            for ia in ri.ingredient.allergens
-        ]
+        ingredient_allergens: List[Dict[str, Any]] = []
+        ingredient_codes = set()
 
-        known_codes = {entry["code"].lower() for entry in allergens if entry.get("code")}
+        for ia in ri.ingredient.allergens:
+            allergen = ia.allergen
+            canonical = None
+            if allergen:
+                canonical = (
+                    canonicalize_allergen(getattr(allergen, "code", None))
+                    or canonical_allergen_from_label(getattr(allergen, "name", None))
+                    or canonicalize_allergen(getattr(allergen, "name", None))
+                )
 
-        if ri.allergens:
-            try:
-                predicted = json.loads(ri.allergens)
-            except json.JSONDecodeError:
-                predicted = None
+            certainty_value = certainty_to_ui(getattr(ia, "certainty", None))
 
-            if isinstance(predicted, list):
-                for entry in predicted:
+            if canonical:
+                code = canonical.slug
+                name = canonical.label
+            else:
+                code = getattr(allergen, "code", None)
+                name = getattr(allergen, "name", None)
+
+            if not code:
+                continue
+
+            code_key = code.lower()
+            if code_key in ingredient_codes:
+                continue
+
+            ingredient_codes.add(code_key)
+            ingredient_allergens.append(
+                {
+                    "code": code,
+                    "name": name,
+                    "certainty": certainty_value,
+                }
+            )
+
+        allergens_payload = ri.allergens
+        override_allergens: Optional[List[Dict[str, Any]]] = None
+
+        if allergens_payload is not None:
+            override_allergens = []
+            override_codes = set()
+
+            parsed_payload: Any = allergens_payload
+            if isinstance(allergens_payload, str):
+                raw_text = allergens_payload.strip()
+                if not raw_text:
+                    parsed_payload = []
+                else:
+                    try:
+                        parsed_payload = json.loads(raw_text)
+                    except json.JSONDecodeError:
+                        parsed_payload = raw_text
+
+            def add_override_entry(label: Any, certainty: Any) -> None:
+                canonical = canonical_allergen_from_label(label) or canonicalize_allergen(label)
+                if not canonical:
+                    return
+                code = canonical.slug
+                code_key = code.lower()
+                if code_key in override_codes:
+                    return
+                override_codes.add(code_key)
+                override_allergens.append(
+                    {
+                        "code": code,
+                        "name": canonical.label,
+                        "certainty": certainty_to_ui(certainty),
+                    }
+                )
+
+            if isinstance(parsed_payload, list):
+                for entry in parsed_payload:
                     if isinstance(entry, dict):
-                        raw_label = entry.get("allergen") or entry.get("name") or entry.get("code")
+                        raw_label = entry.get("code") or entry.get("allergen") or entry.get("name")
                         certainty_value = entry.get("certainty")
                     else:
                         raw_label = entry
                         certainty_value = None
+                    add_override_entry(raw_label, certainty_value)
+            elif isinstance(parsed_payload, dict):
+                raw_label = (
+                    parsed_payload.get("code")
+                    or parsed_payload.get("allergen")
+                    or parsed_payload.get("name")
+                )
+                add_override_entry(raw_label, parsed_payload.get("certainty"))
+            elif isinstance(parsed_payload, str):
+                add_override_entry(parsed_payload, None)
+            elif parsed_payload is None:
+                # Explicit null payload -> treat as cleared list
+                pass
 
-                    canonical = canonical_allergen_from_label(raw_label) or canonicalize_allergen(raw_label)
-                    if not canonical:
-                        continue
-
-                    code = canonical.slug
-                    if code.lower() in known_codes:
-                        continue
-                    known_codes.add(code.lower())
-
-                    allergens.append(
-                        {
-                            "code": code,
-                            "name": canonical.label,
-                            "certainty": certainty_to_ui(certainty_value),
-                        }
-                    )
-            elif isinstance(predicted, dict):
-                canonical = canonical_allergen_from_label(predicted.get("allergen"))
-                if canonical and canonical.slug.lower() not in known_codes:
-                    known_codes.add(canonical.slug.lower())
-                    allergens.append(
-                        {
-                            "code": canonical.slug,
-                            "name": canonical.label,
-                            "certainty": certainty_to_ui(predicted.get("certainty")),
-                        }
-                    )
-            elif isinstance(predicted, str):
-                canonical = canonical_allergen_from_label(predicted) or canonicalize_allergen(predicted)
-                if canonical and canonical.slug.lower() not in known_codes:
-                    known_codes.add(canonical.slug.lower())
-                    allergens.append(
-                        {
-                            "code": canonical.slug,
-                            "name": canonical.label,
-                            "certainty": certainty_to_ui(None),
-                        }
-                    )
-            elif predicted is None:
-                if ri.allergens:
-                    allergens.append(
-                        {
-                            "code": "predicted",
-                            "name": ri.allergens,
-                            "certainty": "predicted",
-                        }
-                    )
+        allergens = override_allergens if override_allergens is not None else ingredient_allergens
 
         substitution_data = None
         if ri.substitution:
