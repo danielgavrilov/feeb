@@ -92,7 +92,7 @@ const uploadProgressSteps = [
   {
     key: "saving",
     title: "Saving your menu",
-    description: "We’re safely storing a copy so you always have a backup.",
+    description: "Storing your menu for analysis...",
     percent: 18,
   },
   {
