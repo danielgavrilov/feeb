@@ -29,8 +29,11 @@ export const mapRecipeToSavedDish = (
   prepMethod: recipe.instructions || "",
   compliance: {},
   image: recipe.image || "",
-  confirmed: normalizeBoolean(recipe.confirmed),
-  isOnMenu: normalizeBoolean(recipe.is_on_menu),
+  // Pass through the status directly
+  status: recipe.status,
+  // Map status to confirmed and isOnMenu for backward compatibility with SavedDish interface
+  confirmed: recipe.status === "confirmed" || recipe.status === "live",
+  isOnMenu: recipe.status === "live",
 });
 
 export const mapRecipesToSavedDishes = (

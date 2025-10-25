@@ -97,6 +97,7 @@ export interface SavedDish {
   prepMethod: string;
   compliance: Record<string, boolean>;
   image?: string;
+  status?: "needs_review" | "confirmed" | "live";
   confirmed: boolean;
   isOnMenu?: boolean;
 }
@@ -148,6 +149,14 @@ const isDishOnMenu = (dish: SavedDish) => normalizeBoolean(dish.isOnMenu);
 const isDishConfirmed = (dish: SavedDish) => normalizeBoolean(dish.confirmed);
 
 const getDishStatus = (dish: SavedDish): "live" | "reviewed" | "needs_review" => {
+  // If status is directly available, use it (with mapping for "confirmed" -> "reviewed")
+  if (dish.status) {
+    if (dish.status === "live") return "live";
+    if (dish.status === "confirmed") return "reviewed";
+    if (dish.status === "needs_review") return "needs_review";
+  }
+  
+  // Fallback to derived status from boolean fields (for backward compatibility)
   if (isDishOnMenu(dish)) {
     return "live";
   }

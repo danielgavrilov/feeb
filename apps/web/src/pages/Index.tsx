@@ -133,11 +133,11 @@ const Index = () => {
   const savedDishes: SavedDish[] = mapRecipesToSavedDishes(recipes, deriveMenuSectionKey);
 
   const totalRecipes = recipes.length;
-  const unconfirmedRecipeCount = recipes.filter(recipe => !recipe.confirmed).length;
+  const unconfirmedRecipeCount = recipes.filter(recipe => recipe.status === "needs_review").length;
   const hasRecipeImages = recipes.some(recipe => Boolean(recipe.image));
   const menuUploadComplete = totalRecipes > 0 || hasRecipeImages;
-  const firstUnconfirmedRecipe = recipes.find(recipe => !recipe.confirmed);
-  const lastUnconfirmedRecipe = [...recipes].reverse().find(recipe => !recipe.confirmed);
+  const firstUnconfirmedRecipe = recipes.find(recipe => recipe.status === "needs_review");
+  const lastUnconfirmedRecipe = [...recipes].reverse().find(recipe => recipe.status === "needs_review");
 
   const reviewNoticeMessage =
     unconfirmedRecipeCount > 0
@@ -626,7 +626,7 @@ const Index = () => {
           serving_size: servingSize,
           price,
           image: dishImage,
-          confirmed: true,
+          status: "confirmed",
           menu_section_ids: resolvedSectionId !== null ? [resolvedSectionId] : [],
         });
         updatedRecipesList = recipes.map((recipe) =>
@@ -642,14 +642,14 @@ const Index = () => {
           price,
           image: dishImage,
           ingredients: [], // TODO: Map ingredients to ingredient IDs
-          confirmed: true,
+          status: "confirmed",
           menu_section_ids: resolvedSectionId !== null ? [resolvedSectionId] : [],
         });
         updatedRecipesList = [...recipes, savedRecipe];
       }
 
       const nextUnconfirmedRecipe = updatedRecipesList.find(
-        (recipe) => !recipe.confirmed && recipe.id !== savedRecipe.id
+        (recipe) => recipe.status === "needs_review" && recipe.id !== savedRecipe.id
       );
 
       toast.success("Dish saved and confirmed");
@@ -694,16 +694,16 @@ const Index = () => {
           await Promise.all(recipeIds.map((recipeId) => deleteRecipeAPI(recipeId)));
           break;
         case "markForReview":
-          await Promise.all(recipeIds.map((recipeId) => updateRecipeAPI(recipeId, { confirmed: false })));
+          await Promise.all(recipeIds.map((recipeId) => updateRecipeAPI(recipeId, { status: "needs_review" })));
           break;
         case "markAsReviewed":
-          await Promise.all(recipeIds.map((recipeId) => updateRecipeAPI(recipeId, { confirmed: true })));
+          await Promise.all(recipeIds.map((recipeId) => updateRecipeAPI(recipeId, { status: "confirmed" })));
           break;
         case "addToMenu":
-          await Promise.all(recipeIds.map((recipeId) => updateRecipeAPI(recipeId, { is_on_menu: true })));
+          await Promise.all(recipeIds.map((recipeId) => updateRecipeAPI(recipeId, { status: "live" })));
           break;
         case "removeFromMenu":
-          await Promise.all(recipeIds.map((recipeId) => updateRecipeAPI(recipeId, { is_on_menu: false })));
+          await Promise.all(recipeIds.map((recipeId) => updateRecipeAPI(recipeId, { status: "confirmed" })));
           break;
       }
 
@@ -765,7 +765,8 @@ const Index = () => {
     const recipe = recipes.find((item) => item.id === recipeId);
 
     try {
-      await updateRecipeAPI(recipeId, { is_on_menu: nextStatus });
+      // When toggling to menu: live, when toggling off: confirmed
+      await updateRecipeAPI(recipeId, { status: nextStatus ? "live" : "confirmed" });
       const message = recipe
         ? nextStatus
           ? `${recipe.name} is now live on your menu`

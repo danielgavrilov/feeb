@@ -84,6 +84,8 @@ export interface RecipeIngredient {
   };
 }
 
+export type RecipeStatus = "needs_review" | "confirmed" | "live";
+
 export interface Recipe {
   id: number;
   restaurant_id: number;
@@ -96,8 +98,7 @@ export interface Recipe {
   options?: string | null;
   special_notes?: string | null;
   prominence_score?: number | null;
-  confirmed: boolean;
-  is_on_menu: boolean;
+  status: RecipeStatus;
   created_at: string;
   sections: RecipeSectionLink[];
   ingredients: RecipeIngredient[];
@@ -146,8 +147,7 @@ export interface CreateRecipeRequest {
   options?: string;
   special_notes?: string;
   prominence_score?: number;
-  confirmed?: boolean;
-  is_on_menu?: boolean;
+  status?: RecipeStatus;
   menu_section_ids?: number[];
 }
 
@@ -161,8 +161,7 @@ export interface UpdateRecipeRequest {
   options?: string;
   special_notes?: string;
   prominence_score?: number;
-  confirmed?: boolean;
-  is_on_menu?: boolean;
+  status?: RecipeStatus;
   menu_section_ids?: number[];
 }
 
