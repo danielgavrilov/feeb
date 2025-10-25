@@ -1242,7 +1242,7 @@ async def add_recipe_ingredient(
         unit: Optional unit
         notes: Optional notes
     """
-    from .models import RecipeIngredient
+    from .models import RecipeIngredient, RecipeIngredientSubstitution
     
     # Check if exists
     result = await session.execute(
