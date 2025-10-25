@@ -44,7 +44,6 @@ import {
   refreshMenuSections,
   saveMenuSections,
   MENU_SECTIONS_EVENT,
-  ARCHIVE_SECTION_ID,
   ARCHIVE_SECTION_LABEL,
   type MenuSectionsEventDetail,
   type StoredMenuSection,
@@ -115,23 +114,31 @@ const isArchiveLabel = (label: string) => label.trim().toLowerCase() === ARCHIVE
 
 const hasWindow = () => typeof window !== "undefined";
 
-const mapStoredToSection = (section: StoredMenuSection): SectionDefinition => ({
-  id: isArchiveLabel(section.label) ? ARCHIVE_SECTION_ID : section.id.toString(),
-  numericId: section.id,
-  label: section.label.trim().length > 0 ? section.label.trim() : `Section ${section.id}`,
-  position: section.position ?? null,
-  isArchive: isArchiveLabel(section.label),
-  isTemporary: section.isTemporary,
-});
+const mapStoredToSection = (section: StoredMenuSection): SectionDefinition => {
+  const label = section.label.trim().length > 0 ? section.label.trim() : `Section ${section.id}`;
+  const isArchive = section.isArchive || isArchiveLabel(section.label);
+  const isTemporary = Boolean(section.isTemporary);
+  const numericId = isTemporary ? null : section.id;
+  const id = numericId !== null ? numericId.toString() : section.id.toString();
+
+  return {
+    id,
+    numericId,
+    label,
+    position: section.position ?? null,
+    isArchive,
+    isTemporary,
+  };
+};
 
 const ensureArchiveSection = (sections: SectionDefinition[]): SectionDefinition[] => {
   if (sections.some((section) => section.isArchive)) {
     return sections;
   }
 
-  const archive = mapStoredToSection(allocateTemporarySection(ARCHIVE_SECTION_LABEL));
+  const temporaryArchive = allocateTemporarySection(ARCHIVE_SECTION_LABEL);
+  const archive = mapStoredToSection({ ...temporaryArchive, isArchive: true });
   archive.isArchive = true;
-  archive.id = "archive";
   archive.numericId = null;
   return [...sections, archive];
 };
@@ -276,6 +283,12 @@ export const RecipeBook = ({
   const [sectionPendingDeletionIndex, setSectionPendingDeletionIndex] = useState<number | null>(null);
   const [isSavingSections, setIsSavingSections] = useState(false);
   const [sectionManageError, setSectionManageError] = useState<string | null>(null);
+
+  const archiveDefinition = useMemo(
+    () => sections.find((section) => section.isArchive) ?? null,
+    [sections],
+  );
+  const archiveSectionId = archiveDefinition?.id ?? null;
 
   const isRemovalUpdating = removalDialogDishId
     ? menuUpdatingIds.includes(removalDialogDishId)
@@ -450,17 +463,18 @@ export const RecipeBook = ({
   }, [dishes, sections]);
 
   const filteredSections = useMemo(() => {
-    const archiveSection = sections.find((section) => section.id === ARCHIVE_SECTION_ID);
-    const nonArchiveSections = sections.filter((section) => section.id !== ARCHIVE_SECTION_ID);
+    const archiveSection = archiveDefinition;
+    const archiveId = archiveSectionId;
+    const nonArchiveSections = sections.filter((section) => !section.isArchive);
 
     if (nonArchiveSections.length === 0) {
-      if (selectedCategory === ARCHIVE_SECTION_ID) {
+      if (archiveId && selectedCategory === archiveId) {
         if (!archiveSection) {
           return [];
         }
 
         const archivedDishes = statusFilteredDishes.filter(
-          (dish) => dish.menuSectionId === ARCHIVE_SECTION_ID,
+          (dish) => dish.menuSectionId === archiveId,
         );
 
         return archivedDishes.length > 0
@@ -478,12 +492,12 @@ export const RecipeBook = ({
         return [];
       }
 
-      const nonArchivedDishes = statusFilteredDishes.filter(
-        (dish) => dish.menuSectionId !== ARCHIVE_SECTION_ID,
+      const nonArchivedDishes = statusFilteredDishes.filter((dish) =>
+        archiveId ? dish.menuSectionId !== archiveId : true,
       );
-      const archivedDishes = statusFilteredDishes.filter(
-        (dish) => dish.menuSectionId === ARCHIVE_SECTION_ID,
-      );
+      const archivedDishes = archiveId
+        ? statusFilteredDishes.filter((dish) => dish.menuSectionId === archiveId)
+        : [];
 
       const groups: Array<{ sectionId: string; sectionLabel: string; dishes: SavedDish[] }> = [];
 
@@ -553,6 +567,8 @@ export const RecipeBook = ({
       );
   }, [
     sections,
+    archiveDefinition,
+    archiveSectionId,
     selectedCategory,
     sectionOrders,
     statusFilteredDishes,
@@ -665,20 +681,27 @@ export const RecipeBook = ({
   };
 
   const handleSectionLabelChange = (index: number, label: string) => {
+    const trimmed = label;
+    if (isArchiveLabel(trimmed)) {
+      setSectionManageError("The Archive section name is reserved.");
+      return;
+    }
+
+    setSectionManageError(null);
     setEditingSections((prev) => {
+      if (index < 0 || index >= prev.length) {
+        return prev;
+      }
+
+      const current = prev[index];
+      if (current.isArchive) {
+        return prev;
+      }
+
       const next = [...prev];
-      const isArchive = isArchiveLabel(label);
-      const current = next[index];
-      const newId = isArchive
-        ? ARCHIVE_SECTION_ID
-        : current.numericId !== null
-          ? current.numericId.toString()
-          : current.id;
       next[index] = {
         ...current,
-        id: newId,
-        label,
-        isArchive,
+        label: trimmed,
       };
       return next;
     });
@@ -690,9 +713,15 @@ export const RecipeBook = ({
       return;
     }
 
+    if (isArchiveLabel(trimmedLabel)) {
+      setSectionManageError("The Archive section name is reserved.");
+      return;
+    }
+
+    setSectionManageError(null);
+
     setEditingSections((prev) => {
       const id = generateSectionId(trimmedLabel, prev);
-      const archive = isArchiveLabel(trimmedLabel);
       return [
         ...prev,
         {
@@ -700,7 +729,7 @@ export const RecipeBook = ({
           numericId: null,
           label: trimmedLabel,
           position: prev.length,
-          isArchive: archive,
+          isArchive: false,
           isTemporary: true,
         },
       ];
@@ -744,7 +773,7 @@ export const RecipeBook = ({
     );
 
     const removedSectionIds = sections
-      .filter((section) => section.id !== ARCHIVE_SECTION_ID)
+      .filter((section) => !section.isArchive)
       .filter((section) => !normalizedSections.some((item) => item.id === section.id))
       .map((section) => section.id);
 
@@ -767,6 +796,7 @@ export const RecipeBook = ({
         id: section.numericId ?? allocateTemporarySection(section.label, section.position).id,
         label: section.label,
         position: section.position ?? index,
+        isArchive: section.isArchive,
         isTemporary: section.numericId == null,
       }));
 
@@ -809,7 +839,7 @@ export const RecipeBook = ({
           <p className="text-sm text-muted-foreground">There are no sections to manage yet.</p>
         )}
         {editingSections.map((section, index) => {
-          const isArchive = isArchiveSection(section);
+          const isArchive = section.isArchive;
 
           return (
             <div key={section.id} className="flex flex-wrap items-center gap-2">
@@ -819,6 +849,8 @@ export const RecipeBook = ({
                 onChange={(event) => handleSectionLabelChange(index, event.target.value)}
                 aria-label={`Rename section ${section.label || section.id}`}
                 className="flex-1 min-w-[180px]"
+                disabled={isArchive}
+                title={isArchive ? "The Archive section name is reserved" : undefined}
               />
               <div className="flex items-center gap-1">
                 <Button

@@ -7,7 +7,7 @@ from typing import List, Optional, Dict, Any
 from enum import Enum
 from sqlalchemy import (
     Column, Integer, String, TIMESTAMP, ForeignKey,
-    DECIMAL, UniqueConstraint, Index, func, Boolean, Text, Float, JSON
+    DECIMAL, UniqueConstraint, Index, func, Boolean, Text, Float, JSON, text
 )
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from pydantic import BaseModel, ConfigDict
@@ -277,6 +277,7 @@ class MenuSection(Base):
     menu_id = mapped_column(Integer, ForeignKey("menu.id"), nullable=False)
     name = mapped_column(Text, nullable=False)
     position = mapped_column(Integer, nullable=True)
+    is_archive = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     created_at = mapped_column(TIMESTAMP, default=func.now(), nullable=False)
 
     menu: Mapped["Menu"] = relationship("Menu", back_populates="sections")
@@ -612,6 +613,7 @@ class MenuSectionResponse(BaseModel):
     menu_id: int
     name: str
     position: Optional[int] = None
+    is_archive: bool
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -646,6 +648,7 @@ class RecipeSectionLinkResponse(BaseModel):
     section_id: int
     section_name: str
     section_position: Optional[int] = None
+    is_archive: bool
     recipe_position: Optional[int] = None
 
 

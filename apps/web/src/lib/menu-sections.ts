@@ -5,13 +5,13 @@ import {
   type RestaurantMenuSectionsResponse,
 } from "@/lib/api";
 
-export const ARCHIVE_SECTION_ID = "archive";
 export const ARCHIVE_SECTION_LABEL = "Archive";
 
 export type StoredMenuSection = {
   id: number;
   label: string;
   position?: number | null;
+  isArchive: boolean;
   isTemporary?: boolean;
 };
 
@@ -34,6 +34,7 @@ const toStoredSection = (section: MenuSection): StoredMenuSection => ({
   id: section.id,
   label: section.name,
   position: section.position ?? null,
+  isArchive: section.is_archive,
 });
 
 const dispatchUpdate = (detail: MenuSectionsEventDetail) => {
@@ -78,6 +79,10 @@ export const loadSavedMenuSections = (restaurantId: number): { menuId: number | 
         id: section.id,
         label: section.label,
         position: section.position ?? null,
+        isArchive:
+          typeof section.isArchive === "boolean"
+            ? section.isArchive
+            : section.label.trim().toLowerCase() === ARCHIVE_SECTION_LABEL.toLowerCase(),
       }));
 
     return {
@@ -125,5 +130,6 @@ export const allocateTemporarySection = (label: string, position?: number | null
   id: TEMP_ID_BASE - Date.now(),
   label,
   position: position ?? null,
+  isArchive: false,
   isTemporary: true,
 });

@@ -40,6 +40,7 @@ export interface MenuSection {
   menu_id: number;
   name: string;
   position?: number | null;
+  is_archive: boolean;
   created_at: string;
 }
 
@@ -49,6 +50,7 @@ export interface RecipeSectionLink {
   section_id: number;
   section_name: string;
   section_position?: number | null;
+  is_archive: boolean;
   recipe_position?: number | null;
 }
 
