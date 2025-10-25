@@ -101,7 +101,10 @@ cp env.example .env
 Example `.env`:
 ```env
 DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/feeb_db
+CORS_ALLOW_ORIGINS=["http://localhost:8000", "http://localhost:8080", "http://localhost:8081/"]
 ```
+
+`CORS_ALLOW_ORIGINS` accepts a JSON-style list of origins. For example, to allow both the web frontend and an additional staging site, you can set `CORS_ALLOW_ORIGINS=["http://localhost:8080","https://staging.example.com"]`. By default, the API allows requests from `http://localhost:8080`.
 
 5. **Initialize database:**
 
