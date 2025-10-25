@@ -15,6 +15,17 @@ from .database import Base
 
 
 # ============================================================================
+# Enums
+# ============================================================================
+
+class RecipeStatus(str, Enum):
+    """Status of a recipe in the workflow."""
+    NEEDS_REVIEW = "needs_review"
+    CONFIRMED = "confirmed"
+    LIVE = "live"
+
+
+# ============================================================================
 # SQLAlchemy ORM Models
 # ============================================================================
 
@@ -309,8 +320,7 @@ class Recipe(Base):
     options = mapped_column(Text, nullable=True)
     special_notes = mapped_column(Text, nullable=True)
     prominence_score = mapped_column(Float, nullable=True)
-    confirmed = mapped_column(Boolean, nullable=False, default=False)
-    is_on_menu = mapped_column(Boolean, nullable=False, default=False)
+    status = mapped_column(String(20), nullable=False, default=RecipeStatus.NEEDS_REVIEW.value)
     created_at = mapped_column(TIMESTAMP, default=func.now())
 
     # Relationships
@@ -664,8 +674,7 @@ class RecipeCreate(BaseModel):
     options: Optional[str] = None
     special_notes: Optional[str] = None
     prominence_score: Optional[float] = None
-    confirmed: Optional[bool] = None
-    is_on_menu: Optional[bool] = None
+    status: Optional[RecipeStatus] = RecipeStatus.NEEDS_REVIEW
     menu_section_ids: Optional[List[int]] = None
     ingredients: Optional[List[RecipeIngredientRequest]] = []
 
@@ -681,8 +690,7 @@ class RecipeUpdate(BaseModel):
     options: Optional[str] = None
     special_notes: Optional[str] = None
     prominence_score: Optional[float] = None
-    confirmed: Optional[bool] = None
-    is_on_menu: Optional[bool] = None
+    status: Optional[RecipeStatus] = None
     menu_section_ids: Optional[List[int]] = None
 
 
@@ -699,8 +707,7 @@ class RecipeResponse(BaseModel):
     options: Optional[str] = None
     special_notes: Optional[str] = None
     prominence_score: Optional[float] = None
-    confirmed: bool
-    is_on_menu: bool
+    status: str
     created_at: datetime
     sections: List[RecipeSectionLinkResponse] = []
 
@@ -720,8 +727,7 @@ class RecipeWithIngredients(BaseModel):
     options: Optional[str] = None
     special_notes: Optional[str] = None
     prominence_score: Optional[float] = None
-    confirmed: bool
-    is_on_menu: bool
+    status: str
     created_at: datetime
     sections: List[RecipeSectionLinkResponse] = []
     ingredients: List[RecipeIngredientResponse] = []
