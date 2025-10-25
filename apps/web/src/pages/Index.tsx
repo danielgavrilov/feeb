@@ -28,7 +28,7 @@ import {
   DEFAULT_PRICE_FORMAT,
   formatPriceDisplay,
 } from "@/lib/price-format";
-import { ARCHIVE_SECTION_ID, ARCHIVE_SECTION_LABEL, loadSavedMenuSections } from "@/lib/menu-sections";
+import { ARCHIVE_SECTION_LABEL, loadSavedMenuSections } from "@/lib/menu-sections";
 import { mapIngredientAllergens, mapRecipesToSavedDishes } from "./recipe-mappers";
 
 const Index = () => {
@@ -84,9 +84,7 @@ const Index = () => {
         return "";
       }
 
-      return primarySection.section_name.trim().toLowerCase() === ARCHIVE_SECTION_LABEL.toLowerCase()
-        ? ARCHIVE_SECTION_ID
-        : primarySection.section_id.toString();
+      return primarySection.section_id.toString();
     },
     [],
   );
@@ -101,18 +99,23 @@ const Index = () => {
         return null;
       }
 
-      const cached = loadSavedMenuSections(restaurant.id);
-
-      if (sectionKey === ARCHIVE_SECTION_ID) {
-        const archive = cached.sections.find((section) =>
-          section.label.trim().toLowerCase() === ARCHIVE_SECTION_LABEL.toLowerCase(),
-        );
-        return archive ? archive.id : null;
-      }
-
       const numericId = Number(sectionKey);
       if (!Number.isNaN(numericId)) {
         return numericId;
+      }
+
+      const cached = loadSavedMenuSections(restaurant.id);
+
+      const archive = cached.sections.find(
+        (section) =>
+          section.isArchive || section.label.trim().toLowerCase() === ARCHIVE_SECTION_LABEL.toLowerCase(),
+      );
+
+      if (archive) {
+        const keyNormalized = sectionKey.trim().toLowerCase();
+        if (keyNormalized === ARCHIVE_SECTION_LABEL.toLowerCase() || sectionKey === "archive") {
+          return archive.id;
+        }
       }
 
       const match = cached.sections.find(
@@ -729,7 +732,7 @@ const Index = () => {
       return;
     }
 
-    const archiveSectionNumericId = resolveSectionId(ARCHIVE_SECTION_ID);
+    const archiveSectionNumericId = resolveSectionId(ARCHIVE_SECTION_LABEL);
 
     try {
       await Promise.all(
