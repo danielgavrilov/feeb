@@ -60,11 +60,11 @@ export interface IngredientState {
     code: string;
     name: string;
     certainty?: string;
-    canonicalCode?: string | null;
-    canonicalName?: string | null;
-    familyCode?: string | null;
-    familyName?: string | null;
-    markerType?: string | null;
+    canonical_code?: string | null;
+    canonical_name?: string | null;
+    family_code?: string | null;
+    family_name?: string | null;
+    marker_type?: string | null;
   }>;
   dietaryInfo?: string[];
   substitution?: {
@@ -81,17 +81,17 @@ interface IngredientsListProps {
   onConfirmIngredient: (index: number) => Promise<void> | void;
   onDeleteIngredient: (index: number) => Promise<void> | void;
   onAddIngredient: (name: string, quantity: string, unit: string) => void;
-  onUpdateIngredientAllergens: (
+  onUpdateIngredientAllergen: (
     index: number,
     allergens: Array<{
       code: string;
       name: string;
       certainty?: string;
-      canonicalCode?: string | null;
-      canonicalName?: string | null;
-      familyCode?: string | null;
-      familyName?: string | null;
-      markerType?: string | null;
+      canonical_code?: string | null;
+      canonical_name?: string | null;
+      family_code?: string | null;
+      family_name?: string | null;
+      marker_type?: string | null;
     }>
   ) => Promise<void> | void;
   onUpdateIngredientSubstitution: (

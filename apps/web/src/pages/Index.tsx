@@ -229,6 +229,7 @@ const Index = () => {
         unit?: string;
         confirmed?: boolean;
         allergens?: IngredientState["allergens"];
+        substitution?: IngredientState["substitution"] | null;
       },
     ) => {
       if (!editingDishId || !ingredient.ingredientId) {
@@ -292,11 +293,11 @@ const Index = () => {
         code: allergen.code,
         name: allergen.name,
         certainty: allergen.certainty,
-        canonical_code: allergen.canonicalCode ?? null,
-        canonical_name: allergen.canonicalName ?? null,
-        family_code: allergen.familyCode ?? null,
-        family_name: allergen.familyName ?? null,
-        marker_type: allergen.markerType ?? null,
+        canonical_code: allergen.canonical_code ?? null,
+        canonical_name: allergen.canonical_name ?? null,
+        family_code: allergen.family_code ?? null,
+        family_name: allergen.family_name ?? null,
+        marker_type: allergen.marker_type ?? null,
       }));
 
       try {
@@ -449,11 +450,11 @@ const Index = () => {
       code: string;
       name: string;
       certainty?: string;
-      canonicalCode?: string | null;
-      canonicalName?: string | null;
-      familyCode?: string | null;
-      familyName?: string | null;
-      markerType?: string | null;
+      canonical_code?: string | null;
+      canonical_name?: string | null;
+      family_code?: string | null;
+      family_name?: string | null;
+      marker_type?: string | null;
     }>,
   ) => {
     const ingredient = ingredients[index];

@@ -83,11 +83,11 @@ export interface SavedDish {
       code: string;
       name: string;
       certainty?: string;
-      canonicalCode?: string | null;
-      canonicalName?: string | null;
-      familyCode?: string | null;
-      familyName?: string | null;
-      markerType?: string | null;
+      canonical_code?: string | null;
+      canonical_name?: string | null;
+      family_code?: string | null;
+      family_name?: string | null;
+      marker_type?: string | null;
     }>;
     substitution?: {
       alternative: string;
