@@ -1,5 +1,6 @@
 import type { Recipe, RecipeIngredient } from "@/lib/api";
 import type { SavedDish } from "@/components/RecipeBook";
+import { normalizeBoolean } from "@/lib/normalizeBoolean";
 
 export const mapIngredientAllergens = (
   allergens: RecipeIngredient["allergens"] | undefined,
@@ -19,7 +20,7 @@ export const mapRecipeToSavedDish = (
     name: ingredient.ingredient_name,
     quantity: ingredient.quantity?.toString() || "",
     unit: ingredient.unit || "",
-    confirmed: ingredient.confirmed,
+    confirmed: normalizeBoolean(ingredient.confirmed),
     ingredientId: ingredient.ingredient_id,
     originalName: ingredient.ingredient_name,
     allergens: mapIngredientAllergens(ingredient.allergens),
@@ -28,8 +29,8 @@ export const mapRecipeToSavedDish = (
   prepMethod: recipe.instructions || "",
   compliance: {},
   image: recipe.image || "",
-  confirmed: recipe.confirmed,
-  isOnMenu: recipe.is_on_menu,
+  confirmed: normalizeBoolean(recipe.confirmed),
+  isOnMenu: normalizeBoolean(recipe.is_on_menu),
 });
 
 export const mapRecipesToSavedDishes = (

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 import {
   Recipe,
   CreateRecipeRequest,
@@ -7,7 +7,14 @@ import {
   createRecipe as apiCreateRecipe,
   updateRecipe as apiUpdateRecipe,
   deleteRecipe as apiDeleteRecipe,
-} from '@/lib/api';
+} from "@/lib/api";
+import { normalizeBoolean } from "@/lib/normalizeBoolean";
+
+const normalizeRecipe = (recipe: Recipe): Recipe => ({
+  ...recipe,
+  confirmed: normalizeBoolean(recipe.confirmed),
+  is_on_menu: normalizeBoolean(recipe.is_on_menu),
+});
 
 export function useRecipes(restaurantId: number | null) {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -30,7 +37,7 @@ export function useRecipes(restaurantId: number | null) {
     try {
       setLoading(true);
       const data = await getRestaurantRecipes(restaurantId);
-      setRecipes(data);
+      setRecipes(data.map(normalizeRecipe));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load recipes');
@@ -43,8 +50,9 @@ export function useRecipes(restaurantId: number | null) {
   const createRecipe = async (recipeData: CreateRecipeRequest): Promise<Recipe> => {
     try {
       const newRecipe = await apiCreateRecipe(recipeData);
-      setRecipes((prevRecipes) => [...prevRecipes, newRecipe]);
-      return newRecipe;
+      const normalized = normalizeRecipe(newRecipe);
+      setRecipes((prevRecipes) => [...prevRecipes, normalized]);
+      return normalized;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create recipe');
       throw err;
@@ -54,8 +62,9 @@ export function useRecipes(restaurantId: number | null) {
   const updateRecipe = async (recipeId: number, updates: UpdateRecipeRequest): Promise<Recipe> => {
     try {
       const updatedRecipe = await apiUpdateRecipe(recipeId, updates);
-      setRecipes((prevRecipes) => prevRecipes.map((r) => (r.id === recipeId ? updatedRecipe : r)));
-      return updatedRecipe;
+      const normalized = normalizeRecipe(updatedRecipe);
+      setRecipes((prevRecipes) => prevRecipes.map((r) => (r.id === recipeId ? normalized : r)));
+      return normalized;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update recipe');
       throw err;

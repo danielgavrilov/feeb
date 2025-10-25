@@ -57,6 +57,7 @@ import {
   isVegetarianFriendly,
 } from "@/lib/allergen-utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { normalizeBoolean } from "@/lib/normalizeBoolean";
 
 export type RecipeBulkAction =
   | "delete"
@@ -135,12 +136,16 @@ const ensureArchiveSection = (sections: SectionDefinition[]): SectionDefinition[
   return [...sections, archive];
 };
 
+const isDishOnMenu = (dish: SavedDish) => normalizeBoolean(dish.isOnMenu);
+
+const isDishConfirmed = (dish: SavedDish) => normalizeBoolean(dish.confirmed);
+
 const getDishStatus = (dish: SavedDish): "live" | "reviewed" | "needs_review" => {
-  if (dish.isOnMenu) {
+  if (isDishOnMenu(dish)) {
     return "live";
   }
 
-  return dish.confirmed ? "reviewed" : "needs_review";
+  return isDishConfirmed(dish) ? "reviewed" : "needs_review";
 };
 
 export const getDishAllergenDefinitions = (
@@ -387,7 +392,7 @@ export const RecipeBook = ({
     () =>
       selectedIds.reduce((count, id) => {
         const dish = dishMap.get(id);
-        return dish?.isOnMenu ? count + 1 : count;
+        return dish && isDishOnMenu(dish) ? count + 1 : count;
       }, 0),
     [selectedIds, dishMap],
   );
@@ -577,7 +582,7 @@ export const RecipeBook = ({
 
     const hasUnconfirmedSelected = selectedIds.some((id) => {
       const dish = dishMap.get(id);
-      return dish ? !dish.confirmed : false;
+      return dish ? !isDishConfirmed(dish) : false;
     });
 
     if (!hasUnconfirmedSelected) {
@@ -931,7 +936,7 @@ export const RecipeBook = ({
     if (bulkAction === "addToMenu") {
       const unconfirmedCount = selectedIds.reduce((count, id) => {
         const dish = dishMap.get(id);
-        return !dish?.confirmed ? count + 1 : count;
+        return dish && !isDishConfirmed(dish) ? count + 1 : count;
       }, 0);
 
       if (unconfirmedCount > 0) {
@@ -1331,7 +1336,7 @@ export const RecipeBook = ({
                             return;
                           }
 
-                          if (!dish.confirmed) {
+                          if (!isDishConfirmed(dish)) {
                             setUnconfirmedDialogDishId(dish.id);
                             return;
                           }
