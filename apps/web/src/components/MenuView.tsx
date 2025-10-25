@@ -31,6 +31,7 @@ import {
   isVeganFriendly,
   isVegetarianFriendly,
 } from "@/lib/allergen-utils";
+import { normalizeBoolean } from "@/lib/normalizeBoolean";
 
 const UNCATEGORIZED_ID = "__uncategorized__";
 
@@ -284,7 +285,7 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
     };
   }, [restaurantId]);
 
-  const menuDishes = useMemo(() => dishes.filter((dish) => dish.isOnMenu), [dishes]);
+  const menuDishes = useMemo(() => dishes.filter((dish) => normalizeBoolean(dish.isOnMenu)), [dishes]);
 
   const normalizedIngredientMap = useMemo(() => {
     const entries = new Map<string, string[]>();
