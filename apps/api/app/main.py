@@ -35,8 +35,8 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_allow_origins,
-    allow_credentials=settings.cors_allow_credentials,
+    allow_origins=["*"],  # Configure appropriately for production
+    allow_credentials=False,  # Fixed: No credentials needed for Supabase UID-based auth
     allow_methods=["*"],
     allow_headers=["*"],
 )
