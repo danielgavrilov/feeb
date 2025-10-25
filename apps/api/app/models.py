@@ -404,6 +404,11 @@ class AllergenResponse(BaseModel):
     code: str
     name: str
     certainty: Optional[str] = None
+    canonical_code: Optional[str] = None
+    canonical_name: Optional[str] = None
+    family_code: Optional[str] = None
+    family_name: Optional[str] = None
+    marker_type: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -546,6 +551,18 @@ class MenuResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AllergenInfo(BaseModel):
+    """Allergen information structure."""
+    code: str
+    name: str
+    certainty: Optional[str] = None
+    canonical_code: Optional[str] = None
+    canonical_name: Optional[str] = None
+    family_code: Optional[str] = None
+    family_name: Optional[str] = None
+    marker_type: Optional[str] = None
+
+
 class RecipeIngredientRequest(BaseModel):
     """Request model for adding ingredient to recipe."""
     ingredient_id: int
@@ -555,7 +572,7 @@ class RecipeIngredientRequest(BaseModel):
     notes: Optional[str] = None
     confirmed: Optional[bool] = None
     substitution: Optional["IngredientSubstitutionRequest"] = None
-    allergens: Optional[List[Dict[str, Any]]] = None
+    allergens: Optional[List[AllergenInfo]] = None
 
 
 class IngredientSubstitutionRequest(BaseModel):

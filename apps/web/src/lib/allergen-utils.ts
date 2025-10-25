@@ -4,11 +4,11 @@ export type IngredientAllergenLike = {
   code?: string | null;
   name?: string | null;
   certainty?: string | null;
-  canonicalCode?: string | null;
-  canonicalName?: string | null;
-  familyCode?: string | null;
-  familyName?: string | null;
-  markerType?: string | null;
+  canonical_code?: string | null;
+  canonical_name?: string | null;
+  family_code?: string | null;
+  family_name?: string | null;
+  marker_type?: string | null;
 };
 
 export type IngredientLike = {
@@ -129,16 +129,16 @@ export const getCanonicalAllergens = (
 
   ingredients.forEach((ingredient) => {
     (ingredient.allergens ?? []).forEach((allergen) => {
-      const canonicalCode = normalizeCanonicalCode(allergen.canonicalCode ?? allergen.code);
+      const canonicalCode = normalizeCanonicalCode(allergen.canonical_code ?? allergen.code);
       if (!canonicalCode || canonicalMap.has(canonicalCode)) {
         return;
       }
 
       const derivedFamily = CODE_FAMILY_MAP.get(canonicalCode);
-      const familyCode = normalizeCode(allergen.familyCode ?? derivedFamily?.familyCode);
-      const familyName = allergen.familyName ?? derivedFamily?.familyName;
+      const familyCode = normalizeCode(allergen.family_code ?? derivedFamily?.familyCode);
+      const familyName = allergen.family_name ?? derivedFamily?.familyName;
       const canonicalName =
-        allergen.canonicalName ??
+        allergen.canonical_name ??
         allergen.name ??
         fallbackNameFromCode(canonicalCode);
 
@@ -164,7 +164,7 @@ export const summarizeDishAllergens = (
 
   ingredients?.forEach((ingredient) => {
     (ingredient.allergens ?? []).forEach((allergen) => {
-      const canonicalCode = normalizeCanonicalCode(allergen.canonicalCode ?? allergen.code);
+      const canonicalCode = normalizeCanonicalCode(allergen.canonical_code ?? allergen.code);
       if (canonicalCode) {
         canonicalCodes.add(canonicalCode);
         const unprefixedCode = canonicalCode.includes(":")
@@ -176,12 +176,12 @@ export const summarizeDishAllergens = (
         }
       }
 
-      const familyCode = normalizeCode(allergen.familyCode);
+      const familyCode = normalizeCode(allergen.family_code);
       if (familyCode) {
         familyCodes.add(familyCode);
       }
 
-      const markerType = allergen.markerType?.trim().toLowerCase();
+      const markerType = allergen.marker_type?.trim().toLowerCase();
       if (markerType) {
         markerTypes.add(markerType);
       }

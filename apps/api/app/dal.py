@@ -5,7 +5,7 @@ All functions use SQLAlchemy async sessions and return Pydantic models.
 
 
 from datetime import datetime
-from typing import Optional, Optional as _Optional, Dict, List, Sequence, Any
+from typing import Optional, Optional as _Optional, Dict, List, Sequence, Any, Union
 
 from sqlalchemy import select, or_, func
 from sqlalchemy.orm import selectinload
@@ -1226,7 +1226,7 @@ async def add_recipe_ingredient(
     quantity: Optional[float] = None,
     unit: Optional[str] = None,
     notes: Optional[str] = None,
-    allergens: Optional[List[Dict[str, Any]]] = None,
+    allergens: Optional[List[Union[Dict[str, Any], Any]]] = None,
     confirmed: bool = False,
     substitution: Optional[dict] = None,
     substitution_provided: bool = False,
@@ -1244,12 +1244,14 @@ async def add_recipe_ingredient(
     """
     from .models import RecipeIngredient, RecipeIngredientSubstitution
     
-    # Check if exists
+    # Check if exists (eagerly load substitution to avoid lazy-load in async context)
     result = await session.execute(
-        select(RecipeIngredient).where(
+        select(RecipeIngredient)
+        .where(
             RecipeIngredient.recipe_id == recipe_id,
             RecipeIngredient.ingredient_id == ingredient_id
         )
+        .options(selectinload(RecipeIngredient.substitution))
     )
     link = result.scalar_one_or_none()
     
@@ -1261,7 +1263,15 @@ async def add_recipe_ingredient(
         if isinstance(allergens, str):
             allergens_json = allergens
         else:
-            allergens_json = json.dumps(allergens)
+            allergens_dicts = []
+            for allergen in allergens:
+                if hasattr(allergen, 'model_dump'):
+                    allergens_dicts.append(allergen.model_dump(exclude_none=False))
+                elif isinstance(allergen, dict):
+                    allergens_dicts.append(allergen)
+                else:
+                    raise ValueError(f"Unexpected allergen type: {type(allergen)}")
+            allergens_json = json.dumps(allergens_dicts)
 
     if link:
         # Update existing
@@ -1499,6 +1509,11 @@ async def get_recipe_with_details(
                     "code": code,
                     "name": name,
                     "certainty": certainty_value,
+                    "canonical_code": canonical.slug if canonical else None,
+                    "canonical_name": canonical.label if canonical else None,
+                    "family_code": canonical.family_slug if canonical and hasattr(canonical, 'family_slug') else None,
+                    "family_name": canonical.family_label if canonical and hasattr(canonical, 'family_label') else None,
+                    "marker_type": None,
                 }
             )
 
@@ -1534,6 +1549,11 @@ async def get_recipe_with_details(
                         "code": code,
                         "name": canonical.label,
                         "certainty": certainty_to_ui(certainty),
+                        "canonical_code": canonical.slug if canonical else None,
+                        "canonical_name": canonical.label if canonical else None,
+                        "family_code": canonical.family_slug if canonical and hasattr(canonical, 'family_slug') else None,
+                        "family_name": canonical.family_label if canonical and hasattr(canonical, 'family_label') else None,
+                        "marker_type": None,
                     }
                 )
 

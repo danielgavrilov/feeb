@@ -1048,6 +1048,16 @@ async def update_recipe_ingredient(
     
     Returns success status.
     """
+    # Debug logging
+    print(f"DEBUG: PUT /recipes/{recipe_id}/ingredients/{ingredient_id}")
+    print(f"DEBUG: Path ingredient_id: {ingredient_id}")
+    print(f"DEBUG: Request body ingredient_id: {ingredient_data.ingredient_id}")
+    print(f"DEBUG: Request data: {ingredient_data.model_dump()}")
+    print(f"DEBUG: Allergens data: {ingredient_data.allergens}")
+    if ingredient_data.allergens:
+        for i, allergen in enumerate(ingredient_data.allergens):
+            print(f"DEBUG: Allergen {i}: {allergen.model_dump()}")
+    
     # Verify recipe exists
     recipe = await dal.get_recipe_by_id(session, recipe_id)
     if not recipe:
@@ -1061,18 +1071,24 @@ async def update_recipe_ingredient(
         else {}
     ) if substitution_provided else None
 
-    await dal.add_recipe_ingredient(
-        session,
-        recipe_id=recipe_id,
-        ingredient_id=ingredient_id,
-        quantity=ingredient_data.quantity,
-        unit=ingredient_data.unit,
-        notes=ingredient_data.notes,
-        allergens=ingredient_data.allergens,
-        confirmed=ingredient_data.confirmed if ingredient_data.confirmed is not None else False,
-        substitution=substitution_payload,
-        substitution_provided=substitution_provided,
-    )
+    try:
+        await dal.add_recipe_ingredient(
+            session,
+            recipe_id=recipe_id,
+            ingredient_id=ingredient_id,
+            quantity=ingredient_data.quantity,
+            unit=ingredient_data.unit,
+            notes=ingredient_data.notes,
+            allergens=ingredient_data.allergens,
+            confirmed=ingredient_data.confirmed if ingredient_data.confirmed is not None else False,
+            substitution=substitution_payload,
+            substitution_provided=substitution_provided,
+        )
+    except Exception as e:
+        print(f"ERROR in add_recipe_ingredient: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to update ingredient: {str(e)}")
 
     target_ingredient_id = ingredient_data.ingredient_id or ingredient_id
     if ingredient_data.ingredient_name:

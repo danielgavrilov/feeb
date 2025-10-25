@@ -3,17 +3,7 @@ import type { SavedDish } from "@/components/RecipeBook";
 
 export const mapIngredientAllergens = (
   allergens: RecipeIngredient["allergens"] | undefined,
-) =>
-  (allergens ?? []).map((allergen) => ({
-    code: allergen.code,
-    name: allergen.name,
-    certainty: allergen.certainty,
-    canonicalCode: allergen.canonical_code ?? null,
-    canonicalName: allergen.canonical_name ?? null,
-    familyCode: allergen.family_code ?? null,
-    familyName: allergen.family_name ?? null,
-    markerType: allergen.marker_type ?? null,
-  }));
+) => allergens ?? [];
 
 export const mapRecipeToSavedDish = (
   recipe: Recipe,
