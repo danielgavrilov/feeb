@@ -846,20 +846,18 @@ async def _ensure_archive_section(
 
     archive_name = "Archive"
 
+    # Find archive section by name
     result = await session.execute(
         select(MenuSection)
         .where(
             MenuSection.menu_id == menu.id,
-            MenuSection.is_archive.is_(True),
+            func.lower(MenuSection.name) == archive_name.lower(),
         )
         .limit(1)
     )
     archive = result.scalar_one_or_none()
 
     if archive:
-        archive.is_archive = True
-        if archive.name.strip().lower() != archive_name.lower():
-            archive.name = archive_name
         if archive.position is None:
             archive.position = 9999
         return archive
@@ -868,7 +866,6 @@ async def _ensure_archive_section(
         menu_id=menu.id,
         name=archive_name,
         position=9999,
-        is_archive=True,
     )
     session.add(archive)
     await session.flush()
@@ -967,7 +964,8 @@ async def save_restaurant_menu_sections(
             if not section or section.menu_id != menu.id:
                 raise ValueError("Invalid menu section id for restaurant")
 
-            if section.is_archive:
+            # Skip archive sections (identified by name)
+            if section.name.strip().lower() == reserved_name.lower():
                 section.position = desired_position
                 retained_ids.append(section.id)
                 position_counter = max(position_counter, desired_position + 1)
@@ -1645,7 +1643,6 @@ async def get_recipe_with_details(
                 "section_id": section.id,
                 "section_name": section.name,
                 "section_position": section.position,
-                "is_archive": section.is_archive,
                 "recipe_position": link.position,
             }
         )

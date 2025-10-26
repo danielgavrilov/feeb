@@ -186,7 +186,7 @@ class MenuUploadService:
                 options=options,
                 special_notes=notes,
                 prominence_score=prominence,
-                confirmed=False,
+                status="needs_review",
                 menu_section_ids=[section.id] if section else None,
             )
             created_recipes.append(
@@ -219,7 +219,7 @@ class MenuUploadService:
             await session.flush()
 
             try:
-                # Smart approach: test with small batch first, then process all if successful
+                # Fail quickly: test with small batch first, then process all if successful
                 # This saves tokens while still being safe
                 test_batch_size = 5
                 
