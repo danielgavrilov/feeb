@@ -98,8 +98,6 @@ export interface SavedDish {
   compliance: Record<string, boolean>;
   image?: string;
   status?: "needs_review" | "confirmed" | "live";
-  confirmed: boolean;
-  isOnMenu?: boolean;
 }
 
 type SectionDefinition = {
@@ -144,24 +142,13 @@ const ensureArchiveSection = (sections: SectionDefinition[]): SectionDefinition[
   return [...sections, archive];
 };
 
-const isDishOnMenu = (dish: SavedDish) => normalizeBoolean(dish.isOnMenu);
+const isDishOnMenu = (dish: SavedDish) => dish.status === "live";
 
-const isDishConfirmed = (dish: SavedDish) => normalizeBoolean(dish.confirmed);
+const isDishConfirmed = (dish: SavedDish) => dish.status === "confirmed" || dish.status === "live";
 
-const getDishStatus = (dish: SavedDish): "live" | "reviewed" | "needs_review" => {
-  // If status is directly available, use it (with mapping for "confirmed" -> "reviewed")
-  if (dish.status) {
-    if (dish.status === "live") return "live";
-    if (dish.status === "confirmed") return "reviewed";
-    if (dish.status === "needs_review") return "needs_review";
-  }
-  
-  // Fallback to derived status from boolean fields (for backward compatibility)
-  if (isDishOnMenu(dish)) {
-    return "live";
-  }
-
-  return isDishConfirmed(dish) ? "reviewed" : "needs_review";
+const getDishStatus = (dish: SavedDish): "live" | "confirmed" | "needs_review" => {
+  // Return the status directly from the dish
+  return dish.status || "needs_review";
 };
 
 export const getDishAllergenDefinitions = (
@@ -213,7 +200,7 @@ export const getDishAllergenDefinitions = (
 };
 
 const RECIPE_STATUS_OPTIONS: Array<{
-  value: "all" | "reviewed" | "needs_review" | "live";
+  value: "all" | "confirmed" | "needs_review" | "live";
   label: string;
   pillClassName: string;
 }> = [
@@ -230,8 +217,8 @@ const RECIPE_STATUS_OPTIONS: Array<{
       "bg-amber-100 text-amber-900 border-amber-200 dark:bg-amber-500/15 dark:text-amber-100 dark:border-amber-300/40",
   },
   {
-    value: "reviewed",
-    label: "Reviewed",
+    value: "confirmed",
+    label: "Confirmed",
     pillClassName:
       "bg-emerald-100 text-emerald-900 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-100 dark:border-emerald-300/40",
   },
@@ -267,7 +254,7 @@ export const RecipeBook = ({
   const isMobile = useIsMobile();
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [recipeStatusFilter, setRecipeStatusFilter] =
-    useState<"all" | "reviewed" | "needs_review" | "live">("all");
+    useState<"all" | "confirmed" | "needs_review" | "live">("all");
   const [showIngredients, setShowIngredients] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState<RecipeBulkAction | null>(null);
@@ -390,14 +377,16 @@ export const RecipeBook = ({
   }, [dishes]);
 
   const statusFilteredDishes = useMemo(
-    () =>
-      dishes.filter((dish) => {
+    () => {
+      return dishes.filter((dish) => {
         if (recipeStatusFilter === "all") {
           return true;
         }
 
-        return getDishStatus(dish) === recipeStatusFilter;
-      }),
+        const dishStatus = getDishStatus(dish);
+        return dishStatus === recipeStatusFilter;
+      });
+    },
     [dishes, recipeStatusFilter],
   );
 
@@ -553,8 +542,12 @@ export const RecipeBook = ({
         order.forEach((dishId) => {
           const dish = dishMap.get(dishId);
           if (dish && dish.menuSectionId === sectionId && !seen.has(dish.id)) {
-            orderedDishes.push(dish);
-            seen.add(dish.id);
+            // Only include dishes that pass the status filter
+            const isInFilteredDishes = statusFilteredDishes.some(d => d.id === dish.id);
+            if (isInFilteredDishes) {
+              orderedDishes.push(dish);
+              seen.add(dish.id);
+            }
           }
         });
 
@@ -1090,7 +1083,7 @@ export const RecipeBook = ({
             </div>
             <Select
               value={recipeStatusFilter}
-              onValueChange={(value: "all" | "reviewed" | "needs_review" | "live") => setRecipeStatusFilter(value)}
+              onValueChange={(value: "all" | "confirmed" | "needs_review" | "live") => setRecipeStatusFilter(value)}
             >
               <SelectTrigger
                 id="recipe-status-filter"
@@ -1363,7 +1356,7 @@ export const RecipeBook = ({
                       };
                     }
 
-                    if (statusKey === "reviewed") {
+                    if (statusKey === "confirmed") {
                       return {
                         label: isMenuUpdating ? "Adding..." : "Add to menu",
                         className: cn(

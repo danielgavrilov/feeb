@@ -285,7 +285,7 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
     };
   }, [restaurantId]);
 
-  const menuDishes = useMemo(() => dishes.filter((dish) => normalizeBoolean(dish.isOnMenu)), [dishes]);
+  const menuDishes = useMemo(() => dishes.filter((dish) => dish.status === "live"), [dishes]);
 
   const normalizedIngredientMap = useMemo(() => {
     const entries = new Map<string, string[]>();

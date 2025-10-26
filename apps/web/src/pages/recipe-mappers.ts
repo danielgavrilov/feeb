@@ -9,32 +9,30 @@ export const mapIngredientAllergens = (
 export const mapRecipeToSavedDish = (
   recipe: Recipe,
   deriveMenuSectionKey: (recipe: Recipe) => string,
-): SavedDish => ({
-  id: recipe.id.toString(),
-  name: recipe.name,
-  menuSectionId: deriveMenuSectionKey(recipe),
-  description: recipe.description || "",
-  servingSize: recipe.serving_size || "1",
-  price: recipe.price || "",
-  ingredients: recipe.ingredients.map((ingredient) => ({
-    name: ingredient.ingredient_name,
-    quantity: ingredient.quantity?.toString() || "",
-    unit: ingredient.unit || "",
-    confirmed: normalizeBoolean(ingredient.confirmed),
-    ingredientId: ingredient.ingredient_id,
-    originalName: ingredient.ingredient_name,
-    allergens: mapIngredientAllergens(ingredient.allergens),
-    substitution: ingredient.substitution,
-  })),
-  prepMethod: recipe.instructions || "",
-  compliance: {},
-  image: recipe.image || "",
-  // Pass through the status directly
-  status: recipe.status,
-  // Map status to confirmed and isOnMenu for backward compatibility with SavedDish interface
-  confirmed: recipe.status === "confirmed" || recipe.status === "live",
-  isOnMenu: recipe.status === "live",
-});
+): SavedDish => {
+  return {
+    id: recipe.id.toString(),
+    name: recipe.name,
+    menuSectionId: deriveMenuSectionKey(recipe),
+    description: recipe.description || "",
+    servingSize: recipe.serving_size || "1",
+    price: recipe.price || "",
+    ingredients: recipe.ingredients.map((ingredient) => ({
+      name: ingredient.ingredient_name,
+      quantity: ingredient.quantity?.toString() || "",
+      unit: ingredient.unit || "",
+      confirmed: normalizeBoolean(ingredient.confirmed),
+      ingredientId: ingredient.ingredient_id,
+      originalName: ingredient.ingredient_name,
+      allergens: mapIngredientAllergens(ingredient.allergens),
+      substitution: ingredient.substitution,
+    })),
+    prepMethod: recipe.instructions || "",
+    compliance: {},
+    image: recipe.image || "",
+    status: recipe.status,
+  };
+};
 
 export const mapRecipesToSavedDishes = (
   recipes: Recipe[],

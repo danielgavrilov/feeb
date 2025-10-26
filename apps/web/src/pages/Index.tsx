@@ -970,7 +970,7 @@ const Index = () => {
                   existingDishes={savedDishes.map((dish) => ({
                     id: dish.id,
                     name: dish.name,
-                    confirmed: dish.confirmed,
+                    status: dish.status,
                   }))}
                   selectedDishId={editingDishId ? editingDishId.toString() : null}
                   onClearSelectedDish={handleClearDishSelection}

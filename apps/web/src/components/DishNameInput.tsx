@@ -30,7 +30,7 @@ const FALLBACK_MENU_SECTIONS: StoredMenuSection[] = [
 export interface DishSuggestion {
   id: string;
   name: string;
-  confirmed: boolean;
+  status?: "needs_review" | "confirmed" | "live";
 }
 
 interface DishNameInputProps {
@@ -187,17 +187,23 @@ export const DishNameInput = ({
         return;
       }
 
-      if (!dish.confirmed && existing.confirmed) {
+      const isDishNeedsReview = dish.status === "needs_review";
+      const isExistingNeedsReview = existing.status === "needs_review";
+      
+      if (isDishNeedsReview && !isExistingNeedsReview) {
         uniqueByName.set(trimmedName, dish);
       }
     });
 
     return Array.from(uniqueByName.values()).sort((a, b) => {
-      if (a.confirmed === b.confirmed) {
+      const aIsNeedsReview = a.status === "needs_review";
+      const bIsNeedsReview = b.status === "needs_review";
+      
+      if (aIsNeedsReview === bIsNeedsReview) {
         return a.name.localeCompare(b.name);
       }
 
-      return a.confirmed ? 1 : -1;
+      return aIsNeedsReview ? -1 : 1;
     });
   }, [existingDishes]);
 
