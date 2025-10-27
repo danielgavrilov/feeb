@@ -20,7 +20,8 @@ services:
     healthCheckPath: /health
     buildCommand: uv sync
     startCommand: uv run alembic upgrade head && uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT
-    # Remember to set a DATABASE_URL with "+asyncpg" in protocol
+    # envVars:
+    # - DATABASE_URL: Remember to set a DATABASE_URL with "+asyncpg" in protocol
 
   - type: web
     runtime: static
@@ -33,14 +34,13 @@ services:
     autoDeployTrigger: commit
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
-    envVars:
-      - key: VITE_API_URL
-        value: https://feeb-api.onrender.com
-      - key: VITE_SUPABASE_URL
-        value: https://ikojeprcvldqpfyugbkp.supabase.co
-      - key: VITE_SUPABASE_ANON_KEY
-        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlrb2plcHJjdmxkcXBmeXVnYmtwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA5OTQxODYsImV4cCI6MjA3NjU3MDE4Nn0.aaZigPDqE-vuhK3xKxGdCuXloWQUBl2a-IN-5KPluu0
     routes:
       - type: rewrite
         source: /*
         destination: /index.html
+    # envVars:
+    # - VITE_API_URL
+    # - VITE_SUPABASE_URL
+    # - VITE_SUPABASE_ANON_KEY
+    # - VITE_PUBLIC_POSTHOG_KEY
+    # - VITE_PUBLIC_POSTHOG_HOST
