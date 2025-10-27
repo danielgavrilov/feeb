@@ -1,0 +1,39 @@
+services:
+  - type: web
+    runtime: python
+    name: feeb-api
+    region: frankfurt
+    plan: free
+    branch: deployment
+    rootDir: apps/api
+    buildFilter:
+      paths:
+        - apps/api
+    autoDeployTrigger: commit
+    healthCheckPath: /health
+    buildCommand: uv sync
+    startCommand: uv run alembic upgrade head && uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    # envVars:
+    # - DATABASE_URL: Remember to set a DATABASE_URL with "+asyncpg" in protocol
+
+  - type: web
+    runtime: static
+    name: feeb-web
+    branch: deployment
+    rootDir: apps/web
+    buildFilter:
+      paths:
+        - apps/web
+    autoDeployTrigger: commit
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    # envVars:
+    # - VITE_API_URL
+    # - VITE_SUPABASE_URL
+    # - VITE_SUPABASE_ANON_KEY
+    # - VITE_PUBLIC_POSTHOG_KEY
+    # - VITE_PUBLIC_POSTHOG_HOST

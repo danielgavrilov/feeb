@@ -195,7 +195,7 @@ const dishContainsAllergen = (dish: SavedDish, allergenId: string) => {
   }
 
   return false;
-};
+}
 
 function ingredientMatches(
   term: string,
