@@ -4,7 +4,7 @@ services:
     name: feeb-api
     region: frankfurt
     plan: free
-    branch: deployment
+    branch: main
     rootDir: apps/api
     buildFilter:
       paths:
@@ -19,7 +19,7 @@ services:
   - type: web
     runtime: static
     name: feeb-web
-    branch: deployment
+    branch: main
     rootDir: apps/web
     buildFilter:
       paths:
