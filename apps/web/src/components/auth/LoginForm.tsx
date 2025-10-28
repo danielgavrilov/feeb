@@ -123,7 +123,12 @@ export function LoginForm() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">{t("auth.login.passwordLabel")}</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">{t("auth.login.passwordLabel")}</Label>
+                <Link to="/forgot-password" className="text-sm text-primary hover:underline">
+                  {t("auth.login.forgotPassword")}
+                </Link>
+              </div>
               <Input id="password" type="password" {...register("password")} disabled={isLoading} />
               {errors.password ? <p className="text-sm text-red-500">{errors.password.message}</p> : null}
             </div>
