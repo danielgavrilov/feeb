@@ -22,6 +22,7 @@ import { LandingPage } from "@/components/LandingPage";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useSearchParams } from "react-router-dom";
+import { RestaurantOnboardingDialog } from "@/components/auth/RestaurantOnboardingDialog";
 import {
   CurrencyOption,
   PriceDisplayFormat,
@@ -37,6 +38,7 @@ const Index = () => {
   const {
     restaurant,
     restaurants,
+    loading: restaurantLoading,
     createRestaurant: createRestaurantAPI,
     selectRestaurant,
     updateRestaurant,
@@ -69,6 +71,7 @@ const Index = () => {
   const [showMenuImages, setShowMenuImages] = useState(false);
   const [currency, setCurrency] = useState<CurrencyOption>(DEFAULT_CURRENCY);
   const [priceFormat, setPriceFormat] = useState<PriceDisplayFormat>(DEFAULT_PRICE_FORMAT);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const prepInputRef = useRef<HTMLTextAreaElement | null>(null);
   const manualAddTabSelectionRef = useRef(false);
 
@@ -809,6 +812,15 @@ const Index = () => {
     }
   }, [searchParams, activeTab]);
 
+  // Show onboarding dialog if user has no restaurants
+  useEffect(() => {
+    if (!restaurantLoading && restaurants.length === 0) {
+      setShowOnboarding(true);
+    } else {
+      setShowOnboarding(false);
+    }
+  }, [restaurantLoading, restaurants]);
+
   const handleTabChange = (
     value: (typeof validTabs)[number],
     options?: { resetAddForm?: boolean },
@@ -858,6 +870,11 @@ const Index = () => {
     }
 
     handleTabChange("recipes");
+  };
+
+  const handleCreateRestaurantFromOnboarding = async (name: string) => {
+    await createRestaurantAPI(name);
+    toast.success(`Welcome! ${name} has been created.`);
   };
 
   const canSave = () => {
@@ -1082,6 +1099,11 @@ const Index = () => {
           </TabsContent>
         </Tabs>
       </main>
+
+      <RestaurantOnboardingDialog
+        open={showOnboarding}
+        onCreateRestaurant={handleCreateRestaurantFromOnboarding}
+      />
     </div>
   );
 };
