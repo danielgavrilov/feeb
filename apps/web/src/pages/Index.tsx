@@ -442,19 +442,30 @@ const Index = () => {
     [editingDishId, ingredients],
   );
 
-  const handleAddIngredient = (name: string, quantity: string, unit: string) => {
+  const handleAddIngredient = (
+    name: string,
+    quantity: string,
+    unit: string,
+    allergens: IngredientState["allergens"],
+  ) => {
+    const normalizedAllergens = (allergens ?? []).map((allergen) => ({
+      ...allergen,
+      certainty: allergen.certainty ?? "confirmed",
+    }));
+
     const newIngredient: IngredientState = {
       name,
       quantity,
       unit,
-      confirmed: false,
+      confirmed: true,
       ingredientId: null,
       originalName: name,
-      allergens: [],
+      allergens: normalizedAllergens,
       dietaryInfo: [],
       substitution: undefined,
     };
-    setIngredients([...ingredients, newIngredient]);
+
+    setIngredients((current) => [...current, newIngredient]);
   };
 
   const handleUpdateIngredientAllergens = async (
