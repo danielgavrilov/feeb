@@ -13,7 +13,6 @@ interface DishCardProps {
   highlightedAllergens?: AllergenFilterDefinition[];
   highlightedIngredientTerms?: string[];
   allergenBadges?: Array<{ definition: AllergenFilterDefinition; label: string }>;
-  dietBadges?: AllergenFilterDefinition[];
   permanentDietBadges?: AllergenFilterDefinition[];
   formatPrice: (value: string | number | null | undefined) => string;
 }
@@ -25,7 +24,6 @@ export const DishCard = ({
   highlightedAllergens = [],
   highlightedIngredientTerms = [],
   allergenBadges = [],
-  dietBadges = [],
   permanentDietBadges = [],
   formatPrice,
 }: DishCardProps) => {
@@ -92,30 +90,6 @@ export const DishCard = ({
               </div>
             )}
           </div>
-          {dietBadges.length > 0 && (
-            <div className="flex items-center gap-2 shrink-0">
-              {dietBadges.map((definition) => {
-                const Icon = definition.Icon;
-                return (
-                  <Tooltip key={`diet-${definition.id}`}>
-                    <TooltipTrigger asChild>
-                      <span
-                        role="img"
-                        aria-label={definition.name}
-                        tabIndex={0}
-                        className="inline-flex shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                      >
-                        <Icon className="h-10 w-10" />
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" align="center">
-                      {definition.name}
-                    </TooltipContent>
-                  </Tooltip>
-                );
-              })}
-            </div>
-          )}
         </div>
         {dish.description && (
           <p className="text-sm text-muted-foreground mt-1">{dish.description}</p>
