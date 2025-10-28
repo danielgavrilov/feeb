@@ -33,6 +33,9 @@ const ANIMAL_PRODUCT_ALLERGENS = new Set([
 
 const HIDDEN_DIET_BADGES = new Set(["vegan", "vegetarian"]);
 
+const DEFAULT_NEW_INGREDIENT_QUANTITY = "100";
+const DEFAULT_NEW_INGREDIENT_UNIT = "g";
+
 export const getSortedAllergenCategories = () =>
   [...ALLERGEN_CATEGORIES].sort((a, b) => {
     const aDefinition = allergenFilterMap.get(a.id);
@@ -80,7 +83,12 @@ interface IngredientsListProps {
   onUpdateIngredientUnit: (index: number, unit: string) => void;
   onConfirmIngredient: (index: number) => Promise<void> | void;
   onDeleteIngredient: (index: number) => Promise<void> | void;
-  onAddIngredient: (name: string, quantity: string, unit: string) => void;
+  onAddIngredient: (
+    name: string,
+    quantity: string,
+    unit: string,
+    allergens: IngredientState["allergens"],
+  ) => void;
   onUpdateIngredientAllergen: (
     index: number,
     allergens: Array<{
@@ -116,8 +124,10 @@ export const IngredientsList = ({
   formatPrice,
 }: IngredientsListProps) => {
   const [newName, setNewName] = useState("");
-  const [newQuantity, setNewQuantity] = useState("");
-  const [newUnit, setNewUnit] = useState("g");
+  const [newQuantity, setNewQuantity] = useState(DEFAULT_NEW_INGREDIENT_QUANTITY);
+  const [newQuantityPristine, setNewQuantityPristine] = useState(true);
+  const [newUnit, setNewUnit] = useState(DEFAULT_NEW_INGREDIENT_UNIT);
+  const [newAllergens, setNewAllergens] = useState<IngredientState["allergens"]>([]);
   const [activeSubstitutionIndex, setActiveSubstitutionIndex] = useState<number | null>(null);
   const [substitutionDraft, setSubstitutionDraft] = useState({ alternative: "", surcharge: "" });
   const [expandedAllergenCategory, setExpandedAllergenCategory] = useState<string | null>(null);
@@ -232,14 +242,71 @@ export const IngredientsList = ({
     return formatted;
   };
 
-  const handleAdd = () => {
-    if (newName.trim() && newQuantity.trim()) {
-      onAddIngredient(newName.trim(), newQuantity, newUnit);
-      setNewName("");
+  const handleNewQuantityFocus = () => {
+    if (newQuantityPristine) {
       setNewQuantity("");
-      setNewUnit("g");
     }
   };
+
+  const handleNewQuantityBlur = () => {
+    if (!newQuantity.trim()) {
+      setNewQuantity(DEFAULT_NEW_INGREDIENT_QUANTITY);
+      setNewQuantityPristine(true);
+    }
+  };
+
+  const handleNewQuantityChange = (value: string) => {
+    setNewQuantity(value);
+    setNewQuantityPristine(false);
+  };
+
+  const handleAdd = () => {
+    if (newName.trim() && newQuantity.trim()) {
+      onAddIngredient(newName.trim(), newQuantity, newUnit, newAllergens);
+      setNewName("");
+      setNewQuantity(DEFAULT_NEW_INGREDIENT_QUANTITY);
+      setNewQuantityPristine(true);
+      setNewUnit(DEFAULT_NEW_INGREDIENT_UNIT);
+      setNewAllergens([]);
+      setExpandedAllergenCategory(null);
+    }
+  };
+
+  const toggleNewAllergen = (allergenId: string, fallbackLabel?: string) => {
+    const definition = allergenFilterMap.get(allergenId);
+    const entryCode = definition?.id ?? allergenId;
+    const entryName = definition?.name ?? fallbackLabel ?? allergenId;
+
+    setNewAllergens((current = []) => {
+      const selectionLabel = entryName;
+      const alreadySelected = isAllergenSelected(current, allergenId, selectionLabel);
+
+      if (alreadySelected) {
+        return current.filter((existing) =>
+          !matchesAllergenSelection(existing, allergenId, selectionLabel),
+        );
+      }
+
+      return [
+        ...current,
+        {
+          code: entryCode,
+          name: entryName,
+          certainty: "confirmed",
+        },
+      ];
+    });
+  };
+
+  const newSelectedAllergens = newAllergens ?? [];
+  const newVisibleAllergens = newSelectedAllergens.filter((allergen) => {
+    const normalizedCode = allergen.code?.toLowerCase();
+    const normalizedName = allergen.name?.toLowerCase();
+    return (
+      (normalizedCode ? !HIDDEN_DIET_BADGES.has(normalizedCode) : true) &&
+      (normalizedName ? !HIDDEN_DIET_BADGES.has(normalizedName) : true)
+    );
+  });
   return (
     <div className="space-y-4">
       <Label className="text-xl font-semibold text-foreground">Ingredients</Label>
@@ -745,51 +812,267 @@ export const IngredientsList = ({
 
       <div className="border-t-2 border-border border-dashed pt-4">
         <Label className="mb-3 block text-lg font-semibold text-foreground">Add New Ingredient</Label>
-        <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-end">
-          <div className="flex-1">
-            <Label htmlFor="new-ingredient-name" className="text-sm text-muted-foreground mb-1 block">
-              Name
-            </Label>
-            <Input
-              id="new-ingredient-name"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Ingredient name"
-              className="h-12 text-lg"
-            />
+        <div className="rounded-lg border-2 border-border/70 border-dashed bg-muted/40 p-4">
+          <div className="grid gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)_auto] md:items-start">
+            <div className="space-y-4">
+              <Input
+                id="new-ingredient-name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Ingredient name"
+                className="h-11 text-lg font-medium"
+                aria-label="Ingredient name"
+              />
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <Input
+                  id="new-ingredient-quantity"
+                  type="number"
+                  value={newQuantity}
+                  onChange={(e) => handleNewQuantityChange(e.target.value)}
+                  onFocus={handleNewQuantityFocus}
+                  onBlur={handleNewQuantityBlur}
+                  className="h-11 w-full text-lg font-medium sm:w-28"
+                  aria-label="Quantity"
+                />
+                <Select value={newUnit} onValueChange={setNewUnit}>
+                  <SelectTrigger className="h-11 w-full text-lg sm:w-32">
+                    <SelectValue placeholder="Unit" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="g">g</SelectItem>
+                    <SelectItem value="kg">kg</SelectItem>
+                    <SelectItem value="ml">ml</SelectItem>
+                    <SelectItem value="l">l</SelectItem>
+                    <SelectItem value="tsp">tsp</SelectItem>
+                    <SelectItem value="tbsp">tbsp</SelectItem>
+                    <SelectItem value="cup">cup</SelectItem>
+                    <SelectItem value="pcs">pcs</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-4">
+              <Popover
+                onOpenChange={(open) => {
+                  if (!open) {
+                    setExpandedAllergenCategory(null);
+                  }
+                }}
+              >
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className={`rounded-lg border text-left transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary ${
+                      newVisibleAllergens.length > 0
+                        ? "border-border bg-background"
+                        : "border-border/60 bg-background/60"
+                    } p-4 w-full`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                            Allergens
+                          </p>
+                          {newVisibleAllergens.length > 0 ? (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {[...newVisibleAllergens]
+                                .sort((a, b) => {
+                                  const aDefinition = allergenFilterMap.get(a.code || "");
+                                  const bDefinition = allergenFilterMap.get(b.code || "");
+                                  const aLabel = (
+                                    aDefinition?.name ?? a.name ?? a.code ?? ""
+                                  ).toLowerCase();
+                                  const bLabel = (
+                                    bDefinition?.name ?? b.name ?? b.code ?? ""
+                                  ).toLowerCase();
+                                  return aLabel.localeCompare(bLabel);
+                                })
+                                .map((allergen, allergenIndex) => {
+                                  const definition = allergenFilterMap.get(allergen.code || "");
+                                  const Icon = definition?.Icon;
+                                  const allergenDisplayName =
+                                    allergen.name ?? definition?.name ?? allergen.code ?? "Allergen";
+
+                                  return (
+                                    <span
+                                      key={`${allergen.code ?? "unknown"}-${allergen.name ?? allergenIndex}`}
+                                      className="inline-flex items-center gap-2 rounded-full border border-secondary/40 bg-secondary/15 px-3 py-1 text-xs"
+                                    >
+                                      {Icon && <Icon className="h-4 w-4 text-secondary" />}
+                                      <span className="text-sm font-semibold text-secondary">
+                                        {allergenDisplayName}
+                                      </span>
+                                    </span>
+                                  );
+                                })}
+                            </div>
+                          ) : (
+                            <p className="mt-3 text-sm text-muted-foreground">Click to select allergens</p>
+                          )}
+                        </div>
+                      </div>
+                      <ChevronsUpDown className="mt-1 h-5 w-5 flex-shrink-0 text-muted-foreground" />
+                    </div>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72" align="end">
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Select allergens</p>
+                      <div className="mt-2 max-h-56 space-y-2 overflow-y-auto pr-1">
+                        {sortedAllergenCategories.map((category) => {
+                          const definition = allergenFilterMap.get(category.id);
+                          const label = definition?.name ?? category.label ?? category.id;
+                          const Icon = definition?.Icon;
+                          const hasChildren =
+                            Array.isArray(category.children) && category.children.length > 0;
+                          const isExpanded = expandedAllergenCategory === category.id;
+                          const selectedChildCount = hasChildren
+                            ? category.children?.reduce((count, child) => {
+                                const childDefinition = allergenFilterMap.get(child.id);
+                                const childLabel = childDefinition?.name ?? child.label ?? child.id;
+                                return isAllergenSelected(newSelectedAllergens, child.id, childLabel)
+                                  ? count + 1
+                                  : count;
+                              }, 0) ?? 0
+                            : 0;
+
+                          if (hasChildren) {
+                            return (
+                              <div key={category.id} className="rounded-md">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setExpandedAllergenCategory((current) =>
+                                      current === category.id ? null : category.id,
+                                    )
+                                  }
+                                  className="flex w-full items-center justify-between rounded-md px-2 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted/40"
+                                >
+                                  <span className="flex items-center gap-2">
+                                    {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
+                                    <span>{label}</span>
+                                  </span>
+                                  <span className="flex items-center gap-2">
+                                    {selectedChildCount > 0 && (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[10px] font-semibold uppercase tracking-wide"
+                                      >
+                                        {selectedChildCount} selected
+                                      </Badge>
+                                    )}
+                                    <ChevronRight
+                                      className={`h-4 w-4 transition-transform ${
+                                        isExpanded ? "rotate-90" : ""
+                                      }`}
+                                    />
+                                  </span>
+                                </button>
+                                {isExpanded && (
+                                  <div className="mt-2 space-y-2 pl-6">
+                                    {[...(category.children ?? [])]
+                                      .sort((aChild, bChild) => {
+                                        const aDefinition = allergenFilterMap.get(aChild.id);
+                                        const bDefinition = allergenFilterMap.get(bChild.id);
+                                        const aLabel = (
+                                          aDefinition?.name ?? aChild.label ?? aChild.id
+                                        ).toLowerCase();
+                                        const bLabel = (
+                                          bDefinition?.name ?? bChild.label ?? bChild.id
+                                        ).toLowerCase();
+                                        return aLabel.localeCompare(bLabel);
+                                      })
+                                      .map((child) => {
+                                        const childDefinition = allergenFilterMap.get(child.id);
+                                        const childLabel = childDefinition?.name ?? child.label ?? child.id;
+                                        const childChecked = isAllergenSelected(
+                                          newSelectedAllergens,
+                                          child.id,
+                                          childLabel,
+                                        );
+                                        const showAnimalBadge =
+                                          isAnimalProductAllergen(child.id) && childChecked;
+                                        const checkboxId = `new-ingredient-allergen-${toInputId(child.id)}`;
+                                        return (
+                                          <label
+                                            key={child.id}
+                                            htmlFor={checkboxId}
+                                            className="flex items-center justify-between gap-2 rounded-md px-2 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/40"
+                                          >
+                                            <span className="flex items-center gap-2">
+                                              <Checkbox
+                                                id={checkboxId}
+                                                checked={childChecked}
+                                                onCheckedChange={() => toggleNewAllergen(child.id, childLabel)}
+                                              />
+                                              <span>{childLabel}</span>
+                                            </span>
+                                            {showAnimalBadge && (
+                                              <Badge
+                                                variant="destructive"
+                                                className="text-[10px] font-semibold uppercase tracking-wide"
+                                              >
+                                                Animal product
+                                              </Badge>
+                                            )}
+                                          </label>
+                                        );
+                                      })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          const isChecked = isAllergenSelected(newSelectedAllergens, category.id, label);
+                          const checkboxId = `new-ingredient-allergen-${toInputId(category.id)}`;
+                          const showAnimalBadge = isAnimalProductAllergen(category.id) && isChecked;
+
+                          return (
+                            <label
+                              key={category.id}
+                              htmlFor={checkboxId}
+                              className="flex items-center justify-between gap-2 rounded-md px-2 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/40"
+                            >
+                              <span className="flex items-center gap-2">
+                                <Checkbox
+                                  checked={isChecked}
+                                  onCheckedChange={() => toggleNewAllergen(category.id, label)}
+                                  id={checkboxId}
+                                />
+                                {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
+                                <span>{label}</span>
+                              </span>
+                              {showAnimalBadge && (
+                                <Badge
+                                  variant="destructive"
+                                  className="text-[10px] font-semibold uppercase tracking-wide"
+                                >
+                                  Animal product
+                                </Badge>
+                              )}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end md:flex-col md:items-end md:gap-3">
+              <Button
+                onClick={handleAdd}
+                className="h-11 w-full sm:w-12"
+                size="icon"
+                disabled={!newName.trim() || !newQuantity.trim()}
+              >
+                <Plus className="w-6 h-6" />
+              </Button>
+            </div>
           </div>
-          <div className="sm:w-28">
-            <Label htmlFor="new-ingredient-quantity" className="mb-1 block text-sm text-muted-foreground">
-              Quantity
-            </Label>
-            <Input
-              id="new-ingredient-quantity"
-              type="number"
-              value={newQuantity}
-              onChange={(e) => setNewQuantity(e.target.value)}
-              placeholder="100"
-              className="h-12 text-lg"
-            />
-          </div>
-          <div className="sm:w-24">
-            <Label htmlFor="new-ingredient-unit" className="mb-1 block text-sm text-muted-foreground">
-              Unit
-            </Label>
-            <Input
-              id="new-ingredient-unit"
-              value={newUnit}
-              onChange={(e) => setNewUnit(e.target.value)}
-              placeholder="g"
-              className="h-12 text-lg"
-            />
-          </div>
-          <Button
-            onClick={handleAdd}
-            className="h-12 w-full sm:w-12"
-            size="icon"
-          >
-            <Plus className="w-6 h-6" />
-          </Button>
         </div>
       </div>
     </div>

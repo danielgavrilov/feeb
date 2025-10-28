@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from .database import get_db
 from .models import (
+    IngredientCreate,
+    IngredientResponse,
     IngredientWithAllergens,
     HealthResponse,
     UserCreate,
@@ -84,6 +86,48 @@ async def get_ingredient(
         raise HTTPException(status_code=404, detail=f"Ingredient '{name}' not found")
     
     return result
+
+
+@router.post("/ingredients", response_model=IngredientResponse)
+async def create_ingredient(
+    ingredient_data: IngredientCreate,
+    session: AsyncSession = Depends(get_db)
+):
+    """
+    Create a new ingredient.
+    
+    - **code**: Unique ingredient code (e.g., "user:12345")
+    - **name**: Ingredient name
+    - **source**: Data source (default: "user")
+    
+    Returns the created ingredient with its ID.
+    """
+    ingredient_id = await dal.insert_ingredient(
+        session,
+        code=ingredient_data.code,
+        name=ingredient_data.name,
+        source=ingredient_data.source,
+    )
+    await session.commit()
+    
+    # Fetch the created ingredient to return
+    from .models import Ingredient
+    from sqlalchemy import select
+    result = await session.execute(
+        select(Ingredient).where(Ingredient.id == ingredient_id)
+    )
+    ingredient = result.scalar_one_or_none()
+    
+    if not ingredient:
+        raise HTTPException(status_code=500, detail="Failed to create ingredient")
+    
+    return IngredientResponse(
+        id=ingredient.id,
+        code=ingredient.code,
+        name=ingredient.name,
+        source=ingredient.source,
+        last_updated=ingredient.last_updated,
+    )
 
 
 @router.get("/health", response_model=HealthResponse)

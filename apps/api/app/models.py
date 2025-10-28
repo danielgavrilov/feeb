@@ -334,8 +334,16 @@ class AllergenBadgeResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class IngredientCreate(BaseModel):
+    """Request model for creating an ingredient."""
+    code: str
+    name: str
+    source: str = "user"
+
+
 class IngredientResponse(BaseModel):
     """Ingredient information in API responses."""
+    id: int
     code: str
     name: str
     source: str
