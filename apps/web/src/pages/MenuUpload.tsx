@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type ComponentType, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { Camera, FileText, Link2, NotebookPen, Loader2 } from "lucide-react";
+import { FileText, Link2, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,7 @@ const optionConfig: Array<{
   description: string;
   icon: ComponentType<{ className?: string }>;
   accept?: string;
+  isBeta?: boolean;
 }> = [
   {
     id: "pdf",
@@ -31,23 +32,11 @@ const optionConfig: Array<{
     accept: "application/pdf",
   },
   {
-    id: "image",
-    title: "Snap or upload photos",
-    description: "Take a photo of your menu or upload existing imagery.",
-    icon: Camera,
-    accept: "image/*",
-  },
-  {
     id: "url",
     title: "Link to an online menu",
-    description: "Paste a URL and we’ll fetch the latest version for you.",
+    description: "Paste a URL and we'll fetch the latest version for you.",
     icon: Link2,
-  },
-  {
-    id: "manual",
-    title: "Enter dishes manually",
-    description: "Use our guided Add Dish flow to capture each recipe.",
-    icon: NotebookPen,
+    isBeta: true,
   },
 ];
 
@@ -119,6 +108,7 @@ const MenuUploadPage = () => {
   const navigate = useNavigate();
   const { restaurant, restaurants, selectRestaurant, refreshRestaurants } = useRestaurant();
   const { backendUserId } = useAuth();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedRestaurantId, setSelectedRestaurantId] = useState<number | null>(restaurant?.id ?? null);
   const [newRestaurantName, setNewRestaurantName] = useState("");
@@ -233,6 +223,13 @@ const MenuUploadPage = () => {
     setProgressPercent(0);
     setProgressIndex(0);
     setProgressComplete(false);
+    
+    // Auto-trigger file picker for PDF
+    if (method === "pdf") {
+      setTimeout(() => {
+        fileInputRef.current?.click();
+      }, 100);
+    }
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -583,18 +580,35 @@ const MenuUploadPage = () => {
                           isActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/60"
                         }`}
                       >
-                        <div className="flex items-start gap-3">
-                          <span
-                            className={`flex h-10 w-10 items-center justify-center rounded-full border ${
-                              isActive ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
-                            }`}
-                          >
-                            <Icon className="h-5 w-5" />
-                          </span>
-                          <div className="space-y-1">
-                            <p className="text-base font-semibold text-foreground">{option.title}</p>
-                            <p className="text-sm text-muted-foreground">{option.description}</p>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-3">
+                            <span
+                              className={`flex h-10 w-10 items-center justify-center rounded-full border ${
+                                isActive ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
+                              }`}
+                            >
+                              <Icon className="h-5 w-5" />
+                            </span>
+                            <div className="space-y-1">
+                              <p className="text-base font-semibold text-foreground">{option.title}</p>
+                              <p className="text-sm text-muted-foreground">{option.description}</p>
+                              {option.isBeta && (
+                                <p className="text-xs text-amber-600">
+                                  Beta version - may generate incorrect results
+                                </p>
+                              )}
+                            </div>
                           </div>
+                          {option.id === "pdf" && (
+                            <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-200">
+                              Recommended
+                            </Badge>
+                          )}
+                          {option.isBeta && (
+                            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                              Beta
+                            </Badge>
+                          )}
                         </div>
                       </button>
                     );
@@ -603,54 +617,51 @@ const MenuUploadPage = () => {
               </div>
 
               {selectedMethod && selectedMethod !== "manual" ? (
-                <div className="grid gap-6 md:grid-cols-[1fr,1.5fr]">
-                  <div className="space-y-3">
-                    <h2 className="text-lg font-semibold text-foreground">Provide your menu</h2>
-                    <p className="text-sm text-muted-foreground">
-                      We’ll store a copy securely, send it to our LLM extraction service, and return structured dishes within minutes.
-                    </p>
-                  </div>
-
-                  <div className="space-y-4">
-                    {methodRequiresFile(selectedMethod) ? (
+                methodRequiresFile(selectedMethod) ? (
+                  <>
+                    {file && (
                       <div className="space-y-2">
-                        <Label className="text-sm font-medium text-muted-foreground">Upload file</Label>
+                        <Label className="text-sm font-medium text-muted-foreground">Selected file</Label>
                         <Input
-                          type="file"
-                          accept={activeOption?.accept}
-                          capture={selectedMethod === "image" ? "environment" : undefined}
-                          onChange={event => {
-                            const selected = event.target.files?.[0] ?? null;
-                            setFile(selected);
-                          }}
+                          type="text"
+                          value={file.name}
+                          readOnly
                           className="h-12"
                         />
                         <p className="text-xs text-muted-foreground">
-                          {selectedMethod === "pdf"
-                            ? "Accepted format: PDF up to 10MB"
-                            : "Accepted formats: JPG, PNG or HEIC up to 10MB"}
+                          Accepted format: PDF up to 10MB
                         </p>
                       </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium text-muted-foreground">Menu URL</Label>
-                        <Input
-                          type="url"
-                          placeholder="https://restaurant.com/menu"
-                          value={urlValue}
-                          onChange={event => setUrlValue(event.target.value)}
-                          className="h-12"
-                        />
-                      </div>
                     )}
+                    <Input
+                      ref={fileInputRef}
+                      type="file"
+                      accept={activeOption?.accept}
+                      onChange={event => {
+                        const selected = event.target.files?.[0] ?? null;
+                        setFile(selected);
+                      }}
+                      className="hidden"
+                    />
+                  </>
+                ) : (
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-muted-foreground">Menu URL</Label>
+                    <Input
+                      type="url"
+                      placeholder="https://restaurant.com/menu"
+                      value={urlValue}
+                      onChange={event => setUrlValue(event.target.value)}
+                      className="h-12"
+                    />
                   </div>
-                </div>
+                )
               ) : null}
 
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
               {selectedMethod && selectedMethod !== "manual" ? (
-                <div className="flex items-center gap-3">
+                <div className="flex items-center justify-end">
                   <Button type="submit" disabled={isSubmitting} className="h-12 px-8 text-base font-semibold">
                     {isSubmitting ? (
                       <span className="flex items-center gap-2">
@@ -660,14 +671,6 @@ const MenuUploadPage = () => {
                     ) : (
                       "Upload menu"
                     )}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => navigate("/?tab=add")}
-                    className="h-12 px-6"
-                  >
-                    Add dishes manually
                   </Button>
                 </div>
               ) : null}
