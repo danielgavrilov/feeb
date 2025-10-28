@@ -270,7 +270,7 @@ export const ALLERGEN_FILTERS: AllergenFilterDefinition[] = [
   },
   {
     id: "vegan",
-    name: "Vegan-friendly",
+    name: "Vegan",
     keywords: ["vegan", "plant-based", "plant based", "no animal"],
     codes: ["vegan", "plant-based", "plant based", "no animal"],
     Icon: VeganIcon,
@@ -278,7 +278,7 @@ export const ALLERGEN_FILTERS: AllergenFilterDefinition[] = [
   },
   {
     id: "vegetarian",
-    name: "Vegetarian-friendly",
+    name: "Vegetarian",
     keywords: ["vegetarian", "ovo-lacto", "ovo lacto", "meat-free"],
     codes: ["vegetarian", "ovo-lacto", "ovo lacto", "meat-free"],
     Icon: VegetarianIcon,

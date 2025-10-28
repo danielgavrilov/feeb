@@ -345,6 +345,69 @@ pytest tests/ -v
 - **Web README**: `/apps/web/README.md` - Frontend setup
 - **Scripts README**: `/apps/api/scripts/README.md` - Script documentation
 
+## Security Guidelines for AI Agents
+
+**⚠️ CRITICAL: Never expose secrets in documentation or code commits!**
+
+### Documentation File Location
+
+When creating debug, fix, or session documentation:
+
+**✅ DO:**
+- Save ALL documentation files to `.internal-docs/` directory
+- Use naming: `FEATURE_NAME_FIX.md`, `FEATURE_NAME_COMPLETE.md`, etc.
+- These files are automatically excluded from git via `.gitignore`
+
+**❌ DON'T:**
+- Save documentation files to repository root
+- Create `*_FIX.md`, `*_COMPLETE.md`, `*_SUMMARY.md` files outside `.internal-docs/`
+- Assume documentation files will be manually cleaned up
+
+### Secret Redaction
+
+When including configuration examples or debugging output:
+
+**✅ DO - Use placeholders:**
+```env
+GEMINI_API_KEY=your_api_key_here
+DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/feeb_db
+VITE_SUPABASE_URL=your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your_anon_key_here
+```
+
+**❌ DON'T - Include actual values:**
+```env
+# WRONG - Never do this!
+GEMINI_API_KEY=sd;gknaweognwoNGQOWN4&*#NNWFEF
+DATABASE_URL=postgresql://admin:secretpass123@prod.example.com/db
+```
+
+### Secret Patterns to Always Redact
+
+- **API Keys**: Google/Gemini API keys, Supabase keys, OpenAI keys
+- **Passwords**: Database passwords, service passwords
+- **Tokens**: Auth tokens, session tokens, JWT tokens
+- **Connection Strings**: Full database URLs with credentials
+- **Email Addresses**: Personal or production email addresses
+- **Domain Names**: Production domains (use `example.com` instead)
+- **IP Addresses**: Production server IPs
+
+### Placeholder Patterns
+
+Use these placeholder formats:
+- API Keys: `your_api_key_here`, `xxx...xxx`, `<REDACTED>`
+- Passwords: `your_password`, `<password>`, `***`
+- URLs: `your-project.supabase.co`, `example.com`, `localhost`
+- Emails: `user@example.com`, `your-email@domain.com`
+
+### Before Creating Any File
+
+Ask yourself:
+1. Does this file contain any secrets or credentials?
+2. Should this file be in `.internal-docs/` instead of repo root?
+3. Have I redacted all sensitive information?
+4. Would I be comfortable with this being in a public repository?
+
 ## Git Workflow
 
 - Main branch: `main`
@@ -353,6 +416,7 @@ pytest tests/ -v
 - Test changes before committing
 - Python code should be formatted with `black`
 - TypeScript code should pass ESLint
+- **Never commit files containing secrets** - check `.gitignore` includes them
 
 ## Contact & Support
 
@@ -366,3 +430,6 @@ pytest tests/ -v
 
 **Note for AI Agents**: This project is actively developed. Always check the latest README files for updates. When making changes, consider the impact across the monorepo and test both frontend and backend integration.
 
+# instruction for Codex:
+Do not modify or stage changes to `pnpm-lock.yaml` or any lockfiles. 
+If dependencies are needed, assume they are already installed.
