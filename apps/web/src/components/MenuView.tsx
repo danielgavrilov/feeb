@@ -800,7 +800,6 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
                         highlightedAllergens={highlightedAllergens}
                         highlightedIngredientTerms={highlightedIngredientTerms}
                         allergenBadges={showAllergens ? allergenBadges : []}
-                        dietBadges={showAllergens ? dietBadges : []}
                         permanentDietBadges={dietBadges}
                         formatPrice={formatPrice}
                       />
