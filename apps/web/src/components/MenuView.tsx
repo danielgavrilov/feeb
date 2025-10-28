@@ -159,14 +159,6 @@ const dishContainsAllergen = (dish: SavedDish, allergenId: string) => {
 
   const summary = getDishAllergenSummary(dish);
 
-  if (definition.id === "vegan") {
-    return !isVeganFriendly(summary);
-  }
-
-  if (definition.id === "vegetarian") {
-    return !isVegetarianFriendly(summary);
-  }
-
   const normalizedCodeSet = buildNormalizedCodeSet(definition);
   const normalizedKeywordSet = buildNormalizedKeywordSet(definition);
 
@@ -426,6 +418,38 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
   const hasActiveFilters = selectedAllergens.length > 0 || ingredientSearchTerms.length > 0;
 
   const handleSelectAllergen = (allergenId: string) => {
+    // Handle dietary filters as automatic multi-selects
+    if (allergenId === "vegan") {
+      // Vegan filter: automatically select all non-vegan allergens
+      const nonVeganAllergens = ["meat", "honey", "fish", "eggs", "crustaceans", "molluscs", "milk"];
+      setSelectedAllergens((prev) => {
+        const newSelection = [...prev];
+        nonVeganAllergens.forEach((allergen) => {
+          if (!newSelection.includes(allergen)) {
+            newSelection.push(allergen);
+          }
+        });
+        return newSelection;
+      });
+      return;
+    }
+
+    if (allergenId === "vegetarian") {
+      // Vegetarian filter: automatically select all non-vegetarian allergens
+      const nonVegetarianAllergens = ["meat", "fish", "crustaceans", "molluscs"];
+      setSelectedAllergens((prev) => {
+        const newSelection = [...prev];
+        nonVegetarianAllergens.forEach((allergen) => {
+          if (!newSelection.includes(allergen)) {
+            newSelection.push(allergen);
+          }
+        });
+        return newSelection;
+      });
+      return;
+    }
+
+    // Standard allergen selection
     setSelectedAllergens((prev) => (prev.includes(allergenId) ? prev : [...prev, allergenId]));
   };
 
@@ -777,6 +801,7 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
                         highlightedIngredientTerms={highlightedIngredientTerms}
                         allergenBadges={showAllergens ? allergenBadges : []}
                         dietBadges={showAllergens ? dietBadges : []}
+                        permanentDietBadges={dietBadges}
                         formatPrice={formatPrice}
                       />
                     );

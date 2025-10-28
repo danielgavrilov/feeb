@@ -14,6 +14,7 @@ interface DishCardProps {
   highlightedIngredientTerms?: string[];
   allergenBadges?: Array<{ definition: AllergenFilterDefinition; label: string }>;
   dietBadges?: AllergenFilterDefinition[];
+  permanentDietBadges?: AllergenFilterDefinition[];
   formatPrice: (value: string | number | null | undefined) => string;
 }
 
@@ -25,6 +26,7 @@ export const DishCard = ({
   highlightedIngredientTerms = [],
   allergenBadges = [],
   dietBadges = [],
+  permanentDietBadges = [],
   formatPrice,
 }: DishCardProps) => {
   const shouldShowImage = showImage && Boolean(dish.image);
@@ -63,9 +65,35 @@ export const DishCard = ({
 
       <div className="flex-1 space-y-3 p-4">
         <div className="flex items-start justify-between gap-3">
-          <h3 className="font-semibold text-lg text-foreground break-words flex-1">{dish.name}</h3>
+          <div className="flex items-start gap-2 flex-1">
+            <h3 className="font-semibold text-lg text-foreground break-words flex-1">{dish.name}</h3>
+            {permanentDietBadges.length > 0 && (
+              <div className="flex items-center gap-1 shrink-0">
+                {permanentDietBadges.map((definition) => {
+                  const Icon = definition.Icon;
+                  return (
+                    <Tooltip key={`permanent-diet-${definition.id}`}>
+                      <TooltipTrigger asChild>
+                        <span
+                          role="img"
+                          aria-label={definition.name}
+                          tabIndex={0}
+                          className="inline-flex shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                        >
+                          <Icon className="h-5 w-5" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" align="center">
+                        {definition.name}
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           {dietBadges.length > 0 && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               {dietBadges.map((definition) => {
                 const Icon = definition.Icon;
                 return (
