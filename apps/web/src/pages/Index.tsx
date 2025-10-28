@@ -143,6 +143,7 @@ const Index = () => {
 
   const totalRecipes = recipes.length;
   const unconfirmedRecipeCount = recipes.filter(recipe => recipe.status === "needs_review").length;
+  const liveDishCount = savedDishes.filter(dish => dish.status === "live").length;
   const hasRecipeImages = recipes.some(recipe => Boolean(recipe.image));
   const menuUploadComplete = totalRecipes > 0 || hasRecipeImages;
   const firstUnconfirmedRecipe = recipes.find(recipe => recipe.status === "needs_review");
@@ -936,9 +937,9 @@ const Index = () => {
               restaurantName={restaurant?.name ?? undefined}
               menuUploaded={menuUploadComplete}
               ingredientsConfirmed={menuUploadComplete && unconfirmedRecipeCount === 0}
-              imagesUploaded={hasRecipeImages}
               totalRecipes={totalRecipes}
               unconfirmedRecipes={unconfirmedRecipeCount}
+              liveDishCount={liveDishCount}
               onReviewFirstRecipe={handleReviewFirstUnconfirmed}
               onStartTour={startTour}
             />

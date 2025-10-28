@@ -12,48 +12,21 @@ interface LandingPageProps {
   menuUploaded?: boolean;
   ingredientsConfirmed?: boolean;
   customisationDone?: boolean;
-  imagesUploaded?: boolean;
-  showImages?: boolean;
   totalRecipes?: number;
   unconfirmedRecipes?: number;
+  liveDishCount?: number;
   onReviewFirstRecipe?: () => void;
   onStartTour?: () => void;
 }
-
-type QuickActionId =
-  | "uploadMenu"
-  | "addDish"
-  | "recipeBook"
-  | "uploadPhotos"
-  | "customiseMenu"
-  | "support"
-  | "pricing";
-
-interface QuickActionConfig {
-  icon: string;
-  href: string;
-  id: QuickActionId;
-}
-
-const QUICK_ACTION_CONFIG: QuickActionConfig[] = [
-  { icon: "📤", href: "/upload", id: "uploadMenu" },
-  { icon: "➕", href: "/add", id: "addDish" },
-  { icon: "📚", href: "/recipes", id: "recipeBook" },
-  { icon: "📸", href: "/photos", id: "uploadPhotos" },
-  { icon: "⚙️", href: "/customise", id: "customiseMenu" },
-  { icon: "💬", href: "/support", id: "support" },
-  { icon: "📈", href: "/pricing", id: "pricing" },
-];
 
 export const LandingPage = ({
   restaurantName,
   menuUploaded: menuUploadedProp,
   ingredientsConfirmed: ingredientsConfirmedProp,
   customisationDone: customisationDoneProp,
-  imagesUploaded: imagesUploadedProp,
-  showImages: showImagesProp,
   totalRecipes = 0,
   unconfirmedRecipes = 0,
+  liveDishCount = 0,
   onReviewFirstRecipe,
   onStartTour,
 }: LandingPageProps) => {
@@ -61,18 +34,8 @@ export const LandingPage = ({
   const effectiveMenuUploaded = menuUploadedProp ?? totalRecipes > 0;
   const effectiveIngredientsConfirmed =
     ingredientsConfirmedProp ?? (effectiveMenuUploaded ? unconfirmedRecipes === 0 : false);
-  const wantsImages = showImagesProp ?? mockRestaurant.showImages;
-  const effectiveImagesUploaded = imagesUploadedProp ?? mockRestaurant.imagesUploaded;
-
-  const quickActions = useMemo(
-    () =>
-      QUICK_ACTION_CONFIG.map((action) => ({
-        ...action,
-        label: t(`landing.quickActions.${action.id}.label`),
-        description: t(`landing.quickActions.${action.id}.description`),
-      })),
-    [t],
-  );
+  const confirmedLiveDishCount = liveDishCount;
+  const hasLiveDishes = confirmedLiveDishCount > 0;
 
   const restaurant = useMemo<RestaurantProgress>(
     () => ({
@@ -80,20 +43,19 @@ export const LandingPage = ({
       menuUploaded: effectiveMenuUploaded,
       ingredientsConfirmed: effectiveIngredientsConfirmed,
       customisationDone: customisationDoneProp ?? mockRestaurant.customisationDone,
-      imagesUploaded: effectiveImagesUploaded,
-      showImages: wantsImages,
     }),
     [
       restaurantName,
       effectiveMenuUploaded,
       effectiveIngredientsConfirmed,
       customisationDoneProp,
-      effectiveImagesUploaded,
-      wantsImages,
     ],
   );
 
-  const { nextStep, isSetupComplete } = useNextStep(restaurant, { unconfirmedRecipes });
+  const { nextStep, isSetupComplete } = useNextStep(restaurant, {
+    unconfirmedRecipes,
+    liveDishCount: confirmedLiveDishCount,
+  });
   const carouselStep = isCarouselStep(nextStep) ? nextStep : null;
   const actionStep = carouselStep ? null : nextStep;
   const [upsellDismissed, setUpsellDismissed] = useState(false);
@@ -120,8 +82,6 @@ export const LandingPage = ({
   const progressSteps = useMemo<ProgressStep[]>(() => {
     if (!restaurant) return [];
 
-    const wantsImagesForStep = restaurant.showImages ?? true;
-
     return [
       {
         key: "upload",
@@ -133,41 +93,44 @@ export const LandingPage = ({
       {
         key: "confirm",
         label: t("landing.progressSteps.confirm"),
-        link: "/ingredients",
+        link: "/?tab=add",
         completed: restaurant.ingredientsConfirmed,
         isCurrent: restaurant.menuUploaded && !restaurant.ingredientsConfirmed,
       },
       {
+        key: "addToMenu",
+        label: t("landing.progressSteps.addToMenu"),
+        link: "/?tab=recipes",
+        completed: hasLiveDishes,
+        isCurrent:
+          restaurant.menuUploaded &&
+          restaurant.ingredientsConfirmed &&
+          !hasLiveDishes,
+      },
+      {
         key: "customise",
         label: t("landing.progressSteps.customise"),
-        link: "/customise",
+        link: "/?tab=settings",
         completed: restaurant.customisationDone,
         isCurrent:
           restaurant.menuUploaded &&
           restaurant.ingredientsConfirmed &&
+          hasLiveDishes &&
           !restaurant.customisationDone,
-      },
-      {
-        key: "photos",
-        label: t("landing.progressSteps.photos"),
-        link: "/photos",
-        completed: !wantsImagesForStep || restaurant.imagesUploaded,
-        isCurrent:
-          restaurant.menuUploaded &&
-          restaurant.ingredientsConfirmed &&
-          restaurant.customisationDone &&
-          wantsImagesForStep &&
-          !restaurant.imagesUploaded,
       },
       {
         key: "live",
         label: t("landing.progressSteps.live"),
-        link: "/menu",
-        completed: isSetupComplete,
-        isCurrent: isSetupComplete,
+        link: "/menu-live",
+        completed: false,
+        isCurrent:
+          restaurant.menuUploaded &&
+          restaurant.ingredientsConfirmed &&
+          hasLiveDishes &&
+          restaurant.customisationDone,
       },
     ];
-  }, [restaurant, t, isSetupComplete]);
+  }, [restaurant, t, hasLiveDishes]);
 
   const completedCount = progressSteps.filter((step) => step.completed).length;
   const progressSummary = t("landing.progressSummary", {
@@ -242,26 +205,6 @@ export const LandingPage = ({
           <ProgressTracker steps={progressSteps} summary={progressSummary} onStartTour={onStartTour} />
         </div>
       </div>
-
-      <section>
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
-          <h2 className="text-lg font-semibold text-foreground">Quick actions</h2>
-          <span className="text-xs text-muted-foreground">Focus on one task at a time</span>
-        </div>
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {quickActions.map(action => (
-            <Link key={action.id} to={action.href}>
-              <Card className="flex h-full flex-col gap-2 rounded-2xl border border-border/70 p-4 transition hover:-translate-y-1 hover:border-emerald-400 hover:shadow-md">
-                <span className="text-2xl" aria-hidden>
-                  {action.icon}
-                </span>
-                <span className="text-sm font-semibold text-foreground">{action.label}</span>
-                <span className="text-xs text-muted-foreground">{action.description}</span>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      </section>
 
       {isSetupComplete && !upsellDismissed ? (
         <section>

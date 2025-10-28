@@ -3,8 +3,6 @@ export interface RestaurantProgress {
   menuUploaded: boolean;
   ingredientsConfirmed: boolean;
   customisationDone: boolean;
-  imagesUploaded: boolean;
-  showImages: boolean;
 }
 
 export const mockRestaurant: RestaurantProgress = {
@@ -12,6 +10,4 @@ export const mockRestaurant: RestaurantProgress = {
   menuUploaded: false,
   ingredientsConfirmed: false,
   customisationDone: false,
-  imagesUploaded: false,
-  showImages: true,
 };
