@@ -59,6 +59,20 @@ export interface RestaurantMenuSectionsResponse {
 
 export type AllergenConfidence = "confirmed" | "likely" | "possible" | "predicted";
 
+export interface Ingredient {
+  id: number;
+  code: string;
+  name: string;
+  source: string;
+  last_updated: string;
+}
+
+export interface CreateIngredientRequest {
+  code: string;
+  name: string;
+  source?: string;
+}
+
 export interface RecipeIngredient {
   ingredient_id: number;
   ingredient_name: string;
@@ -395,6 +409,13 @@ export async function updateRecipe(recipeId: number, updates: UpdateRecipeReques
 export async function deleteRecipe(recipeId: number): Promise<void> {
   return fetchAPI(`/recipes/${recipeId}`, {
     method: 'DELETE',
+  });
+}
+
+export async function createIngredient(ingredient: CreateIngredientRequest): Promise<Ingredient> {
+  return fetchAPI('/ingredients', {
+    method: 'POST',
+    body: JSON.stringify(ingredient),
   });
 }
 

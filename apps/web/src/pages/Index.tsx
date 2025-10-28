@@ -14,6 +14,8 @@ import { useRecipes } from "@/hooks/useRecipes";
 import { useAppTour } from "@/hooks/useAppTour";
 import {
   Recipe,
+  createIngredient as createIngredientAPI,
+  addRecipeIngredient as addRecipeIngredientAPI,
   updateRecipeIngredient as updateRecipeIngredientAPI,
   deleteRecipeIngredient as deleteRecipeIngredientAPI,
   UpdateRecipeIngredientRequest,
@@ -442,7 +444,7 @@ const Index = () => {
     [editingDishId, ingredients],
   );
 
-  const handleAddIngredient = (
+  const handleAddIngredient = async (
     name: string,
     quantity: string,
     unit: string,
@@ -465,7 +467,52 @@ const Index = () => {
       substitution: undefined,
     };
 
-    setIngredients((current) => [...current, newIngredient]);
+    // If editing an existing recipe, immediately create the ingredient and link it
+    if (editingDishId) {
+      try {
+        // Create a unique code for this user-added ingredient
+        const ingredientCode = `user:${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Create the ingredient in the database
+        const createdIngredient = await createIngredientAPI({
+          code: ingredientCode,
+          name,
+          source: "user",
+        });
+
+        // Link it to the recipe
+        await addRecipeIngredientAPI(editingDishId, {
+          ingredient_id: createdIngredient.id,
+          ingredient_name: name,
+          quantity: parseFloat(quantity) || undefined,
+          unit,
+          confirmed: true,
+          allergens: normalizedAllergens.map((a) => ({
+            code: a.code,
+            name: a.name,
+            certainty: a.certainty,
+            canonical_code: a.canonical_code ?? null,
+            canonical_name: a.canonical_name ?? null,
+            family_code: a.family_code ?? null,
+            family_name: a.family_name ?? null,
+            marker_type: a.marker_type ?? null,
+          })),
+        });
+
+        // Add to local state with the ingredient ID
+        newIngredient.ingredientId = createdIngredient.id;
+        setIngredients((current) => [...current, newIngredient]);
+        
+        toast.success("Ingredient added successfully");
+      } catch (error) {
+        console.error("Failed to add ingredient to recipe", error);
+        toast.error("Failed to add ingredient. Please try again.");
+        return;
+      }
+    } else {
+      // For new recipes, just add to local state (will be created when recipe is saved)
+      setIngredients((current) => [...current, newIngredient]);
+    }
   };
 
   const handleUpdateIngredientAllergens = async (
@@ -623,19 +670,20 @@ const Index = () => {
       };
     });
 
-    for (const { ingredient, overrides } of ingredientsToPersist) {
-      const persisted = await persistIngredientChanges(ingredient, overrides);
+    // For existing recipes, persist ingredient changes
+    if (editingDishId) {
+      for (const { ingredient, overrides } of ingredientsToPersist) {
+        const persisted = await persistIngredientChanges(ingredient, overrides);
 
-      if (!persisted) {
-        return;
+        if (!persisted) {
+          return;
+        }
       }
     }
 
     setIngredients(ingredientsToPersist.map(({ sanitizedState }) => sanitizedState));
 
     try {
-      // For now, we're saving recipes without ingredient links
-      // TODO: Implement ingredient search and linking
       let updatedRecipesList: Recipe[] = recipes;
       let savedRecipe: Recipe;
       const resolvedSectionId = resolveSectionId(menuSectionId);
@@ -654,6 +702,7 @@ const Index = () => {
           recipe.id === savedRecipe.id ? savedRecipe : recipe
         );
       } else {
+        // Create the recipe first
         savedRecipe = await createRecipeAPI({
           restaurant_id: restaurant.id,
           name: dishName,
@@ -662,11 +711,47 @@ const Index = () => {
           serving_size: servingSize,
           price,
           image: dishImage,
-          ingredients: [], // TODO: Map ingredients to ingredient IDs
+          ingredients: [],
           status: "confirmed",
           menu_section_ids: resolvedSectionId !== null ? [resolvedSectionId] : [],
         });
         updatedRecipesList = [...recipes, savedRecipe];
+        
+        // Now create and link ingredients to the new recipe
+        for (const { ingredient, overrides } of ingredientsToPersist) {
+          try {
+            // Create the ingredient in the database
+            const ingredientCode = `user:${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            const createdIngredient = await createIngredientAPI({
+              code: ingredientCode,
+              name: overrides.name || ingredient.name,
+              source: "user",
+            });
+
+            // Link it to the recipe
+            await addRecipeIngredientAPI(savedRecipe.id, {
+              ingredient_id: createdIngredient.id,
+              ingredient_name: overrides.name || ingredient.name,
+              quantity: parseFloat(overrides.quantity || ingredient.quantity) || undefined,
+              unit: overrides.unit || ingredient.unit,
+              confirmed: true,
+              allergens: (overrides.allergens || ingredient.allergens || []).map((a) => ({
+                code: a.code,
+                name: a.name,
+                certainty: a.certainty,
+                canonical_code: a.canonical_code ?? null,
+                canonical_name: a.canonical_name ?? null,
+                family_code: a.family_code ?? null,
+                family_name: a.family_name ?? null,
+                marker_type: a.marker_type ?? null,
+              })),
+            });
+          } catch (error) {
+            console.error("Failed to create ingredient for new recipe", error);
+            toast.error("Failed to save ingredient. Please try again.");
+            return;
+          }
+        }
       }
 
       const nextUnconfirmedRecipe = updatedRecipesList.find(

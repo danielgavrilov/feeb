@@ -4,7 +4,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -231,9 +230,10 @@ export const DishNameInput = ({
 
   const handleOptionSelect = (option: DishSuggestion) => {
     onChange(option.name);
-    onRecipeMatch(option.id);
     setIsInputFocused(false);
     setIsPopoverHovered(false);
+    onRecipeMatch(option.id);
+    // Keep focus on input after selection
     window.setTimeout(() => {
       inputRef.current?.focus();
     }, 0);
@@ -244,7 +244,12 @@ export const DishNameInput = ({
   };
 
   const handleInputBlur = () => {
-    setIsInputFocused(false);
+    // Delay to allow clicking on suggestions
+    setTimeout(() => {
+      if (!isPopoverHovered && document.activeElement !== inputRef.current) {
+        setIsInputFocused(false);
+      }
+    }, 150);
   };
 
   const handlePopoverMouseEnter = () => {
@@ -253,6 +258,10 @@ export const DishNameInput = ({
 
   const handlePopoverMouseLeave = () => {
     setIsPopoverHovered(false);
+    // Close the suggestions when mouse leaves and input isn't focused
+    if (!inputRef.current || document.activeElement !== inputRef.current) {
+      setIsInputFocused(false);
+    }
   };
 
   const shouldShowSuggestions = shouldOpenDishSuggestions({
@@ -289,83 +298,67 @@ export const DishNameInput = ({
         <Label htmlFor="dish-name" className="text-lg font-semibold text-foreground sm:text-xl">
           Dish Name
         </Label>
-        <Popover
-          open={shouldShowSuggestions}
-          onOpenChange={(nextOpen) => {
-            if (!nextOpen) {
-              setIsInputFocused(false);
-              setIsPopoverHovered(false);
-            }
-          }}
-        >
-          <PopoverTrigger asChild>
-            <div className="relative">
-              <Input
-                ref={inputRef}
-                id="dish-name"
-                value={value}
-                onChange={(e) => {
-                  onChange(e.target.value);
-                  setIsInputFocused(true);
-                }}
-                onFocus={handleInputFocus}
-                onBlur={handleInputBlur}
-                onClick={() => setIsInputFocused(true)}
-                placeholder="Enter dish name..."
-                className="h-14 border-2 pr-14 text-xl font-medium sm:h-16 sm:text-2xl"
-                autoComplete="off"
-              />
-              {hasSelectedDish && onClearSelectedDish && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsInputFocused(false);
-                    setIsPopoverHovered(false);
-                    onClearSelectedDish();
-                    inputRef.current?.focus();
-                  }}
-                  className="absolute inset-y-0 right-4 flex items-center text-muted-foreground transition-colors hover:text-foreground"
-                  aria-label="Clear selected dish"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              )}
-            </div>
-          </PopoverTrigger>
-          {!hasSelectedDish && suggestionOptions.length > 0 && (
-            <PopoverContent
-              align="start"
-              className="w-[var(--radix-popover-trigger-width)] p-0"
-              sideOffset={4}
+        <div className="relative">
+          <Input
+            ref={inputRef}
+            id="dish-name"
+            value={value}
+            onChange={(e) => {
+              onChange(e.target.value);
+            }}
+            onFocus={handleInputFocus}
+            onBlur={handleInputBlur}
+            placeholder="Enter dish name..."
+            className="h-14 border-2 pr-14 text-xl font-medium sm:h-16 sm:text-2xl"
+            autoComplete="off"
+          />
+          {hasSelectedDish && onClearSelectedDish && (
+            <button
+              type="button"
+              onClick={() => {
+                setIsInputFocused(false);
+                setIsPopoverHovered(false);
+                onClearSelectedDish();
+                inputRef.current?.focus();
+              }}
+              className="absolute inset-y-0 right-4 flex items-center text-muted-foreground transition-colors hover:text-foreground"
+              aria-label="Clear selected dish"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          )}
+          
+          {/* Suggestions dropdown - conditionally rendered */}
+          {shouldShowSuggestions && !hasSelectedDish && suggestionOptions.length > 0 && (
+            <div
+              className="absolute top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-md border border-border bg-popover py-2 shadow-md z-50"
               onMouseEnter={handlePopoverMouseEnter}
               onMouseLeave={handlePopoverMouseLeave}
             >
-              <div className="max-h-60 overflow-y-auto py-2">
-                {filteredSuggestions.length === 0 ? (
-                  <p className="px-3 py-2 text-sm text-muted-foreground">No matching dishes found.</p>
-                ) : (
-                  filteredSuggestions.map((option) => (
-                    <button
-                      key={`${option.id}-${option.name}`}
-                      type="button"
-                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-muted focus:bg-muted"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => handleOptionSelect(option)}
+              {filteredSuggestions.length === 0 ? (
+                <p className="px-3 py-2 text-sm text-muted-foreground">No matching dishes found.</p>
+              ) : (
+                filteredSuggestions.map((option) => (
+                  <button
+                    key={`${option.id}-${option.name}`}
+                    type="button"
+                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-muted focus:bg-muted"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => handleOptionSelect(option)}
+                  >
+                    <span className="font-medium text-foreground">{option.name}</span>
+                    <Badge
+                      variant={option.status === "confirmed" || option.status === "live" ? "secondary" : "destructive"}
+                      className="pointer-events-none"
                     >
-                      <span className="font-medium text-foreground">{option.name}</span>
-                      <Badge
-                        variant={option.confirmed ? "secondary" : "destructive"}
-                        className="pointer-events-none"
-                      >
-                        {option.confirmed ? "Ingredients confirmed" : "Review"}
-                      </Badge>
-                    </button>
-                  ))
-                )}
-              </div>
-            </PopoverContent>
+                      {option.status === "needs_review" ? "Review" : "Ingredients confirmed"}
+                    </Badge>
+                  </button>
+                ))
+              )}
+            </div>
           )}
-        </Popover>
+        </div>
       </div>
 
       {hasOptionalSummary && (
