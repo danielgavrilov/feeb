@@ -39,6 +39,8 @@ import { Restaurant } from "@/lib/api";
 import { RestaurantUpdateInput } from "@/hooks/useRestaurant";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useAuth } from "@/hooks/useAuth";
+import { useNavigate } from "react-router-dom";
 import {
   CurrencyOption,
   PriceDisplayFormat,
@@ -255,6 +257,8 @@ export const Settings = ({
   onPriceFormatChange,
 }: SettingsProps) => {
   const { t } = useLanguage();
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newRestaurantName, setNewRestaurantName] = useState("");
   const [newRestaurantDescription, setNewRestaurantDescription] = useState("");
@@ -419,6 +423,11 @@ export const Settings = ({
     } finally {
       setIsDeletingRestaurant(false);
     }
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/login");
   };
 
   return (
@@ -659,6 +668,24 @@ export const Settings = ({
           </div>
         </div>
       </Card>
+
+      <Card className="rounded-2xl p-4 sm:p-6">
+        <h3 className="mb-4 text-lg font-semibold text-foreground">{t("settings.account.title")}</h3>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-base font-semibold text-foreground">{t("settings.account.emailLabel")}</Label>
+            <div className="rounded-md border bg-muted/50 px-4 py-2.5 text-base text-muted-foreground">
+              {user?.email || "No email"}
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={handleSignOut}>
+              {t("settings.account.signOut")}
+            </Button>
+          </div>
+        </div>
+      </Card>
+
 
       <Card className="bg-muted/50 p-6">
         <h3 className="mb-2 font-semibold text-foreground">About</h3>
