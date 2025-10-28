@@ -489,7 +489,7 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
   }, [savedSections, visibleMenuDishes]);
 
   return (
-    <div className="bg-background">
+    <div data-tour="menu-view" className="bg-background">
       <header className="border-b border-border/60 bg-background/80">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 px-4 py-4 sm:px-6 sm:py-6">
           <h1 className="text-2xl font-bold text-foreground sm:text-3xl">{restaurantName}</h1>
@@ -537,7 +537,7 @@ export const MenuView = ({ dishes, restaurantName, showImages, formatPrice, rest
 
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-4 md:flex-row md:items-end">
-                <div className="space-y-2 md:w-1/2">
+                <div data-tour="allergen-filter" className="space-y-2 md:w-1/2">
                   <Label htmlFor="allergen-select" className="text-sm font-medium text-foreground">
                     Pick an allergen
                   </Label>
