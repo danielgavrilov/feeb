@@ -12,7 +12,6 @@ from sqlalchemy import text
 from .database import get_db
 from .models import (
     IngredientWithAllergens,
-    ProductWithDetails,
     HealthResponse,
     UserCreate,
     UserResponse,
@@ -83,26 +82,6 @@ async def get_ingredient(
     
     if not result:
         raise HTTPException(status_code=404, detail=f"Ingredient '{name}' not found")
-    
-    return result
-
-
-@router.get("/products/{barcode}", response_model=ProductWithDetails)
-async def get_product(
-    barcode: str,
-    session: AsyncSession = Depends(get_db)
-):
-    """
-    Retrieve product by barcode with ingredients and allergens.
-    
-    - **barcode**: Product barcode (EAN/UPC code)
-    
-    Returns product details, ingredients list, and allergens.
-    """
-    result = await dal.get_product_by_barcode(session, barcode)
-    
-    if not result:
-        raise HTTPException(status_code=404, detail=f"Product with barcode '{barcode}' not found")
     
     return result
 
