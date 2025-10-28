@@ -1071,7 +1071,7 @@ export const RecipeBook = ({
 
   return (
     <>
-      <div className="space-y-6">
+      <div data-tour="recipe-book" className="space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <h2 className="text-2xl font-bold text-foreground">Recipe Book</h2>
           <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-start">

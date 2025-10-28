@@ -74,3 +74,71 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* Driver.js custom theme to match Feeb's design */
+.driver-popover.feeb-tour-popover {
+  background-color: hsl(var(--card));
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+.driver-popover.feeb-tour-popover .driver-popover-title {
+  color: hsl(var(--foreground));
+  font-weight: 600;
+  font-size: 1.125rem;
+}
+
+.driver-popover.feeb-tour-popover .driver-popover-description {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.driver-popover.feeb-tour-popover .driver-popover-progress-text {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.75rem;
+}
+
+.driver-popover.feeb-tour-popover button {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border: none;
+  border-radius: calc(var(--radius) * 0.75);
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+  text-shadow: none !important;
+  box-shadow: none !important;
+}
+
+.driver-popover.feeb-tour-popover button:hover {
+  background-color: hsl(var(--primary) / 0.9);
+}
+
+.driver-popover.feeb-tour-popover .driver-popover-prev-btn {
+  background-color: transparent;
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+}
+
+.driver-popover.feeb-tour-popover .driver-popover-prev-btn:hover {
+  background-color: hsl(var(--muted));
+}
+
+.driver-popover.feeb-tour-popover .driver-popover-close-btn {
+  color: hsl(var(--muted-foreground));
+  background-color: transparent !important;
+}
+
+.driver-popover.feeb-tour-popover .driver-popover-close-btn:hover {
+  color: hsl(var(--foreground));
+  background-color: hsl(var(--muted)) !important;
+}
+
+/* Remove the red/orange outline - shading is enough */
+.driver-active-element {
+  outline: none !important;
+}

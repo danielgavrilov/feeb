@@ -126,6 +126,49 @@ const baseTranslations: Record<LanguageCode, TranslationDictionary> = {
     },
     progressTracker: {
       title: "Setup progress",
+      helpButton: "Replay the app tour",
+    },
+    tour: {
+      next: "Next",
+      previous: "Previous",
+      done: "Done",
+      progress: "{{current}} of {{total}}",
+      step1: {
+        title: "Welcome to Feeb! 👋",
+        description: "Feeb helps restaurants to easily create a user-friendly allergen menu. Mapping allergens can be a hassle, so our AI helps to make the process as smooth as possible.",
+      },
+      step2: {
+        title: "Start here",
+        description: "Upload your menu and we pre-fill most of the ingredients and allergens using AI.",
+      },
+      step3: {
+        title: "Review ingredients",
+        description: "However, AI can make mistakes, and we do not know your exact recipes. Review your ingredient lists here.",
+      },
+      step4: {
+        title: "Review ingredients",
+        description: "This is where you can double-check the pre-filled ingredients. and quantities by confirming each recipe on your menu. This is the most time-consuming step, but it is necessary to ensure you inform your customers correctly.",
+      },
+      step5: {
+        title: "Recipe Book",
+        description: "All of your recipes are listed here.",
+      },
+      step6: {
+        title: "Recipe Book",
+        description: "You can change the sections names, the order of the dishes on the menu and you can put dishes 'Live' so that they appear on your actual menu.",
+      },
+      step7: {
+        title: "Your live menu",
+        description: "This is how customers will see your menu.",
+      },
+      step8: {
+        title: "User-friendly filters",
+        description: "Using the drop-down will make it easier for customers to order, and reduce the number of questions and special requests for your staff.",
+      },
+      step9: {
+        title: "Need help?",
+        description: "Click this button anytime to replay this tour and see the main features again.",
+      },
     },
     auth: {
       login: {
@@ -292,6 +335,49 @@ const baseTranslations: Record<LanguageCode, TranslationDictionary> = {
     },
     progressTracker: {
       title: "Voortgang van de setup",
+      helpButton: "Speel de app-tour opnieuw af",
+    },
+    tour: {
+      next: "Volgende",
+      previous: "Vorige",
+      done: "Klaar",
+      progress: "{{current}} van {{total}}",
+      step1: {
+        title: "Welkom bij Feeb! 👋",
+        description: "Feeb helpt restaurants om eenvoudig een gebruiksvriendelijk allergenen menu te maken. Het in kaart brengen van allergenen kan lastig zijn, dus onze AI helpt om het proces zo soepel mogelijk te maken.",
+      },
+      step2: {
+        title: "Begin hier",
+        description: "Upload je menu en wij vullen de meeste ingrediënten en allergenen vooraf in met AI.",
+      },
+      step3: {
+        title: "Bekijk ingrediënten",
+        description: "AI kan echter fouten maken, en wij kennen je exacte recepten niet. Bekijk hier je ingrediëntenlijsten.",
+      },
+      step4: {
+        title: "Bekijk ingrediënten",
+        description: "Dit is waar je de vooraf ingevulde ingrediënten en hoeveelheden kunt dubbelchecken door elk recept op je menu te bevestigen. Dit is de meest tijdrovende stap, maar het is noodzakelijk om ervoor te zorgen dat je je klanten correct informeert.",
+      },
+      step5: {
+        title: "Receptenboek",
+        description: "Al je recepten staan hier vermeld.",
+      },
+      step6: {
+        title: "Receptenboek",
+        description: "Je kunt de sectienamen, de volgorde van de gerechten op het menu wijzigen en gerechten 'Live' zetten zodat ze op je daadwerkelijke menu verschijnen.",
+      },
+      step7: {
+        title: "Je live menu",
+        description: "Zo zien klanten je menu.",
+      },
+      step8: {
+        title: "Gebruiksvriendelijke filters",
+        description: "Het gebruik van het drop-down menu maakt het gemakkelijker voor klanten om te bestellen, en vermindert het aantal vragen en speciale verzoeken voor je personeel.",
+      },
+      step9: {
+        title: "Hulp nodig?",
+        description: "Klik op deze knop om deze tour opnieuw af te spelen en de belangrijkste functies weer te zien.",
+      },
     },
     auth: {
       login: {

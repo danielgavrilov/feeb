@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useRestaurant } from "@/hooks/useRestaurant";
 import { useRecipes } from "@/hooks/useRecipes";
+import { useAppTour } from "@/hooks/useAppTour";
 import {
   Recipe,
   updateRecipeIngredient as updateRecipeIngredientAPI,
@@ -70,6 +71,14 @@ const Index = () => {
   const [priceFormat, setPriceFormat] = useState<PriceDisplayFormat>(DEFAULT_PRICE_FORMAT);
   const prepInputRef = useRef<HTMLTextAreaElement | null>(null);
   const manualAddTabSelectionRef = useRef(false);
+
+  // Initialize app tour
+  const { startTour } = useAppTour({
+    onTabChange: (tab: string) => {
+      setActiveTab(tab);
+      setSearchParams({ tab });
+    },
+  });
 
   const formatPrice = useCallback(
     (value: string | number | null | undefined) =>
@@ -878,7 +887,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b border-border/70 bg-card/95 shadow-sm backdrop-blur">
+      <header data-tour="feeb-header" className="sticky top-0 z-50 border-b border-border/70 bg-card/95 shadow-sm backdrop-blur">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex items-center gap-3">
             <img src="/logo.svg" alt="Feeb Logo" className="h-8 w-8 feeb-logo" />
@@ -896,12 +905,13 @@ const Index = () => {
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-3 pb-10 pt-6 sm:px-4 lg:gap-10">
         <Tabs value={activeTab} onValueChange={handleTabsValueChange} className="w-full">
           <div className="mb-6 overflow-x-auto overflow-y-hidden scroll-smooth snap-x snap-mandatory">
-            <TabsList className="flex min-w-full flex-nowrap items-center justify-start gap-2 rounded-xl border border-border/60 bg-muted/40 p-1.5 sm:gap-3">
-              <TabsTrigger value="landing" className={tabTriggerClass}>
+            <TabsList data-tour="tabs-list" className="flex min-w-full flex-nowrap items-center justify-start gap-2 rounded-xl border border-border/60 bg-muted/40 p-1.5 sm:gap-3">
+              <TabsTrigger value="landing" data-tour="tab-landing" className={tabTriggerClass}>
                 {t("navigation.landing")}
               </TabsTrigger>
               <TabsTrigger
                 value="add"
+                data-tour="tab-add"
                 className={tabTriggerClass}
                 onClick={() => {
                   manualAddTabSelectionRef.current = true;
@@ -909,10 +919,10 @@ const Index = () => {
               >
                 {t("navigation.add")}
               </TabsTrigger>
-              <TabsTrigger value="recipes" className={tabTriggerClass}>
+              <TabsTrigger value="recipes" data-tour="tab-recipes" className={tabTriggerClass}>
                 {t("navigation.recipes")}
               </TabsTrigger>
-              <TabsTrigger value="menu" className={tabTriggerClass}>
+              <TabsTrigger value="menu" data-tour="tab-menu" className={tabTriggerClass}>
                 {t("navigation.menu")}
               </TabsTrigger>
               <TabsTrigger value="settings" className={tabTriggerClass}>
@@ -921,7 +931,7 @@ const Index = () => {
             </TabsList>
           </div>
 
-          <TabsContent value="landing">
+          <TabsContent value="landing" data-tour="landing-content">
             <LandingPage
               restaurantName={restaurant?.name ?? undefined}
               menuUploaded={menuUploadComplete}
@@ -930,10 +940,11 @@ const Index = () => {
               totalRecipes={totalRecipes}
               unconfirmedRecipes={unconfirmedRecipeCount}
               onReviewFirstRecipe={handleReviewFirstUnconfirmed}
+              onStartTour={startTour}
             />
           </TabsContent>
 
-          <TabsContent value="add">
+          <TabsContent value="add" data-tour="add-content">
             <div className="space-y-8 rounded-xl bg-card p-4 shadow-lg sm:p-6 lg:p-8">
               <div className="space-y-8">
                 {reviewNoticeMessage && (

@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
+import { HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { Button } from "@/components/ui/button";
 
 export interface ProgressStep {
   key: string;
@@ -13,15 +15,30 @@ export interface ProgressStep {
 interface ProgressTrackerProps {
   steps: ProgressStep[];
   summary?: string;
+  onStartTour?: () => void;
 }
 
-export const ProgressTracker = ({ steps, summary }: ProgressTrackerProps) => {
+export const ProgressTracker = ({ steps, summary, onStartTour }: ProgressTrackerProps) => {
   const { t } = useLanguage();
 
   return (
-    <section className="rounded-2xl border border-border/70 bg-card/80 p-4 shadow-sm">
+    <section data-tour="progress-tracker" className="rounded-2xl border border-border/70 bg-card/80 p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-foreground">{t("progressTracker.title")}</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-semibold text-foreground">{t("progressTracker.title")}</h2>
+          {onStartTour && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onStartTour}
+              data-tour="help-button"
+              className="h-6 w-6 p-0"
+              title={t("progressTracker.helpButton")}
+            >
+              <HelpCircle className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+            </Button>
+          )}
+        </div>
         {summary ? <span className="text-xs text-muted-foreground">{summary}</span> : null}
       </div>
       <div className="mt-4 overflow-x-auto pb-1">
