@@ -1,74 +1,63 @@
-# Welcome to your Lovable project
+# Feeb Web App
 
-## Project info
+**Feeb** is an allergen-aware kitchen assistant that helps users identify allergens in ingredients and recipes. Built for busy kitchens.
 
-**URL**: https://lovable.dev/projects/9cfe2436-efa3-4d5d-a853-9ea5864de497
+🌐 **Live App**: [https://feeb-web-6vsb.onrender.com/](https://feeb-web-6vsb.onrender.com/)
 
-## How can I edit this code?
+## About This App
 
-There are several ways of editing your application.
+This is the web frontend for Feeb, built with:
 
-**Use Lovable**
+- **React 18** with TypeScript
+- **Vite** for fast development and building
+- **Tailwind CSS** for styling
+- **Shadcn UI** for beautiful, accessible components
+- **Supabase** for authentication (Email/Password + Google OAuth)
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/9cfe2436-efa3-4d5d-a853-9ea5864de497) and start prompting.
+For complete project documentation, see the [main repository README](../../README.md).
 
-Changes made via Lovable will be committed automatically to this repo.
+## Local Development
 
-**Use your preferred IDE**
+### Prerequisites
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+- Node.js (v18 or higher)
+- pnpm package manager
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### Setup
 
-Follow these steps:
+1. **Clone the repository** (if you haven't already):
+   ```bash
+   git clone https://github.com/AlexanderKok/feeb.git
+   cd feeb
+   ```
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+2. **Install dependencies** (from repository root):
+   ```bash
+   pnpm install
+   ```
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+3. **Set up environment variables** (see Authentication Setup below)
 
-# Step 3: Install the necessary dependencies.
-npm i
+4. **Start the development server**:
+   ```bash
+   # From repository root:
+   pnpm dev
+   
+   # Or from this directory:
+   cd apps/web
+   pnpm dev
+   ```
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-- Supabase (Authentication)
+The app will be available at `http://localhost:8080`.
 
 ## Authentication Setup
 
-This app uses Supabase for authentication. To run locally, you need to:
+This app uses Supabase for authentication. To run locally:
 
 1. Create a free account at [supabase.com](https://supabase.com)
 2. Create a new project
 3. Get your project URL and anon key from Settings > API
-4. Create a `.env` file in this directory with:
+4. Create a `.env` file in this directory (`apps/web/`) with:
    ```env
    VITE_SUPABASE_URL=your-project-url.supabase.co
    VITE_SUPABASE_ANON_KEY=your-anon-key
@@ -84,26 +73,68 @@ In your Supabase project:
    - Get OAuth credentials from [Google Cloud Console](https://console.cloud.google.com)
    - Add the Client ID and Secret to Supabase
 
-### Running the App
+## Available Scripts
 
-```sh
-# Install dependencies (from repository root)
-pnpm install
-
-# Start the development server
-pnpm dev
+```bash
+pnpm dev      # Start development server
+pnpm build    # Build for production
+pnpm preview  # Preview production build locally
+pnpm lint     # Run ESLint
 ```
 
-The app will be available at `http://localhost:5173`. You'll be redirected to the login page if not authenticated.
+## Project Structure
 
-## How can I deploy this project?
+```
+apps/web/
+├── src/
+│   ├── components/     # React components (including Shadcn UI)
+│   ├── contexts/       # React contexts (Auth, Language)
+│   ├── hooks/          # Custom React hooks
+│   ├── pages/          # Page components
+│   ├── lib/            # Utility functions
+│   ├── i18n/           # Internationalization
+│   └── data/           # Mock/static data
+├── public/             # Static assets
+└── index.html          # Entry HTML file
+```
 
-Simply open [Lovable](https://lovable.dev/projects/9cfe2436-efa3-4d5d-a853-9ea5864de497) and click on Share -> Publish.
+## Building for Production
 
-## Can I connect a custom domain to my Lovable project?
+```bash
+# From repository root:
+pnpm build
 
-Yes, you can!
+# Or from this directory:
+cd apps/web
+pnpm build
+```
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+The production build will be output to the `dist/` directory.
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## Backend API
+
+The web app connects to the Feeb API for ingredient and allergen data. See the [API README](../api/README.md) for setup instructions.
+
+## Features
+
+- 🔐 User authentication with Supabase
+- 🍽️ Menu management for restaurants
+- 📋 Recipe creation and management
+- 🥜 Allergen tracking and warnings
+- 🌍 Multi-language support
+- 📱 Responsive design for mobile and desktop
+- 🎨 Beautiful, modern UI with Shadcn components
+
+## Contributing
+
+This project is actively developed. When making changes, consider the impact across the monorepo and test both frontend and backend integration.
+
+## Documentation
+
+- [Main Project README](../../README.md)
+- [API Documentation](../api/README.md)
+- [Docker Quick Start](../../DOCKER_QUICKSTART.md)
+
+## License
+
+See the [main repository](https://github.com/AlexanderKok/feeb) for license information.
