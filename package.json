@@ -10,9 +10,6 @@
     "build": "pnpm --filter @feeb/web build",
     "api:dev": "cd apps/api && source venv/bin/activate && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
     "api:setup": "cd apps/api && ./scripts/setup_db.sh",
-    "api:import": "cd apps/api && ./scripts/run_full_import.sh",
-    "api:import:sample": "cd apps/api && SAMPLE_PRODUCT_LIMIT=10000 python -m data_pipeline.import_off",
-    "api:status": "cd apps/api && ./scripts/check_import_status.sh",
     "api:test": "cd apps/api && source venv/bin/activate && pytest tests/ -v"
   },
   "devDependencies": {

@@ -45,9 +45,6 @@ class Ingredient(Base):
     allergens: Mapped[List["IngredientAllergen"]] = relationship(
         "IngredientAllergen", back_populates="ingredient", cascade="all, delete-orphan"
     )
-    product_links: Mapped[List["ProductIngredient"]] = relationship(
-        "ProductIngredient", back_populates="ingredient", cascade="all, delete-orphan"
-    )
 
 
 class Allergen(Base):
@@ -63,9 +60,6 @@ class Allergen(Base):
     # Relationships
     ingredients: Mapped[List["IngredientAllergen"]] = relationship(
         "IngredientAllergen", back_populates="allergen", cascade="all, delete-orphan"
-    )
-    product_links: Mapped[List["ProductAllergen"]] = relationship(
-        "ProductAllergen", back_populates="allergen", cascade="all, delete-orphan"
     )
 
 
@@ -100,102 +94,6 @@ class IngredientAllergen(Base):
     __table_args__ = (
         UniqueConstraint("ingredient_id", "allergen_id", "source", name="uq_ingredient_allergen_source"),
     )
-
-
-class Product(Base):
-    """Product information from OpenFoodFacts."""
-    __tablename__ = "product"
-
-    id = mapped_column(Integer, primary_key=True, autoincrement=True)
-    barcode = mapped_column(String(50), unique=True, nullable=False, index=True)
-    name = mapped_column(String(500), nullable=False)
-    brand = mapped_column(String(255), nullable=True)
-    lang = mapped_column(String(10), default="en")
-    created_at = mapped_column(TIMESTAMP, default=func.now())
-    last_modified_at = mapped_column(TIMESTAMP, nullable=True)
-    
-    # Newly added denormalized fields for analysis/querying
-    nutriscore_grade = mapped_column(String(10), nullable=True)
-    nutriscore_score = mapped_column(Integer, nullable=True)
-    quantity_raw = mapped_column(String(100), nullable=True)
-    quantity_amount = mapped_column(DECIMAL(10, 3), nullable=True)
-    quantity_unit = mapped_column(String(20), nullable=True)
-    categories_text = mapped_column(Text, nullable=True)
-    
-    # Completeness flags
-    has_allergens = mapped_column(Boolean, default=False, nullable=False)
-    has_traces = mapped_column(Boolean, default=False, nullable=False)
-    has_ingredients = mapped_column(Boolean, default=False, nullable=False)
-    has_nutrition = mapped_column(Boolean, default=False, nullable=False)
-    is_complete = mapped_column(Boolean, default=False, nullable=False)
-    allergen_data_incomplete = mapped_column(Boolean, default=False, nullable=False)
-    
-    # Relationships
-    ingredients: Mapped[List["ProductIngredient"]] = relationship(
-        "ProductIngredient", back_populates="product", cascade="all, delete-orphan"
-    )
-    allergens: Mapped[List["ProductAllergen"]] = relationship(
-        "ProductAllergen", back_populates="product", cascade="all, delete-orphan"
-    )
-    nutrition: Mapped[Optional["ProductNutrition"]] = relationship(
-        "ProductNutrition", back_populates="product", uselist=False, cascade="all, delete-orphan"
-    )
-
-
-class ProductIngredient(Base):
-    """Many-to-many link between products and ingredients."""
-    __tablename__ = "product_ingredient"
-    
-    id = mapped_column(Integer, primary_key=True, autoincrement=True)
-    product_id = mapped_column(Integer, ForeignKey("product.id"), nullable=False)
-    ingredient_id = mapped_column(Integer, ForeignKey("ingredient.id"), nullable=False)
-    percent_estimate = mapped_column(DECIMAL(5, 2), nullable=True)
-    rank = mapped_column(Integer, nullable=True)
-    
-    # Relationships
-    product: Mapped["Product"] = relationship("Product", back_populates="ingredients")
-    ingredient: Mapped["Ingredient"] = relationship("Ingredient", back_populates="product_links")
-    
-    __table_args__ = (
-        UniqueConstraint("product_id", "ingredient_id", name="uq_product_ingredient"),
-    )
-
-
-class ProductAllergen(Base):
-    """Denormalized product-allergen link for fast lookups."""
-    __tablename__ = "product_allergen"
-    
-    id = mapped_column(Integer, primary_key=True, autoincrement=True)
-    product_id = mapped_column(Integer, ForeignKey("product.id"), nullable=False)
-    allergen_id = mapped_column(Integer, ForeignKey("allergen.id"), nullable=False)
-    relation_type = mapped_column(String(50), nullable=False)  # contains, may_contain, traces
-    source = mapped_column(String(50), nullable=False, default="off")
-    
-    # Relationships
-    product: Mapped["Product"] = relationship("Product", back_populates="allergens")
-    allergen: Mapped["Allergen"] = relationship("Allergen", back_populates="product_links")
-    
-    __table_args__ = (
-        UniqueConstraint("product_id", "allergen_id", "relation_type", name="uq_product_allergen_relation"),
-    )
-
-
-# New table: product nutritional values per 100g/ml
-class ProductNutrition(Base):
-    __tablename__ = "product_nutrition"
-    
-    id = mapped_column(Integer, primary_key=True, autoincrement=True)
-    product_id = mapped_column(Integer, ForeignKey("product.id"), unique=True, nullable=False)
-    
-    fat_100g = mapped_column(DECIMAL(10, 3), nullable=True)
-    saturated_fat_100g = mapped_column(DECIMAL(10, 3), nullable=True)
-    carbohydrates_100g = mapped_column(DECIMAL(10, 3), nullable=True)
-    sugars_100g = mapped_column(DECIMAL(10, 3), nullable=True)
-    fiber_100g = mapped_column(DECIMAL(10, 3), nullable=True)
-    proteins_100g = mapped_column(DECIMAL(10, 3), nullable=True)
-    salt_100g = mapped_column(DECIMAL(10, 3), nullable=True)
-    
-    product: Mapped["Product"] = relationship("Product", back_populates="nutrition")
 
 
 # ============================================================================
@@ -450,38 +348,6 @@ class IngredientWithAllergens(BaseModel):
     """Ingredient with associated allergens."""
     ingredient: IngredientResponse
     allergens: List[AllergenResponse]
-
-
-class ProductIngredientResponse(BaseModel):
-    """Product ingredient with rank."""
-    name: str
-    rank: Optional[int] = None
-    
-    model_config = ConfigDict(from_attributes=True)
-
-
-class ProductAllergenResponse(BaseModel):
-    """Product allergen with relation type."""
-    name: str
-    relation_type: str
-    
-    model_config = ConfigDict(from_attributes=True)
-
-
-class ProductResponse(BaseModel):
-    """Product basic information."""
-    barcode: str
-    name: str
-    brand: Optional[str] = None
-    
-    model_config = ConfigDict(from_attributes=True)
-
-
-class ProductWithDetails(BaseModel):
-    """Product with ingredients and allergens."""
-    product: ProductResponse
-    ingredients: List[ProductIngredientResponse]
-    allergens: List[ProductAllergenResponse]
 
 
 class HealthResponse(BaseModel):
