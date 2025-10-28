@@ -19,3 +19,11 @@ env/
 *.db
 *.db-journal
 logs/
+
+# Internal documentation (AI agent fix/debug files)
+# These files may contain sensitive information and should not be committed
+.internal-docs/
+*_FIX.md
+*_COMPLETE.md
+*_SUMMARY.md
+*_STATUS.md
