@@ -10,6 +10,7 @@ import { SignupForm } from "@/components/auth/SignupForm";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import MenuUploadPage from "./pages/MenuUpload";
+import MenuLiveInfo from "./pages/MenuLiveInfo";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { PostHogProvider } from "posthog-js/react";
 import { PostHogUserDetector } from "./lib/posthog";
@@ -55,6 +56,14 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <MenuUploadPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/menu-live"
+                  element={
+                    <ProtectedRoute>
+                      <MenuLiveInfo />
                     </ProtectedRoute>
                   }
                 />

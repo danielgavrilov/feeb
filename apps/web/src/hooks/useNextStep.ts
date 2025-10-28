@@ -23,6 +23,7 @@ export type NextStep = NextStepBase | CarouselStep;
 
 export interface UseNextStepOptions {
   unconfirmedRecipes?: number;
+  liveDishCount?: number;
 }
 
 export interface UseNextStepResult {
@@ -37,7 +38,7 @@ export const useNextStep = (
   options: UseNextStepOptions = {},
 ): UseNextStepResult => {
   const { t } = useLanguage();
-  const { unconfirmedRecipes } = options;
+  const { unconfirmedRecipes, liveDishCount = 0 } = options;
 
   return useMemo(() => {
     if (!restaurant) {
@@ -51,8 +52,6 @@ export const useNextStep = (
         isSetupComplete: false,
       };
     }
-
-    const wantsImages = restaurant.showImages ?? true;
 
     let nextStep: NextStep;
 
@@ -69,41 +68,28 @@ export const useNextStep = (
         description: t("nextStep.reviewRecipes.description"),
         actionLabel: t("nextStep.reviewRecipes.actionLabel"),
         actionLink:
-          unconfirmedRecipes && unconfirmedRecipes > 0 ? "/recipes?status=needs_review" : "/ingredients",
+          unconfirmedRecipes && unconfirmedRecipes > 0 ? "/recipes?status=needs_review" : "/?tab=add",
+      };
+    } else if (liveDishCount === 0) {
+      nextStep = {
+        title: t("nextStep.addToMenu.title"),
+        description: t("nextStep.addToMenu.description"),
+        actionLabel: t("nextStep.addToMenu.actionLabel"),
+        actionLink: "/?tab=recipes",
       };
     } else if (!restaurant.customisationDone) {
       nextStep = {
         title: t("nextStep.customiseMenu.title"),
         description: t("nextStep.customiseMenu.description"),
         actionLabel: t("nextStep.customiseMenu.actionLabel"),
-        actionLink: "/customise",
-      };
-    } else if (wantsImages && !restaurant.imagesUploaded) {
-      nextStep = {
-        title: t("nextStep.uploadPhotos.title"),
-        description: t("nextStep.uploadPhotos.description"),
-        actionLabel: t("nextStep.uploadPhotos.actionLabel"),
-        actionLink: "/photos",
+        actionLink: "/?tab=settings",
       };
     } else {
       nextStep = {
-        carousel: [
-          {
-            title: t("nextStep.carousel.addDishTitle"),
-            actionLabel: t("nextStep.carousel.addDishAction"),
-            actionLink: "/add",
-          },
-          {
-            title: t("nextStep.carousel.printQrTitle"),
-            actionLabel: t("nextStep.carousel.printQrAction"),
-            actionLink: "/menu",
-          },
-          {
-            title: t("nextStep.carousel.pricingTitle"),
-            actionLabel: t("nextStep.carousel.pricingAction"),
-            actionLink: "/pricing",
-          },
-        ],
+        title: t("nextStep.setLive.title"),
+        description: t("nextStep.setLive.description"),
+        actionLabel: t("nextStep.setLive.actionLabel"),
+        actionLink: "/menu-live",
       };
     }
 
@@ -111,8 +97,8 @@ export const useNextStep = (
       restaurant.menuUploaded &&
       restaurant.ingredientsConfirmed &&
       restaurant.customisationDone &&
-      (!wantsImages || restaurant.imagesUploaded);
+      liveDishCount > 0;
 
     return { nextStep, isSetupComplete };
-  }, [restaurant, t, unconfirmedRecipes]);
+  }, [restaurant, t, unconfirmedRecipes, liveDishCount]);
 };

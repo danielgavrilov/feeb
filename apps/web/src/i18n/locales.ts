@@ -83,9 +83,9 @@ const baseTranslations: Record<LanguageCode, TranslationDictionary> = {
       progressSteps: {
         upload: "Upload menu",
         confirm: "Confirm ingredients",
-        customise: "Customise Menu",
-        photos: "Add photos (optional)",
-        live: "Set Menu Live",
+        addToMenu: "Add reviewed dishes to menu",
+        customise: "Customise menu",
+        live: "Set menu live",
       },
     },
     nextStep: {
@@ -105,23 +105,20 @@ const baseTranslations: Record<LanguageCode, TranslationDictionary> = {
           "Confirm the ingredients for each of the meals you have uploaded to make sure we get the allergens right.",
         actionLabel: "Review recipe",
       },
+      addToMenu: {
+        title: "Add your reviewed dishes to the menu",
+        description: "Move confirmed recipes into your live menu so they’re ready for guests.",
+        actionLabel: "Open recipe book",
+      },
       customiseMenu: {
         title: "Customise your menu page",
-        description: "Add your logo and colour scheme to match your restaurant.",
-        actionLabel: "Customise",
+        description: "Add your logo and colour scheme from the settings tab.",
+        actionLabel: "Open settings",
       },
-      uploadPhotos: {
-        title: "Add photos of your dishes",
-        description: "Make your menu shine with mouth-watering pictures.",
-        actionLabel: "Upload Photos",
-      },
-      carousel: {
-        addDishTitle: "Add a new dish",
-        addDishAction: "Add Dish",
-        printQrTitle: "Print your QR menu",
-        printQrAction: "Print QR",
-        pricingTitle: "Optimise pricing",
-        pricingAction: "Try Pricing Insights",
+      setLive: {
+        title: "Set your menu live",
+        description: "Review the live status page to see how publishing will work once it’s available.",
+        actionLabel: "View live status",
       },
     },
     progressTracker: {
@@ -249,8 +246,8 @@ const baseTranslations: Record<LanguageCode, TranslationDictionary> = {
       progressSteps: {
         upload: "Menu uploaden",
         confirm: "Ingrediënten bevestigen",
+        addToMenu: "Goedgekeurde gerechten op menu zetten",
         customise: "Menu aanpassen",
-        photos: "Foto's toevoegen (optioneel)",
         live: "Menu live zetten",
       },
     },
@@ -271,23 +268,20 @@ const baseTranslations: Record<LanguageCode, TranslationDictionary> = {
           "Bevestig de ingrediënten van elke maaltijd die je hebt geüpload zodat de allergenen kloppen.",
         actionLabel: "Recept beoordelen",
       },
+      addToMenu: {
+        title: "Zet je beoordeelde gerechten op het menu",
+        description: "Verplaats bevestigde recepten naar je live menu zodat gasten ze kunnen bekijken.",
+        actionLabel: "Receptenboek openen",
+      },
       customiseMenu: {
         title: "Pas je menupagina aan",
-        description: "Voeg je logo en kleurenschema toe zodat het bij je restaurant past.",
-        actionLabel: "Aanpassen",
+        description: "Voeg je logo en kleurenschema toe via het tabblad instellingen.",
+        actionLabel: "Naar instellingen",
       },
-      uploadPhotos: {
-        title: "Voeg foto's van je gerechten toe",
-        description: "Laat je menu stralen met watertandende foto's.",
-        actionLabel: "Foto's uploaden",
-      },
-      carousel: {
-        addDishTitle: "Voeg een nieuw gerecht toe",
-        addDishAction: "Gerecht toevoegen",
-        printQrTitle: "Print je QR-menu",
-        printQrAction: "QR printen",
-        pricingTitle: "Optimaliseer prijzen",
-        pricingAction: "Probeer Prijsinzichten",
+      setLive: {
+        title: "Zet je menu live",
+        description: "Bekijk de live-statuspagina om te zien hoe publiceren straks werkt.",
+        actionLabel: "Live-status bekijken",
       },
     },
     progressTracker: {
