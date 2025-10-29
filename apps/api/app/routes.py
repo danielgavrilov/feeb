@@ -29,6 +29,9 @@ from .models import (
     RecipeUpdate,
     RecipeWithIngredients,
     RecipeIngredientRequest,
+    BasePrepCreate,
+    BasePrepUpdate,
+    BasePrepIngredientRequest,
     MenuUploadCreateResponse,
     MenuUploadResponse,
     MenuUploadSourceType,
@@ -64,6 +67,59 @@ CANONICAL_ALLERGEN_MARKERS_PROMPT = """[
 ]"""
 
 router = APIRouter()
+
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+async def _base_prep_dict_to_recipe_response(base_prep_dict: dict, session: AsyncSession) -> RecipeWithIngredients:
+    """Convert a base prep dict to RecipeWithIngredients response format."""
+    sections = []
+    
+    # Try to find Base Prep section for this restaurant
+    if "restaurant_id" in base_prep_dict:
+        BASE_PREP_SECTION_LABEL = "Base Prep"
+        try:
+            # Get the restaurant's primary menu sections
+            menu, menu_sections = await dal.get_restaurant_menu_sections(session, base_prep_dict["restaurant_id"])
+            
+            # Find Base Prep section
+            base_prep_section = next(
+                (s for s in menu_sections if s.name.strip().lower() == BASE_PREP_SECTION_LABEL.lower()),
+                None
+            )
+            
+            if base_prep_section:
+                sections.append({
+                    "menu_id": menu.id,
+                    "menu_name": menu.name,
+                    "section_id": base_prep_section.id,
+                    "section_name": base_prep_section.name,
+                    "section_position": base_prep_section.position,
+                    "recipe_position": None,
+                })
+        except Exception:
+            # If we can't find the section, just leave sections empty
+            pass
+    
+    return RecipeWithIngredients(
+        id=base_prep_dict["id"],
+        restaurant_id=base_prep_dict["restaurant_id"],
+        name=base_prep_dict["name"],
+        description=base_prep_dict["description"],
+        instructions=base_prep_dict["instructions"],
+        serving_size=None,
+        price=None,
+        image=None,
+        options=None,
+        special_notes=None,
+        prominence_score=None,
+        status="base_prep",
+        created_at=base_prep_dict["created_at"],
+        sections=sections,
+        ingredients=base_prep_dict["ingredients"]
+    )
 
 
 @router.get("/ingredients/{name}", response_model=IngredientWithAllergens)
@@ -473,6 +529,96 @@ async def create_recipe(
     Returns recipe with full details.
     """
 
+    # Filter out temporary section IDs (negative values) - they shouldn't be assigned
+    sanitized_section_ids = [sid for sid in (recipe_data.menu_section_ids or []) if sid > 0] if recipe_data.menu_section_ids else None
+    
+    # Check if any section is Base Prep - if so, create as base prep instead
+    if sanitized_section_ids:
+        from .models import MenuSection
+        from sqlalchemy import select
+        
+        result = await session.execute(
+            select(MenuSection)
+            .where(MenuSection.id.in_(sanitized_section_ids))
+        )
+        sections = result.scalars().all()
+        
+        # Check if any section is Base Prep (by name)
+        BASE_PREP_SECTION_LABEL = "Base Prep"
+        is_base_prep_section = any(
+            section.name.strip().lower() == BASE_PREP_SECTION_LABEL.lower()
+            for section in sections
+        )
+        
+        if is_base_prep_section:
+            # Convert to BasePrepCreate and use base prep endpoint
+            from .models import BasePrepIngredientRequest
+            
+            base_prep_ingredients = []
+            if recipe_data.ingredients:
+                for ing in recipe_data.ingredients:
+                    base_prep_ingredients.append(BasePrepIngredientRequest(
+                        ingredient_id=ing.ingredient_id,
+                        ingredient_name=ing.ingredient_name,
+                        quantity=ing.quantity,
+                        unit=ing.unit,
+                        notes=ing.notes,
+                        confirmed=ing.confirmed or False,
+                        allergens=ing.allergens or [],
+                    ))
+            
+            base_prep_data = BasePrepCreate(
+                restaurant_id=recipe_data.restaurant_id,
+                name=recipe_data.name,
+                description=recipe_data.description,
+                instructions=recipe_data.instructions,
+                ingredients=base_prep_ingredients,
+            )
+            
+            # Use the base prep creation logic
+            try:
+                base_prep_id = await dal.create_base_prep(
+                    session,
+                    restaurant_id=recipe_data.restaurant_id,
+                    name=base_prep_data.name,
+                    description=base_prep_data.description,
+                    instructions=base_prep_data.instructions,
+                    yield_quantity=None,
+                    yield_unit=None,
+                )
+                
+                # Add ingredients if provided
+                if base_prep_data.ingredients:
+                    for ing in base_prep_data.ingredients:
+                        allergens_payload = ing.allergens
+                        await dal.add_base_prep_ingredient(
+                            session,
+                            base_prep_id=base_prep_id,
+                            ingredient_id=ing.ingredient_id,
+                            quantity=ing.quantity,
+                            unit=ing.unit,
+                            notes=ing.notes,
+                            allergens=allergens_payload,
+                            confirmed=ing.confirmed or False,
+                        )
+                        if ing.ingredient_name:
+                            await dal.update_ingredient_name(
+                                session,
+                                ingredient_id=ing.ingredient_id,
+                                name=ing.ingredient_name,
+                            )
+                
+                await session.commit()
+                
+                # Fetch the created base prep with details
+                base_prep_dict = await dal.get_base_prep_with_details(session, base_prep_id)
+                
+                # Convert to RecipeWithIngredients format for compatibility
+                return await _base_prep_dict_to_recipe_response(base_prep_dict, session)
+            except Exception as exc:
+                await session.rollback()
+                raise HTTPException(status_code=500, detail=str(exc)) from exc
+    
     # Create the recipe
     try:
         recipe_id = await dal.create_recipe(
@@ -488,7 +634,7 @@ async def create_recipe(
             special_notes=recipe_data.special_notes,
             prominence_score=recipe_data.prominence_score,
             status=recipe_data.status.value if recipe_data.status else "needs_review",
-            menu_section_ids=recipe_data.menu_section_ids,
+            menu_section_ids=sanitized_section_ids,
         )
     except ValueError as exc:
         await session.rollback()
@@ -529,6 +675,8 @@ async def create_recipe(
     # Fetch the created recipe with details
     recipe_dict = await dal.get_recipe_with_details(session, recipe_id)
     
+    if not recipe_dict:
+        raise HTTPException(status_code=500, detail="Failed to retrieve created recipe")
     return RecipeWithIngredients(**recipe_dict)
 
 
@@ -539,17 +687,25 @@ async def get_recipe(
 ):
     """
     Get recipe with full ingredient details and allergens.
+    Handles both recipes and base preps (they share the same ID space).
     
-    - **recipe_id**: Recipe ID
+    - **recipe_id**: Recipe or Base Prep ID
     
     Returns recipe with ingredients and allergens.
     """
+    # Try recipe first
     recipe_dict = await dal.get_recipe_with_details(session, recipe_id)
     
-    if not recipe_dict:
-        raise HTTPException(status_code=404, detail=f"Recipe with ID {recipe_id} not found")
+    if recipe_dict:
+        return RecipeWithIngredients(**recipe_dict)
     
-    return RecipeWithIngredients(**recipe_dict)
+    # If not found, try base prep
+    base_prep_dict = await dal.get_base_prep_with_details(session, recipe_id)
+    
+    if base_prep_dict:
+        return await _base_prep_dict_to_recipe_response(base_prep_dict, session)
+    
+    raise HTTPException(status_code=404, detail=f"Recipe or Base Prep with ID {recipe_id} not found")
 
 
 @router.get("/recipes/restaurant/{restaurant_id}", response_model=list[RecipeWithIngredients])
@@ -596,27 +752,193 @@ async def update_recipe(
 
     Returns updated recipe with full details.
     """
+    from .models import Recipe, BasePrep, MenuSection
+    from sqlalchemy import select
+    
+    BASE_PREP_SECTION_LABEL = "Base Prep"
+    
+    # Check if recipe exists in recipe table or base_prep table
+    recipe_result = await session.execute(
+        select(Recipe).where(Recipe.id == recipe_id)
+    )
+    recipe = recipe_result.scalar_one_or_none()
+    
+    base_prep_result = await session.execute(
+        select(BasePrep).where(BasePrep.id == recipe_id)
+    )
+    base_prep = base_prep_result.scalar_one_or_none()
+    
+    # Determine if currently a recipe or base prep
+    is_currently_recipe = recipe is not None
+    is_currently_base_prep = base_prep is not None
+    
+    # Check if new section is Base Prep
+    new_section_ids = recipe_data.menu_section_ids
+    is_new_section_base_prep = False
+    
+    if new_section_ids:
+        sanitized_section_ids = [sid for sid in new_section_ids if sid > 0]
+        if sanitized_section_ids:
+            section_result = await session.execute(
+                select(MenuSection)
+                .where(MenuSection.id.in_(sanitized_section_ids))
+            )
+            sections = section_result.scalars().all()
+            is_new_section_base_prep = any(
+                section.name.strip().lower() == BASE_PREP_SECTION_LABEL.lower()
+                for section in sections
+            )
+        
+        # If we have negative temp IDs and no Base Prep detected yet, check if Base Prep section exists
+        # This handles the case where frontend sends temporary negative IDs for Base Prep section
+        if not is_new_section_base_prep and any(sid <= 0 for sid in new_section_ids):
+            # Get the restaurant_id from the recipe or base_prep
+            restaurant_id_to_check = None
+            if recipe:
+                restaurant_id_to_check = recipe.restaurant_id
+            elif base_prep:
+                restaurant_id_to_check = base_prep.restaurant_id
+            
+            if restaurant_id_to_check:
+                # Check if Base Prep section exists for this restaurant
+                menu, menu_sections = await dal.get_restaurant_menu_sections(session, restaurant_id_to_check)
+                is_new_section_base_prep = any(
+                    s.name.strip().lower() == BASE_PREP_SECTION_LABEL.lower()
+                    for s in menu_sections
+                )
+    
+    # Handle migration cases
+    if is_currently_recipe and is_new_section_base_prep:
+        # Migrate recipe to base prep
+        try:
+            # Get current recipe details
+            recipe_dict = await dal.get_recipe_with_details(session, recipe_id)
+            if not recipe_dict:
+                raise HTTPException(status_code=404, detail=f"Recipe with ID {recipe_id} not found")
+            
+            # Create update payload with all fields
+            update_dict = recipe_data.model_dump(exclude_unset=True)
+            
+            # Merge current recipe data with updates
+            for key in ['name', 'description', 'instructions']:
+                if key not in update_dict and key in recipe_dict:
+                    update_dict[key] = recipe_dict[key]
+            
+            # Migrate to base prep
+            new_base_prep_id = await dal.migrate_recipe_to_base_prep(session, recipe_id)
+            
+            # Update base prep with new data
+            await dal.update_base_prep(
+                session,
+                base_prep_id=new_base_prep_id,
+                name=update_dict.get('name'),
+                description=update_dict.get('description'),
+                instructions=update_dict.get('instructions'),
+            )
+            
+            await session.commit()
+            
+            # Fetch the migrated base prep
+            base_prep_dict = await dal.get_base_prep_with_details(session, new_base_prep_id)
+            return await _base_prep_dict_to_recipe_response(base_prep_dict, session)
+        except Exception as exc:
+            await session.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to migrate recipe to base prep: {str(exc)}") from exc
+    
+    elif is_currently_base_prep and not is_new_section_base_prep:
+        # Migrate base prep to recipe
+        try:
+            # Get current base prep details
+            base_prep_dict = await dal.get_base_prep_with_details(session, recipe_id)
+            if not base_prep_dict:
+                raise HTTPException(status_code=404, detail=f"Base prep with ID {recipe_id} not found")
+            
+            # Create update payload with all fields
+            update_dict = recipe_data.model_dump(exclude_unset=True)
+            
+            # Merge current base prep data with updates
+            for key in ['name', 'description', 'instructions']:
+                if key not in update_dict and key in base_prep_dict:
+                    update_dict[key] = base_prep_dict[key]
+            
+            # Need a menu section ID for the new recipe
+            if not new_section_ids or all(sid <= 0 for sid in new_section_ids):
+                raise HTTPException(status_code=400, detail="A valid menu section ID is required when converting base prep to recipe")
+            
+            sanitized_section_ids = [sid for sid in new_section_ids if sid > 0]
+            menu_section_id = sanitized_section_ids[0]  # Use first valid section
+            
+            # Migrate to recipe
+            new_recipe_id = await dal.migrate_base_prep_to_recipe(
+                session,
+                base_prep_id=recipe_id,
+                menu_section_id=menu_section_id
+            )
+            
+            # Update recipe with new data
+            await dal.update_recipe(
+                session,
+                recipe_id=new_recipe_id,
+                name=update_dict.get('name'),
+                description=update_dict.get('description'),
+                instructions=update_dict.get('instructions'),
+                serving_size=update_dict.get('serving_size'),
+                price=update_dict.get('price'),
+                image=update_dict.get('image'),
+            )
+            
+            await session.commit()
+            
+            # Fetch the migrated recipe
+            recipe_dict = await dal.get_recipe_with_details(session, new_recipe_id)
+            return RecipeWithIngredients(**recipe_dict)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            await session.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to migrate base prep to recipe: {str(exc)}") from exc
+    
+    elif is_currently_base_prep:
+        # Update base prep (no migration needed)
+        try:
+            updated_base_prep = await dal.update_base_prep(
+                session,
+                base_prep_id=recipe_id,
+                **recipe_data.model_dump(exclude_unset=True)
+            )
+            if not updated_base_prep:
+                raise HTTPException(status_code=404, detail=f"Base prep with ID {recipe_id} not found")
+            
+            await session.commit()
+            
+            # Fetch the updated base prep
+            base_prep_dict = await dal.get_base_prep_with_details(session, recipe_id)
+            return await _base_prep_dict_to_recipe_response(base_prep_dict, session)
+        except ValueError as exc:
+            await session.rollback()
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    
+    else:
+        # Update recipe (no migration needed)
+        try:
+            updated_recipe = await dal.update_recipe(
+                session,
+                recipe_id=recipe_id,
+                **recipe_data.model_dump(exclude_unset=True)
+            )
+        except ValueError as exc:
+            await session.rollback()
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    # Update the recipe
-    try:
-        updated_recipe = await dal.update_recipe(
-            session,
-            recipe_id=recipe_id,
-            **recipe_data.model_dump(exclude_unset=True)
-        )
-    except ValueError as exc:
-        await session.rollback()
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    if not updated_recipe:
-        raise HTTPException(status_code=404, detail=f"Recipe with ID {recipe_id} not found")
-    
-    await session.commit()
-    
-    # Fetch the updated recipe with details
-    recipe_dict = await dal.get_recipe_with_details(session, recipe_id)
-    
-    return RecipeWithIngredients(**recipe_dict)
+        if not updated_recipe:
+            raise HTTPException(status_code=404, detail=f"Recipe with ID {recipe_id} not found")
+        
+        await session.commit()
+        
+        # Fetch the updated recipe with details
+        recipe_dict = await dal.get_recipe_with_details(session, recipe_id)
+        
+        return RecipeWithIngredients(**recipe_dict)
 
 
 @router.delete("/recipes/{recipe_id}")
@@ -639,6 +961,311 @@ async def delete_recipe(
     await session.commit()
     
     return {"status": "success", "message": f"Recipe {recipe_id} deleted"}
+
+
+# ============================================================================
+# Base Prep endpoints
+# ============================================================================
+
+@router.post("/restaurants/{restaurant_id}/base-preps", response_model=RecipeWithIngredients, status_code=status.HTTP_201_CREATED)
+async def create_base_prep(
+    restaurant_id: int,
+    base_prep_data: BasePrepCreate,
+    session: AsyncSession = Depends(get_db)
+):
+    """
+    Create a new base prep with ingredients.
+    
+    - **restaurant_id**: Restaurant ID
+    - **name**: Base prep name
+    - **description**: Optional description
+    - **instructions**: Optional preparation instructions
+    - **yield_quantity**: Optional yield quantity
+    - **yield_unit**: Optional yield unit
+    - **ingredients**: Optional list of ingredients
+    
+    Returns base prep with full details.
+    """
+    try:
+        base_prep_id = await dal.create_base_prep(
+            session,
+            restaurant_id=restaurant_id,
+            name=base_prep_data.name,
+            description=base_prep_data.description,
+            instructions=base_prep_data.instructions,
+            yield_quantity=base_prep_data.yield_quantity,
+            yield_unit=base_prep_data.yield_unit,
+        )
+        
+        # Add ingredients if provided
+        if base_prep_data.ingredients:
+            for ing in base_prep_data.ingredients:
+                allergens_payload = ing.allergens
+                await dal.add_base_prep_ingredient(
+                    session,
+                    base_prep_id=base_prep_id,
+                    ingredient_id=ing.ingredient_id,
+                    quantity=ing.quantity,
+                    unit=ing.unit,
+                    notes=ing.notes,
+                    allergens=allergens_payload,
+                    confirmed=ing.confirmed or False,
+                )
+                if ing.ingredient_name:
+                    await dal.update_ingredient_name(
+                        session,
+                        ingredient_id=ing.ingredient_id,
+                        name=ing.ingredient_name,
+                    )
+        
+        await session.commit()
+        
+        # Fetch the created base prep with details
+        base_prep_dict = await dal.get_base_prep_with_details(session, base_prep_id)
+        
+        # Convert to RecipeWithIngredients format for compatibility
+        return await _base_prep_dict_to_recipe_response(base_prep_dict, session)
+    except Exception as exc:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/restaurants/{restaurant_id}/base-preps", response_model=list[RecipeWithIngredients])
+async def list_base_preps(
+    restaurant_id: int,
+    session: AsyncSession = Depends(get_db)
+):
+    """
+    Get all base preps for a restaurant with full details.
+    
+    - **restaurant_id**: Restaurant ID
+    
+    Returns list of base preps with ingredients.
+    """
+    base_preps = await dal.get_restaurant_base_preps(session, restaurant_id)
+    
+    # Fetch details for each base prep
+    result = []
+    for base_prep in base_preps:
+        base_prep_dict = await dal.get_base_prep_with_details(session, base_prep.id)
+        if base_prep_dict:
+            result.append(await _base_prep_dict_to_recipe_response(base_prep_dict, session))
+    
+    return result
+
+
+@router.get("/base-preps/{base_prep_id}", response_model=RecipeWithIngredients)
+async def get_base_prep(
+    base_prep_id: int,
+    session: AsyncSession = Depends(get_db)
+):
+    """
+    Get base prep with full ingredient details and allergens.
+    
+    - **base_prep_id**: Base prep ID
+    
+    Returns base prep with ingredients and allergens.
+    """
+    base_prep_dict = await dal.get_base_prep_with_details(session, base_prep_id)
+    
+    if not base_prep_dict:
+        raise HTTPException(status_code=404, detail=f"Base prep with ID {base_prep_id} not found")
+    
+    return await _base_prep_dict_to_recipe_response(base_prep_dict, session)
+
+
+@router.patch("/base-preps/{base_prep_id}", response_model=RecipeWithIngredients)
+async def update_base_prep(
+    base_prep_id: int,
+    base_prep_data: BasePrepUpdate,
+    session: AsyncSession = Depends(get_db)
+):
+    """
+    Update a base prep.
+    
+    - **base_prep_id**: Base prep ID
+    - **name**: Optional base prep name
+    - **description**: Optional description
+    - **instructions**: Optional preparation instructions
+    - **yield_quantity**: Optional yield quantity
+    - **yield_unit**: Optional yield unit
+    
+    Returns updated base prep with full details.
+    """
+    try:
+        base_prep = await dal.update_base_prep(
+            session, 
+            base_prep_id, 
+            **base_prep_data.model_dump(exclude_unset=True)
+        )
+        
+        if not base_prep:
+            raise HTTPException(status_code=404, detail=f"Base prep with ID {base_prep_id} not found")
+        
+        await session.commit()
+        
+        # Fetch updated base prep with details
+        base_prep_dict = await dal.get_base_prep_with_details(session, base_prep_id)
+        
+        return await _base_prep_dict_to_recipe_response(base_prep_dict, session)
+    except HTTPException:
+        await session.rollback()
+        raise
+    except Exception as exc:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.delete("/base-preps/{base_prep_id}")
+async def delete_base_prep(
+    base_prep_id: int,
+    session: AsyncSession = Depends(get_db)
+):
+    """
+    Delete a base prep.
+    
+    - **base_prep_id**: Base prep ID
+    
+    Returns success status.
+    """
+    deleted = await dal.delete_base_prep(session, base_prep_id)
+    
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Base prep with ID {base_prep_id} not found")
+    
+    await session.commit()
+    
+    return {"status": "success", "message": f"Base prep {base_prep_id} deleted"}
+
+
+@router.post("/base-preps/{base_prep_id}/ingredients/{ingredient_id}")
+async def add_ingredient_to_base_prep(
+    base_prep_id: int,
+    ingredient_id: int,
+    ingredient_data: BasePrepIngredientRequest,
+    session: AsyncSession = Depends(get_db)
+):
+    """
+    Add or update an ingredient in a base prep.
+    
+    - **base_prep_id**: Base prep ID
+    - **ingredient_id**: Ingredient ID
+    - **quantity**: Optional quantity
+    - **unit**: Optional unit
+    - **notes**: Optional notes
+    - **allergens**: Optional allergens list
+    - **confirmed**: Optional confirmation status
+    
+    Returns success status.
+    """
+    try:
+        await dal.add_base_prep_ingredient(
+            session,
+            base_prep_id=base_prep_id,
+            ingredient_id=ingredient_id,
+            quantity=ingredient_data.quantity,
+            unit=ingredient_data.unit,
+            notes=ingredient_data.notes,
+            allergens=ingredient_data.allergens,
+            confirmed=ingredient_data.confirmed or False,
+        )
+        
+        await session.commit()
+        
+        return {"status": "success", "message": "Ingredient added to base prep"}
+    except Exception as exc:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.delete("/base-preps/{base_prep_id}/ingredients/{ingredient_id}")
+async def remove_ingredient_from_base_prep(
+    base_prep_id: int,
+    ingredient_id: int,
+    session: AsyncSession = Depends(get_db)
+):
+    """
+    Remove an ingredient from a base prep.
+    
+    - **base_prep_id**: Base prep ID
+    - **ingredient_id**: Ingredient ID
+    
+    Returns success status.
+    """
+    removed = await dal.remove_base_prep_ingredient(session, base_prep_id, ingredient_id)
+    
+    if not removed:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Ingredient {ingredient_id} not found in base prep {base_prep_id}"
+        )
+    
+    await session.commit()
+    
+    return {"status": "success", "message": "Ingredient removed from base prep"}
+
+
+@router.post("/recipes/{recipe_id}/base-preps/{base_prep_id}")
+async def link_base_prep_to_recipe(
+    recipe_id: int,
+    base_prep_id: int,
+    link_data: dict,  # Expect {quantity?, unit?, notes?}
+    session: AsyncSession = Depends(get_db)
+):
+    """
+    Link a base prep to a recipe.
+    
+    - **recipe_id**: Recipe ID
+    - **base_prep_id**: Base prep ID
+    - **quantity**: Optional quantity
+    - **unit**: Optional unit
+    - **notes**: Optional notes
+    
+    Returns success status.
+    """
+    try:
+        await dal.link_recipe_to_base_prep(
+            session,
+            recipe_id=recipe_id,
+            base_prep_id=base_prep_id,
+            quantity=link_data.get("quantity"),
+            unit=link_data.get("unit"),
+            notes=link_data.get("notes"),
+        )
+        
+        await session.commit()
+        
+        return {"status": "success", "message": "Base prep linked to recipe"}
+    except Exception as exc:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.delete("/recipes/{recipe_id}/base-preps/{base_prep_id}")
+async def unlink_base_prep_from_recipe(
+    recipe_id: int,
+    base_prep_id: int,
+    session: AsyncSession = Depends(get_db)
+):
+    """
+    Remove a base prep from a recipe.
+    
+    - **recipe_id**: Recipe ID
+    - **base_prep_id**: Base prep ID
+    
+    Returns success status.
+    """
+    removed = await dal.unlink_recipe_from_base_prep(session, recipe_id, base_prep_id)
+    
+    if not removed:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Base prep {base_prep_id} not found in recipe {recipe_id}"
+        )
+    
+    await session.commit()
+    
+    return {"status": "success", "message": "Base prep removed from recipe"}
 
 
 # ============================================================================
@@ -945,7 +1572,7 @@ async def deduce_recipe_ingredients(request: dict):
                   "quantity": 0.0,
                   "unit": "g/ml/piece/etc",
                   "allergens": [
-                    {{"allergen": "marker_id", "certainty": "certain|probable"}}
+                    {{"allergen": "marker_id", "certainty": "likely|possible"}}
                   ]
                 }}
               ]
@@ -960,9 +1587,9 @@ async def deduce_recipe_ingredients(request: dict):
         - Base quantities on 1 person serving
         - Use ONLY singular, specific ingredient names (NOT "pancetta or bacon" - choose ONE)
         - Choose the most common/traditional ingredient variant
-        - Each ingredient's "allergens" must be a JSON array of objects shaped exactly like {{"allergen": "<marker>", "certainty": "<certain|probable>"}}
+        - Each ingredient's "allergens" must be a JSON array of objects shaped exactly like {{"allergen": "<marker>", "certainty": "<likely|possible>"}}
         - Allowed markers are ONLY the canonical ids listed above
-        - Use "certain" when the allergen or marker is definitely present in the ingredient; use "probable" when it is likely but not guaranteed (e.g., shared fryers or garnish risk)
+        - Use "likely" when the allergen is definitely present in the ingredient as a core component; use "possible" when it might be present but is not guaranteed (e.g., potential cross-contamination, garnish risk, or optional variants)
         - Use specific allergen markers: "meat" for any meat or animal derivative (beef, pork, chicken, gelatin, lard, etc.), "milk" for dairy products, "eggs" for egg products, "honey" for honey, "fish" for fish, "crustaceans" for shellfish, etc.
         - Do not use dietary markers like "vegan" or "vegetarian" - use factual allergen labels instead
         - Don't infer anything else and return only valid JSON with no prose

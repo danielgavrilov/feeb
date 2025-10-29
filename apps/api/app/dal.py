@@ -1195,6 +1195,132 @@ async def add_ingredient_allergen(
     await session.flush()
 
 
+def _process_ingredient_allergens(
+    ingredient_allergens_list: List[Any],
+    allergens_payload: Optional[str]
+) -> List[Dict[str, Any]]:
+    """
+    Process allergens for an ingredient, handling both database allergens and overrides.
+    
+    Args:
+        ingredient_allergens_list: List of IngredientAllergen objects from database
+        allergens_payload: JSON string or None containing allergen overrides
+    
+    Returns:
+        List of allergen dictionaries with canonical codes and names
+    """
+    import json
+    
+    # Build base allergens from ingredient allergens
+    ingredient_allergens: List[Dict[str, Any]] = []
+    ingredient_codes = set()
+    
+    for ia in ingredient_allergens_list:
+        allergen = ia.allergen
+        canonical = None
+        if allergen:
+            canonical = (
+                canonicalize_allergen(getattr(allergen, "code", None))
+                or canonical_allergen_from_label(getattr(allergen, "name", None))
+                or canonicalize_allergen(getattr(allergen, "name", None))
+            )
+        
+        certainty_value = certainty_to_ui(getattr(ia, "certainty", None))
+        
+        if canonical:
+            code = canonical.slug
+            name = canonical.label
+        else:
+            code = getattr(allergen, "code", None)
+            name = getattr(allergen, "name", None)
+        
+        if not code:
+            continue
+        
+        code_key = code.lower()
+        if code_key in ingredient_codes:
+            continue
+        
+        ingredient_codes.add(code_key)
+        ingredient_allergens.append(
+            {
+                "code": code,
+                "name": name,
+                "certainty": certainty_value,
+                "canonical_code": canonical.slug if canonical else None,
+                "canonical_name": canonical.label if canonical else None,
+                "family_code": canonical.family_slug if canonical and hasattr(canonical, 'family_slug') else None,
+                "family_name": canonical.family_label if canonical and hasattr(canonical, 'family_label') else None,
+                "marker_type": None,
+            }
+        )
+    
+    # Process allergen overrides if provided
+    override_allergens: Optional[List[Dict[str, Any]]] = None
+    
+    if allergens_payload is not None:
+        override_allergens = []
+        override_codes = set()
+        
+        parsed_payload: Any = allergens_payload
+        if isinstance(allergens_payload, str):
+            raw_text = allergens_payload.strip()
+            if not raw_text:
+                parsed_payload = []
+            else:
+                try:
+                    parsed_payload = json.loads(raw_text)
+                except json.JSONDecodeError:
+                    parsed_payload = raw_text
+        
+        def add_override_entry(label: Any, certainty: Any) -> None:
+            canonical = canonical_allergen_from_label(label) or canonicalize_allergen(label)
+            if not canonical:
+                return
+            code = canonical.slug
+            code_key = code.lower()
+            if code_key in override_codes:
+                return
+            override_codes.add(code_key)
+            override_allergens.append(
+                {
+                    "code": code,
+                    "name": canonical.label,
+                    "certainty": certainty_to_ui(certainty),
+                    "canonical_code": canonical.slug if canonical else None,
+                    "canonical_name": canonical.label if canonical else None,
+                    "family_code": canonical.family_slug if canonical and hasattr(canonical, 'family_slug') else None,
+                    "family_name": canonical.family_label if canonical and hasattr(canonical, 'family_label') else None,
+                    "marker_type": None,
+                }
+            )
+        
+        if isinstance(parsed_payload, list):
+            for entry in parsed_payload:
+                if isinstance(entry, dict):
+                    raw_label = entry.get("code") or entry.get("allergen") or entry.get("name")
+                    certainty_value = entry.get("certainty")
+                else:
+                    raw_label = entry
+                    certainty_value = None
+                add_override_entry(raw_label, certainty_value)
+        elif isinstance(parsed_payload, dict):
+            raw_label = (
+                parsed_payload.get("code")
+                or parsed_payload.get("allergen")
+                or parsed_payload.get("name")
+            )
+            add_override_entry(raw_label, parsed_payload.get("certainty"))
+        elif isinstance(parsed_payload, str):
+            add_override_entry(parsed_payload, None)
+        elif parsed_payload is None:
+            # Explicit null payload -> treat as cleared list
+            pass
+    
+    # Return overrides if present, otherwise return ingredient allergens
+    return override_allergens if override_allergens is not None else ingredient_allergens
+
+
 async def get_recipe_with_details(
     session: AsyncSession,
     recipe_id: int
@@ -1209,9 +1335,9 @@ async def get_recipe_with_details(
     Returns:
         Dict with recipe data and ingredients with allergens, or None
     """
-    from .models import Recipe, RecipeIngredient, Ingredient, IngredientAllergen
+    from .models import Recipe, RecipeIngredient, Ingredient, IngredientAllergen, BasePrep, BasePrepIngredient, RecipeBasePrep
     
-    # Get recipe with eager loading
+    # Get recipe with eager loading (including base preps)
     result = await session.execute(
         select(Recipe)
         .where(Recipe.id == recipe_id)
@@ -1221,6 +1347,15 @@ async def get_recipe_with_details(
                 .selectinload(Ingredient.allergens)
                 .selectinload(IngredientAllergen.allergen),
                 selectinload(RecipeIngredient.substitution),
+            ),
+            selectinload(Recipe.recipe_base_preps).options(
+                selectinload(RecipeBasePrep.base_prep).options(
+                    selectinload(BasePrep.ingredients).options(
+                        selectinload(BasePrepIngredient.ingredient)
+                        .selectinload(Ingredient.allergens)
+                        .selectinload(IngredientAllergen.allergen)
+                    )
+                )
             ),
             selectinload(Recipe.section_links)
             .selectinload(MenuSectionRecipe.section)
@@ -1234,116 +1369,11 @@ async def get_recipe_with_details(
     
     # Build ingredient list with allergens
     ingredients = []
-    import json
 
+    # Process direct ingredients
     for ri in recipe.ingredients:
-        ingredient_allergens: List[Dict[str, Any]] = []
-        ingredient_codes = set()
-
-        for ia in ri.ingredient.allergens:
-            allergen = ia.allergen
-            canonical = None
-            if allergen:
-                canonical = (
-                    canonicalize_allergen(getattr(allergen, "code", None))
-                    or canonical_allergen_from_label(getattr(allergen, "name", None))
-                    or canonicalize_allergen(getattr(allergen, "name", None))
-                )
-
-            certainty_value = certainty_to_ui(getattr(ia, "certainty", None))
-
-            if canonical:
-                code = canonical.slug
-                name = canonical.label
-            else:
-                code = getattr(allergen, "code", None)
-                name = getattr(allergen, "name", None)
-
-            if not code:
-                continue
-
-            code_key = code.lower()
-            if code_key in ingredient_codes:
-                continue
-
-            ingredient_codes.add(code_key)
-            ingredient_allergens.append(
-                {
-                    "code": code,
-                    "name": name,
-                    "certainty": certainty_value,
-                    "canonical_code": canonical.slug if canonical else None,
-                    "canonical_name": canonical.label if canonical else None,
-                    "family_code": canonical.family_slug if canonical and hasattr(canonical, 'family_slug') else None,
-                    "family_name": canonical.family_label if canonical and hasattr(canonical, 'family_label') else None,
-                    "marker_type": None,
-                }
-            )
-
-        allergens_payload = ri.allergens
-        override_allergens: Optional[List[Dict[str, Any]]] = None
-
-        if allergens_payload is not None:
-            override_allergens = []
-            override_codes = set()
-
-            parsed_payload: Any = allergens_payload
-            if isinstance(allergens_payload, str):
-                raw_text = allergens_payload.strip()
-                if not raw_text:
-                    parsed_payload = []
-                else:
-                    try:
-                        parsed_payload = json.loads(raw_text)
-                    except json.JSONDecodeError:
-                        parsed_payload = raw_text
-
-            def add_override_entry(label: Any, certainty: Any) -> None:
-                canonical = canonical_allergen_from_label(label) or canonicalize_allergen(label)
-                if not canonical:
-                    return
-                code = canonical.slug
-                code_key = code.lower()
-                if code_key in override_codes:
-                    return
-                override_codes.add(code_key)
-                override_allergens.append(
-                    {
-                        "code": code,
-                        "name": canonical.label,
-                        "certainty": certainty_to_ui(certainty),
-                        "canonical_code": canonical.slug if canonical else None,
-                        "canonical_name": canonical.label if canonical else None,
-                        "family_code": canonical.family_slug if canonical and hasattr(canonical, 'family_slug') else None,
-                        "family_name": canonical.family_label if canonical and hasattr(canonical, 'family_label') else None,
-                        "marker_type": None,
-                    }
-                )
-
-            if isinstance(parsed_payload, list):
-                for entry in parsed_payload:
-                    if isinstance(entry, dict):
-                        raw_label = entry.get("code") or entry.get("allergen") or entry.get("name")
-                        certainty_value = entry.get("certainty")
-                    else:
-                        raw_label = entry
-                        certainty_value = None
-                    add_override_entry(raw_label, certainty_value)
-            elif isinstance(parsed_payload, dict):
-                raw_label = (
-                    parsed_payload.get("code")
-                    or parsed_payload.get("allergen")
-                    or parsed_payload.get("name")
-                )
-                add_override_entry(raw_label, parsed_payload.get("certainty"))
-            elif isinstance(parsed_payload, str):
-                add_override_entry(parsed_payload, None)
-            elif parsed_payload is None:
-                # Explicit null payload -> treat as cleared list
-                pass
-
-        allergens = override_allergens if override_allergens is not None else ingredient_allergens
-
+        allergens = _process_ingredient_allergens(ri.ingredient.allergens, ri.allergens)
+        
         substitution_data = None
         if ri.substitution:
             substitution_data = {
@@ -1361,6 +1391,33 @@ async def get_recipe_with_details(
             "confirmed": ri.confirmed,
             "substitution": substitution_data,
         })
+    
+    # Process base prep ingredients (expand them into the ingredients list)
+    for rbp in recipe.recipe_base_preps:
+        base_prep = rbp.base_prep
+        if not base_prep:
+            continue
+        
+        # Each base prep ingredient is added to the recipe's ingredient list
+        for bpi in base_prep.ingredients:
+            allergens = _process_ingredient_allergens(bpi.ingredient.allergens, bpi.allergens)
+            
+            # Build notes that indicate this comes from a base prep
+            base_prep_note = f"From base prep: {base_prep.name}"
+            combined_notes = f"{bpi.notes}. {base_prep_note}" if bpi.notes else base_prep_note
+            if rbp.notes:
+                combined_notes = f"{combined_notes}. {rbp.notes}"
+            
+            ingredients.append({
+                "ingredient_id": bpi.ingredient_id,
+                "ingredient_name": bpi.ingredient.name,
+                "quantity": float(bpi.quantity) if bpi.quantity else None,
+                "unit": bpi.unit,
+                "notes": combined_notes,
+                "allergens": allergens,
+                "confirmed": bpi.confirmed,
+                "substitution": None,  # Base prep ingredients don't have substitutions in recipes
+            })
     
     section_links = sorted(
         recipe.section_links,
@@ -1403,4 +1460,543 @@ async def get_recipe_with_details(
         "sections": sections,
         "ingredients": ingredients
     }
+
+
+# ============================================================================
+# Base Prep System DAL Functions
+# ============================================================================
+
+async def create_base_prep(
+    session: AsyncSession,
+    restaurant_id: int,
+    name: str,
+    description: Optional[str] = None,
+    instructions: Optional[str] = None,
+    yield_quantity: Optional[float] = None,
+    yield_unit: Optional[str] = None,
+) -> int:
+    """
+    Create a new base prep.
+    
+    Args:
+        session: Database session
+        restaurant_id: Restaurant ID
+        name: Base prep name
+        description: Optional description
+        instructions: Optional preparation instructions
+        yield_quantity: Optional yield quantity
+        yield_unit: Optional yield unit
+    
+    Returns:
+        Base prep ID
+    """
+    from .models import BasePrep
+    
+    base_prep = BasePrep(
+        restaurant_id=restaurant_id,
+        name=name,
+        description=description,
+        instructions=instructions,
+        yield_quantity=yield_quantity,
+        yield_unit=yield_unit,
+    )
+    session.add(base_prep)
+    await session.flush()
+    return base_prep.id
+
+
+async def update_base_prep(
+    session: AsyncSession,
+    base_prep_id: int,
+    **kwargs
+) -> Optional["BasePrep"]:
+    """
+    Update a base prep.
+    
+    Args:
+        session: Database session
+        base_prep_id: Base prep ID
+        **kwargs: Fields to update
+    
+    Returns:
+        Updated BasePrep object or None if not found
+    """
+    from .models import BasePrep
+    
+    result = await session.execute(
+        select(BasePrep).where(BasePrep.id == base_prep_id)
+    )
+    base_prep = result.scalar_one_or_none()
+    
+    if not base_prep:
+        return None
+    
+    for key, value in kwargs.items():
+        if hasattr(base_prep, key) and value is not None:
+            setattr(base_prep, key, value)
+    
+    await session.flush()
+    return base_prep
+
+
+async def delete_base_prep(
+    session: AsyncSession,
+    base_prep_id: int
+) -> bool:
+    """
+    Delete a base prep.
+    
+    Args:
+        session: Database session
+        base_prep_id: Base prep ID
+    
+    Returns:
+        True if deleted, False if not found
+    """
+    from .models import BasePrep
+    
+    result = await session.execute(
+        select(BasePrep).where(BasePrep.id == base_prep_id)
+    )
+    base_prep = result.scalar_one_or_none()
+    
+    if not base_prep:
+        return False
+    
+    await session.delete(base_prep)
+    await session.flush()
+    return True
+
+
+async def get_base_prep_by_id(
+    session: AsyncSession,
+    base_prep_id: int
+) -> Optional["BasePrep"]:
+    """
+    Get base prep by ID.
+    
+    Args:
+        session: Database session
+        base_prep_id: Base prep ID
+    
+    Returns:
+        BasePrep object or None
+    """
+    from .models import BasePrep
+    
+    result = await session.execute(
+        select(BasePrep).where(BasePrep.id == base_prep_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_restaurant_base_preps(
+    session: AsyncSession,
+    restaurant_id: int
+) -> list:
+    """
+    Get all base preps for a restaurant.
+    
+    Args:
+        session: Database session
+        restaurant_id: Restaurant ID
+    
+    Returns:
+        List of BasePrep objects
+    """
+    from .models import BasePrep
+    
+    result = await session.execute(
+        select(BasePrep).where(BasePrep.restaurant_id == restaurant_id)
+    )
+    return result.scalars().all()
+
+
+async def add_base_prep_ingredient(
+    session: AsyncSession,
+    base_prep_id: int,
+    ingredient_id: int,
+    quantity: Optional[float] = None,
+    unit: Optional[str] = None,
+    notes: Optional[str] = None,
+    allergens: Optional[List[Union[Dict[str, Any], Any]]] = None,
+    confirmed: bool = False,
+) -> None:
+    """
+    Add or update an ingredient in a base prep.
+    
+    Args:
+        session: Database session
+        base_prep_id: Base prep ID
+        ingredient_id: Ingredient ID
+        quantity: Optional quantity
+        unit: Optional unit
+        notes: Optional notes
+        allergens: Optional allergens list
+        confirmed: Whether ingredient is confirmed
+    """
+    from .models import BasePrepIngredient
+    
+    # Check if exists
+    result = await session.execute(
+        select(BasePrepIngredient).where(
+            BasePrepIngredient.base_prep_id == base_prep_id,
+            BasePrepIngredient.ingredient_id == ingredient_id
+        )
+    )
+    link = result.scalar_one_or_none()
+    
+    # Serialize allergens to JSON string
+    allergens_json = None
+    if allergens is not None:
+        import json
+        
+        if isinstance(allergens, str):
+            allergens_json = allergens
+        else:
+            allergens_dicts = []
+            for allergen in allergens:
+                if hasattr(allergen, 'model_dump'):
+                    allergens_dicts.append(allergen.model_dump(exclude_none=False))
+                elif isinstance(allergen, dict):
+                    allergens_dicts.append(allergen)
+                else:
+                    raise ValueError(f"Unexpected allergen type: {type(allergen)}")
+            allergens_json = json.dumps(allergens_dicts)
+    
+    if link:
+        # Update existing
+        link.quantity = quantity
+        link.unit = unit
+        link.notes = notes
+        link.allergens = allergens_json
+        link.confirmed = confirmed
+    else:
+        # Insert new
+        link = BasePrepIngredient(
+            base_prep_id=base_prep_id,
+            ingredient_id=ingredient_id,
+            quantity=quantity,
+            unit=unit,
+            notes=notes,
+            allergens=allergens_json,
+            confirmed=confirmed
+        )
+        session.add(link)
+    
+    await session.flush()
+
+
+async def remove_base_prep_ingredient(
+    session: AsyncSession,
+    base_prep_id: int,
+    ingredient_id: int,
+) -> bool:
+    """
+    Remove an ingredient from a base prep.
+    
+    Args:
+        session: Database session
+        base_prep_id: Base prep ID
+        ingredient_id: Ingredient ID
+    
+    Returns:
+        True if removed, False if not found
+    """
+    from .models import BasePrepIngredient
+    
+    result = await session.execute(
+        select(BasePrepIngredient).where(
+            BasePrepIngredient.base_prep_id == base_prep_id,
+            BasePrepIngredient.ingredient_id == ingredient_id,
+        )
+    )
+    link = result.scalar_one_or_none()
+    
+    if not link:
+        return False
+    
+    await session.delete(link)
+    await session.flush()
+    return True
+
+
+async def link_recipe_to_base_prep(
+    session: AsyncSession,
+    recipe_id: int,
+    base_prep_id: int,
+    quantity: Optional[float] = None,
+    unit: Optional[str] = None,
+    notes: Optional[str] = None,
+) -> None:
+    """
+    Link a base prep to a recipe.
+    
+    Args:
+        session: Database session
+        recipe_id: Recipe ID
+        base_prep_id: Base prep ID
+        quantity: Optional quantity
+        unit: Optional unit
+        notes: Optional notes
+    """
+    from .models import RecipeBasePrep
+    
+    # Check if exists
+    result = await session.execute(
+        select(RecipeBasePrep).where(
+            RecipeBasePrep.recipe_id == recipe_id,
+            RecipeBasePrep.base_prep_id == base_prep_id
+        )
+    )
+    link = result.scalar_one_or_none()
+    
+    if link:
+        # Update existing
+        link.quantity = quantity
+        link.unit = unit
+        link.notes = notes
+    else:
+        # Insert new
+        link = RecipeBasePrep(
+            recipe_id=recipe_id,
+            base_prep_id=base_prep_id,
+            quantity=quantity,
+            unit=unit,
+            notes=notes,
+        )
+        session.add(link)
+    
+    await session.flush()
+
+
+async def unlink_recipe_from_base_prep(
+    session: AsyncSession,
+    recipe_id: int,
+    base_prep_id: int,
+) -> bool:
+    """
+    Remove a base prep from a recipe.
+    
+    Args:
+        session: Database session
+        recipe_id: Recipe ID
+        base_prep_id: Base prep ID
+    
+    Returns:
+        True if removed, False if not found
+    """
+    from .models import RecipeBasePrep
+    
+    result = await session.execute(
+        select(RecipeBasePrep).where(
+            RecipeBasePrep.recipe_id == recipe_id,
+            RecipeBasePrep.base_prep_id == base_prep_id,
+        )
+    )
+    link = result.scalar_one_or_none()
+    
+    if not link:
+        return False
+    
+    await session.delete(link)
+    await session.flush()
+    return True
+
+
+async def get_base_prep_with_details(
+    session: AsyncSession,
+    base_prep_id: int
+) -> Optional[Dict]:
+    """
+    Get base prep with full ingredient details and allergens.
+    
+    Args:
+        session: Database session
+        base_prep_id: Base prep ID
+    
+    Returns:
+        Dict with base prep data and ingredients with allergens, or None
+    """
+    from .models import BasePrep, BasePrepIngredient, Ingredient, IngredientAllergen
+    
+    # Get base prep with eager loading
+    result = await session.execute(
+        select(BasePrep)
+        .where(BasePrep.id == base_prep_id)
+        .options(
+            selectinload(BasePrep.ingredients).options(
+                selectinload(BasePrepIngredient.ingredient)
+                .selectinload(Ingredient.allergens)
+                .selectinload(IngredientAllergen.allergen)
+            )
+        )
+    )
+    base_prep = result.scalar_one_or_none()
+    
+    if not base_prep:
+        return None
+    
+    # Build ingredient list with allergens
+    ingredients = []
+    
+    for bpi in base_prep.ingredients:
+        allergens = _process_ingredient_allergens(bpi.ingredient.allergens, bpi.allergens)
+        
+        ingredients.append({
+            "ingredient_id": bpi.ingredient_id,
+            "ingredient_name": bpi.ingredient.name,
+            "quantity": float(bpi.quantity) if bpi.quantity else None,
+            "unit": bpi.unit,
+            "notes": bpi.notes,
+            "allergens": allergens,
+            "confirmed": bpi.confirmed,
+        })
+    
+    return {
+        "id": base_prep.id,
+        "restaurant_id": base_prep.restaurant_id,
+        "name": base_prep.name,
+        "description": base_prep.description,
+        "instructions": base_prep.instructions,
+        "yield_quantity": float(base_prep.yield_quantity) if base_prep.yield_quantity else None,
+        "yield_unit": base_prep.yield_unit,
+        "created_at": base_prep.created_at,
+        "ingredients": ingredients
+    }
+
+
+async def migrate_recipe_to_base_prep(
+    session: AsyncSession,
+    recipe_id: int
+) -> int:
+    """
+    Migrate a recipe to a base prep.
+    Copies all data from recipe to base_prep table and deletes the recipe.
+    
+    Args:
+        session: Database session
+        recipe_id: Recipe ID to migrate
+    
+    Returns:
+        New base prep ID
+    """
+    from .models import Recipe, RecipeIngredient, BasePrep, BasePrepIngredient
+    
+    # Get recipe with ingredients
+    result = await session.execute(
+        select(Recipe)
+        .where(Recipe.id == recipe_id)
+        .options(selectinload(Recipe.ingredients))
+    )
+    recipe = result.scalar_one_or_none()
+    
+    if not recipe:
+        raise ValueError(f"Recipe {recipe_id} not found")
+    
+    # Create base prep with recipe data
+    base_prep = BasePrep(
+        restaurant_id=recipe.restaurant_id,
+        name=recipe.name,
+        description=recipe.description,
+        instructions=recipe.instructions,
+        yield_quantity=None,  # Can be set later by user
+        yield_unit=None,
+    )
+    session.add(base_prep)
+    await session.flush()
+    
+    # Copy ingredients
+    for ri in recipe.ingredients:
+        bpi = BasePrepIngredient(
+            base_prep_id=base_prep.id,
+            ingredient_id=ri.ingredient_id,
+            quantity=ri.quantity,
+            unit=ri.unit,
+            notes=ri.notes,
+            allergens=ri.allergens,
+            confirmed=ri.confirmed,
+        )
+        session.add(bpi)
+    
+    # Delete the recipe (cascading will handle recipe_ingredient)
+    await session.delete(recipe)
+    await session.flush()
+    
+    return base_prep.id
+
+
+async def migrate_base_prep_to_recipe(
+    session: AsyncSession,
+    base_prep_id: int,
+    menu_section_id: int
+) -> int:
+    """
+    Migrate a base prep to a recipe.
+    Copies all data from base_prep to recipe table and deletes the base prep.
+    
+    Args:
+        session: Database session
+        base_prep_id: Base prep ID to migrate
+        menu_section_id: Menu section to place the new recipe in
+    
+    Returns:
+        New recipe ID
+    """
+    from .models import BasePrep, BasePrepIngredient, Recipe, RecipeIngredient, MenuSectionRecipe
+    
+    # Get base prep with ingredients
+    result = await session.execute(
+        select(BasePrep)
+        .where(BasePrep.id == base_prep_id)
+        .options(selectinload(BasePrep.ingredients))
+    )
+    base_prep = result.scalar_one_or_none()
+    
+    if not base_prep:
+        raise ValueError(f"Base prep {base_prep_id} not found")
+    
+    # Create recipe with base prep data
+    recipe = Recipe(
+        restaurant_id=base_prep.restaurant_id,
+        name=base_prep.name,
+        description=base_prep.description,
+        instructions=base_prep.instructions,
+        serving_size=None,
+        price=None,
+        image=None,
+        options=None,
+        special_notes=None,
+        prominence_score=None,
+        status="needs_review",  # Default status for converted recipe
+    )
+    session.add(recipe)
+    await session.flush()
+    
+    # Copy ingredients
+    for bpi in base_prep.ingredients:
+        ri = RecipeIngredient(
+            recipe_id=recipe.id,
+            ingredient_id=bpi.ingredient_id,
+            quantity=bpi.quantity,
+            unit=bpi.unit,
+            notes=bpi.notes,
+            allergens=bpi.allergens,
+            confirmed=bpi.confirmed,
+        )
+        session.add(ri)
+    
+    # Link to menu section
+    menu_link = MenuSectionRecipe(
+        section_id=menu_section_id,
+        recipe_id=recipe.id,
+        position=None,
+    )
+    session.add(menu_link)
+    
+    # Delete the base prep (cascading will handle base_prep_ingredient)
+    await session.delete(base_prep)
+    await session.flush()
+    
+    return recipe.id
 

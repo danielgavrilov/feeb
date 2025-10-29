@@ -256,8 +256,8 @@ async def test_deduce_ingredients_prompt_enforces_allergen_schema(client, monkey
                                 "quantity": 80,
                                 "unit": "g",
                                 "allergens": [
-                                    {"allergen": "milk", "certainty": "certain"},
-                                    {"allergen": "vegan", "certainty": "certain"},
+                                    {"allergen": "milk", "certainty": "likely"},
+                                    {"allergen": "vegan", "certainty": "likely"},
                                 ],
                             }
                         ],
@@ -285,15 +285,15 @@ async def test_deduce_ingredients_prompt_enforces_allergen_schema(client, monkey
 
     payload = response.json()
     assert payload["recipes"][0]["ingredients"][0]["allergens"] == [
-        {"allergen": "milk", "certainty": "certain"},
-        {"allergen": "vegan", "certainty": "certain"},
+        {"allergen": "milk", "certainty": "likely"},
+        {"allergen": "vegan", "certainty": "likely"},
     ]
 
     prompt = captured.get("prompt", "")
     assert CANONICAL_ALLERGEN_MARKERS_PROMPT in prompt
     assert "\"allergens\" must be a JSON array of objects" in prompt
-    assert "\"certainty\"" in prompt and "certain" in prompt and "probable" in prompt
-    assert "\"vegan\" marker" in prompt and "\"vegetarian\" marker" in prompt
+    assert "\"certainty\"" in prompt and "likely" in prompt and "possible" in prompt
+    assert "Do not use dietary markers" in prompt and "\"vegan\"" in prompt and "\"vegetarian\"" in prompt
     assert "Description: Fresh egg pasta with sage, Parmesan and truffle." in prompt
     assert "Price: €18" in prompt
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Dict, Iterable, Mapping, Optional
-import re
 
 
 @dataclass(frozen=True)
@@ -202,51 +201,11 @@ for entry in _CANONICAL_DATA:
 
 
 _CERTAINTY_NORMALIZATION_RULES: Dict[str, str] = {
-    "direct": "direct",
-    "confirmed": "direct",
-    "certain": "direct",
-    "definite": "direct",
-    "explicit": "direct",
-    "sure": "direct",
-    "inferred": "inferred",
-    "suggested": "inferred",
-    "estimated": "inferred",
-    "assumed": "inferred",
-    "high": "high",
-    "very high": "high",
-    "high confidence": "high",
+    "confirmed": "confirmed",
     "likely": "likely",
-    "most likely": "likely",
-    "probable": "likely",
-    "strong": "likely",
-    "medium": "medium",
-    "moderate": "medium",
-    "medium confidence": "medium",
     "possible": "possible",
-    "potential": "possible",
-    "maybe": "possible",
-    "uncertain": "possible",
-    "low": "low",
-    "low confidence": "low",
-    "speculative": "low",
-    "unknown": "unknown",
-    "n/a": "unknown",
-    "na": "unknown",
-    "unspecified": "unknown",
-    "predicted": "possible",
 }
 
-_UI_CERTAINTY_MAP: Dict[str, str] = {
-    "direct": "confirmed",
-    "high": "likely",
-    "likely": "likely",
-    "probable": "likely",
-    "inferred": "likely",
-    "medium": "likely",
-    "possible": "possible",
-    "low": "possible",
-    "unknown": "possible",
-}
 
 
 def canonicalize_allergen(value: object) -> Optional[CanonicalAllergen]:
@@ -271,33 +230,25 @@ def canonical_allergen_from_label(label: str) -> Optional[CanonicalAllergen]:
 
 
 def normalize_certainty(value: object) -> Optional[str]:
-    """Normalize free-form certainty text into a controlled vocabulary."""
+    """Normalize certainty text into a controlled vocabulary."""
 
     if value is None:
         return None
     text = str(value).strip().lower()
     if not text:
         return None
-    text = re.sub(r"\s+", " ", text)
-    normalized = _CERTAINTY_NORMALIZATION_RULES.get(text)
-    if normalized:
-        return normalized
-    # Try to match prefixes like "very high" -> "high"
-    for key, target in _CERTAINTY_NORMALIZATION_RULES.items():
-        if text.startswith(key):
-            return target
-    return None
+    return _CERTAINTY_NORMALIZATION_RULES.get(text)
 
 
 def certainty_to_ui(value: Optional[str]) -> str:
-    """Translate a normalized certainty value into UI vocabulary."""
-
+    """Return certainty value directly (no translation needed)."""
+    
     if not value:
-        return "predicted"
-    mapped = _UI_CERTAINTY_MAP.get(value)
-    if mapped:
-        return mapped
-    return "predicted"
+        return "possible"  # Conservative default
+    # Return as-is if valid, otherwise default to possible
+    if value in ("confirmed", "likely", "possible"):
+        return value
+    return "possible"
 
 
 def iter_all_aliases() -> Iterable[str]:

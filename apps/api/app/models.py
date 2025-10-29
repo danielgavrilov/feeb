@@ -138,6 +138,9 @@ class Restaurant(Base):
     recipes: Mapped[List["Recipe"]] = relationship(
         "Recipe", back_populates="restaurant", cascade="all, delete-orphan"
     )
+    base_preps: Mapped[List["BasePrep"]] = relationship(
+        "BasePrep", back_populates="restaurant", cascade="all, delete-orphan"
+    )
     menu_uploads: Mapped[List["MenuUpload"]] = relationship(
         "MenuUpload", back_populates="restaurant", cascade="all, delete-orphan"
     )
@@ -230,6 +233,9 @@ class Recipe(Base):
     ingredients: Mapped[List["RecipeIngredient"]] = relationship(
         "RecipeIngredient", back_populates="recipe", cascade="all, delete-orphan"
     )
+    recipe_base_preps: Mapped[List["RecipeBasePrep"]] = relationship(
+        "RecipeBasePrep", back_populates="recipe", cascade="all, delete-orphan"
+    )
 
 
 class MenuSectionRecipe(Base):
@@ -300,6 +306,75 @@ class RecipeIngredientSubstitution(Base):
         "RecipeIngredient",
         back_populates="substitution",
         single_parent=True,
+    )
+
+
+# ============================================================================
+# Base Prep System Models
+# ============================================================================
+
+class BasePrep(Base):
+    """Reusable recipe component (e.g., homemade mayonnaise, stock, sauce)."""
+    __tablename__ = "base_prep"
+    
+    id = mapped_column(Integer, primary_key=True, autoincrement=True)
+    restaurant_id = mapped_column(Integer, ForeignKey("restaurant.id"), nullable=False)
+    name = mapped_column(Text, nullable=False)
+    description = mapped_column(Text, nullable=True)
+    instructions = mapped_column(Text, nullable=True)
+    yield_quantity = mapped_column(DECIMAL(10, 3), nullable=True)
+    yield_unit = mapped_column(Text, nullable=True)
+    created_at = mapped_column(TIMESTAMP, default=func.now())
+    
+    # Relationships
+    restaurant: Mapped["Restaurant"] = relationship("Restaurant", back_populates="base_preps")
+    ingredients: Mapped[List["BasePrepIngredient"]] = relationship(
+        "BasePrepIngredient", back_populates="base_prep", cascade="all, delete-orphan"
+    )
+    recipe_links: Mapped[List["RecipeBasePrep"]] = relationship(
+        "RecipeBasePrep", back_populates="base_prep", cascade="all, delete-orphan"
+    )
+
+
+class BasePrepIngredient(Base):
+    """Links base preps to ingredients."""
+    __tablename__ = "base_prep_ingredient"
+    
+    id = mapped_column(Integer, primary_key=True, autoincrement=True)
+    base_prep_id = mapped_column(Integer, ForeignKey("base_prep.id"), nullable=False)
+    ingredient_id = mapped_column(Integer, ForeignKey("ingredient.id"), nullable=False)
+    quantity = mapped_column(DECIMAL(10, 3), nullable=True)
+    unit = mapped_column(Text, nullable=True)
+    notes = mapped_column(Text, nullable=True)
+    allergens = mapped_column(Text, nullable=True)
+    confirmed = mapped_column(Boolean, nullable=False, default=False)
+    
+    # Relationships
+    base_prep: Mapped["BasePrep"] = relationship("BasePrep", back_populates="ingredients")
+    ingredient: Mapped["Ingredient"] = relationship("Ingredient")
+    
+    __table_args__ = (
+        UniqueConstraint("base_prep_id", "ingredient_id", name="uq_base_prep_ingredient"),
+    )
+
+
+class RecipeBasePrep(Base):
+    """Links recipes to base preps with quantity used."""
+    __tablename__ = "recipe_base_prep"
+    
+    id = mapped_column(Integer, primary_key=True, autoincrement=True)
+    recipe_id = mapped_column(Integer, ForeignKey("recipe.id", ondelete="CASCADE"), nullable=False)
+    base_prep_id = mapped_column(Integer, ForeignKey("base_prep.id", ondelete="CASCADE"), nullable=False)
+    quantity = mapped_column(DECIMAL(10, 3), nullable=True)
+    unit = mapped_column(Text, nullable=True)
+    notes = mapped_column(Text, nullable=True)
+    
+    # Relationships
+    recipe: Mapped["Recipe"] = relationship("Recipe", back_populates="recipe_base_preps")
+    base_prep: Mapped["BasePrep"] = relationship("BasePrep", back_populates="recipe_links")
+    
+    __table_args__ = (
+        UniqueConstraint("recipe_id", "base_prep_id", name="uq_recipe_base_prep"),
     )
 
 
@@ -602,6 +677,103 @@ class RecipeWithIngredients(BaseModel):
     created_at: datetime
     sections: List[RecipeSectionLinkResponse] = []
     ingredients: List[RecipeIngredientResponse] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ============================================================================
+# Base Prep Pydantic Models
+# ============================================================================
+
+class BasePrepIngredientRequest(BaseModel):
+    """Request model for adding ingredient to base prep."""
+    ingredient_id: int
+    ingredient_name: Optional[str] = None
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    notes: Optional[str] = None
+    allergens: Optional[List[AllergenInfo]] = None
+    confirmed: Optional[bool] = None
+
+
+class BasePrepIngredientResponse(BaseModel):
+    """Base prep ingredient with details."""
+    ingredient_id: int
+    ingredient_name: str
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    notes: Optional[str] = None
+    allergens: List[AllergenResponse] = []
+    confirmed: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BasePrepCreate(BaseModel):
+    """Request model for creating a base prep."""
+    restaurant_id: int
+    name: str
+    description: Optional[str] = None
+    instructions: Optional[str] = None
+    yield_quantity: Optional[float] = None
+    yield_unit: Optional[str] = None
+    ingredients: Optional[List[BasePrepIngredientRequest]] = []
+
+
+class BasePrepUpdate(BaseModel):
+    """Request model for updating a base prep."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    instructions: Optional[str] = None
+    yield_quantity: Optional[float] = None
+    yield_unit: Optional[str] = None
+
+
+class BasePrepResponse(BaseModel):
+    """Base prep basic information."""
+    id: int
+    restaurant_id: int
+    name: str
+    description: Optional[str] = None
+    instructions: Optional[str] = None
+    yield_quantity: Optional[float] = None
+    yield_unit: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BasePrepWithIngredients(BaseModel):
+    """Base prep with full ingredient details and allergens."""
+    id: int
+    restaurant_id: int
+    name: str
+    description: Optional[str] = None
+    instructions: Optional[str] = None
+    yield_quantity: Optional[float] = None
+    yield_unit: Optional[str] = None
+    created_at: datetime
+    ingredients: List[BasePrepIngredientResponse] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RecipeBasePrepRequest(BaseModel):
+    """Request model for linking base prep to recipe."""
+    base_prep_id: int
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class RecipeBasePrepResponse(BaseModel):
+    """Recipe base prep link with base prep details."""
+    base_prep_id: int
+    base_prep_name: str
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    notes: Optional[str] = None
+    ingredients: List[BasePrepIngredientResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
 
