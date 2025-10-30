@@ -1,4 +1,5 @@
-import { type ElementType, type MouseEvent, useEffect, useMemo, useState } from "react";
+import { type ElementType, type MouseEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -57,6 +58,7 @@ import {
 } from "@/lib/allergen-utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { normalizeBoolean } from "@/lib/normalizeBoolean";
+import { RecipeEditSheet } from "@/components/RecipeEditSheet";
 
 export type RecipeBulkAction =
   | "delete"
@@ -93,6 +95,27 @@ export interface SavedDish {
       alternative: string;
       surcharge?: string | null;
     };
+    // Fields for when this ingredient entry represents a base prep used in the recipe
+    // (not when the recipe itself is a base prep - those are separate entities now)
+    basePrepId?: number;
+    isBasePrep?: boolean;
+    basePrepIngredients?: Array<{
+      name: string;
+      quantity: string;
+      unit: string;
+      confirmed?: boolean;
+      ingredientId?: number | null;
+      allergens?: Array<{
+        code: string;
+        name: string;
+        certainty?: string;
+        canonical_code?: string | null;
+        canonical_name?: string | null;
+        family_code?: string | null;
+        family_name?: string | null;
+        marker_type?: string | null;
+      }>;
+    }>;
   }>;
   prepMethod: string;
   compliance: Record<string, boolean>;
@@ -130,16 +153,19 @@ const mapStoredToSection = (section: StoredMenuSection): SectionDefinition => {
   };
 };
 
-const ensureArchiveSection = (sections: SectionDefinition[]): SectionDefinition[] => {
-  if (sections.some((section) => section.isArchive)) {
-    return sections;
+const ensureSpecialSections = (sections: SectionDefinition[]): SectionDefinition[] => {
+  let result = sections;
+  
+  // Ensure Archive section exists
+  if (!result.some((section) => section.isArchive)) {
+    const temporaryArchive = allocateTemporarySection(ARCHIVE_SECTION_LABEL);
+    const archive = mapStoredToSection({ ...temporaryArchive, isArchive: true });
+    archive.isArchive = true;
+    archive.numericId = null;
+    result = [...result, archive];
   }
-
-  const temporaryArchive = allocateTemporarySection(ARCHIVE_SECTION_LABEL);
-  const archive = mapStoredToSection({ ...temporaryArchive, isArchive: true });
-  archive.isArchive = true;
-  archive.numericId = null;
-  return [...sections, archive];
+  
+  return result;
 };
 
 const isDishOnMenu = (dish: SavedDish) => dish.status === "live";
@@ -155,7 +181,17 @@ export const getDishAllergenDefinitions = (
   dish: SavedDish,
   summaryOverride?: ReturnType<typeof summarizeDishAllergens>,
 ): AllergenFilterDefinition[] => {
-  const summary = summaryOverride ?? summarizeDishAllergens(dish.ingredients);
+  // Expand ingredients to include base prep sub-ingredients
+  const expandedIngredients = dish.ingredients.flatMap((ingredient) => {
+    // If it's a base prep, include its sub-ingredients
+    if (ingredient.basePrepIngredients && ingredient.basePrepIngredients.length > 0) {
+      return ingredient.basePrepIngredients;
+    }
+    // Otherwise, return the ingredient as-is
+    return [ingredient];
+  });
+
+  const summary = summaryOverride ?? summarizeDishAllergens(expandedIngredients);
   const results: AllergenFilterDefinition[] = [];
   const seen = new Set<string>();
 
@@ -234,6 +270,8 @@ interface RecipeBookProps {
   dishes: SavedDish[];
   onDelete: (id: string) => void;
   onEdit: (id: string) => void;
+  onEditRecipeInSheet: (dishId: string, updates: import("@/components/RecipeEditSheet").RecipeUpdatePayload) => Promise<void>;
+  onCreateRecipeInSheet?: (updates: import("@/components/RecipeEditSheet").RecipeUpdatePayload) => Promise<void>;
   onBulkAction: (action: RecipeBulkAction, ids: string[]) => Promise<void> | void;
   onToggleMenuStatus: (id: string, nextStatus: boolean) => Promise<void> | void;
   onMoveDishesToArchive: (dishIds: string[]) => Promise<void> | void;
@@ -245,6 +283,8 @@ export const RecipeBook = ({
   dishes,
   onDelete,
   onEdit,
+  onEditRecipeInSheet,
+  onCreateRecipeInSheet,
   onBulkAction,
   onToggleMenuStatus,
   onMoveDishesToArchive,
@@ -257,6 +297,8 @@ export const RecipeBook = ({
     useState<"all" | "confirmed" | "needs_review" | "live">("all");
   const [showIngredients, setShowIngredients] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [editingSheetDishId, setEditingSheetDishId] = useState<string | null>(null);
+  const [isCreatingNewRecipe, setIsCreatingNewRecipe] = useState(false);
   const [bulkAction, setBulkAction] = useState<RecipeBulkAction | null>(null);
   const [isBulkDialogOpen, setIsBulkDialogOpen] = useState(false);
   const [isProcessingBulk, setIsProcessingBulk] = useState(false);
@@ -292,21 +334,21 @@ export const RecipeBook = ({
 
   useEffect(() => {
     if (!restaurantId) {
-      setSections(ensureArchiveSection([]));
+      setSections(ensureSpecialSections([]));
       setMenuId(null);
       return;
     }
 
     const cached = loadSavedMenuSections(restaurantId);
     setMenuId(cached.menuId);
-    setSections(ensureArchiveSection(cached.sections.map(mapStoredToSection)));
+    setSections(ensureSpecialSections(cached.sections.map(mapStoredToSection)));
     setSectionsError(null);
     setSectionsLoading(true);
 
     refreshMenuSections(restaurantId)
       .then(({ menuId: nextMenuId, sections: nextSections }) => {
         setMenuId(nextMenuId);
-        setSections(ensureArchiveSection(nextSections.map(mapStoredToSection)));
+        setSections(ensureSpecialSections(nextSections.map(mapStoredToSection)));
       })
       .catch((error) => {
         console.error("Failed to refresh menu sections", error);
@@ -329,7 +371,7 @@ export const RecipeBook = ({
       }
 
       setMenuId(custom.detail.menuId);
-      setSections(ensureArchiveSection(custom.detail.sections.map(mapStoredToSection)));
+      setSections(ensureSpecialSections(custom.detail.sections.map(mapStoredToSection)));
     };
 
     window.addEventListener(MENU_SECTIONS_EVENT, handler);
@@ -460,103 +502,107 @@ export const RecipeBook = ({
     });
   }, [dishes, sections]);
 
-  const filteredSections = useMemo(() => {
-    const archiveSection = archiveDefinition;
-    const archiveId = archiveSectionId;
-    const nonArchiveSections = sections.filter((section) => !section.isArchive);
+  // Helper: Order dishes within a section based on saved order
+  const orderDishesInSection = useCallback(
+    (sectionId: string, dishesInSection: SavedDish[]): SavedDish[] => {
+      const order = sectionOrders[sectionId] ?? [];
+      const orderedDishes: SavedDish[] = [];
+      const seen = new Set<string>();
 
-    if (nonArchiveSections.length === 0) {
-      if (archiveId && selectedCategory === archiveId) {
-        if (!archiveSection) {
-          return [];
+      // Add dishes in saved order
+      order.forEach((dishId) => {
+        const dish = dishMap.get(dishId);
+        if (dish && dish.menuSectionId === sectionId && !seen.has(dish.id)) {
+          const isInFilteredDishes = statusFilteredDishes.some(d => d.id === dish.id);
+          if (isInFilteredDishes) {
+            orderedDishes.push(dish);
+            seen.add(dish.id);
+          }
         }
+      });
 
+      // Add remaining dishes that weren't in the saved order
+      dishesInSection.forEach((dish) => {
+        if (!seen.has(dish.id)) {
+          orderedDishes.push(dish);
+          seen.add(dish.id);
+        }
+      });
+
+      return orderedDishes;
+    },
+    [sectionOrders, dishMap, statusFilteredDishes]
+  );
+
+  // Helper: Build section groups when no regular sections exist
+  const buildFallbackSections = useCallback(
+    (archiveSection: SectionDefinition | null, archiveId: string | null) => {
+      // If viewing only archive, show only archive dishes
+      if (archiveId && selectedCategory === archiveId && archiveSection) {
         const archivedDishes = statusFilteredDishes.filter(
-          (dish) => dish.menuSectionId === archiveId,
+          (dish) => dish.menuSectionId === archiveId
         );
-
         return archivedDishes.length > 0
-          ? [
-              {
-                sectionId: archiveSection.id,
-                sectionLabel: archiveSection.label,
-                dishes: archivedDishes,
-              },
-            ]
+          ? [{ sectionId: archiveSection.id, sectionLabel: archiveSection.label, dishes: archivedDishes }]
           : [];
       }
 
+      // If not viewing all, no sections to show
       if (selectedCategory !== "all") {
         return [];
       }
 
+      // Show all dishes grouped by archive/non-archive
       const nonArchivedDishes = statusFilteredDishes.filter((dish) =>
-        archiveId ? dish.menuSectionId !== archiveId : true,
+        archiveId ? dish.menuSectionId !== archiveId : true
       );
       const archivedDishes = archiveId
         ? statusFilteredDishes.filter((dish) => dish.menuSectionId === archiveId)
         : [];
 
       const groups: Array<{ sectionId: string; sectionLabel: string; dishes: SavedDish[] }> = [];
-
+      
       if (nonArchivedDishes.length > 0) {
-        groups.push({
-          sectionId: "__all__",
-          sectionLabel: "Dishes",
-          dishes: nonArchivedDishes,
-        });
+        groups.push({ sectionId: "__all__", sectionLabel: "Dishes", dishes: nonArchivedDishes });
       }
-
       if (archiveSection && archivedDishes.length > 0) {
-        groups.push({
-          sectionId: archiveSection.id,
-          sectionLabel: archiveSection.label,
-          dishes: archivedDishes,
-        });
+        groups.push({ sectionId: archiveSection.id, sectionLabel: archiveSection.label, dishes: archivedDishes });
       }
 
       return groups;
+    },
+    [selectedCategory, statusFilteredDishes]
+  );
+
+  const filteredSections = useMemo(() => {
+    const archiveSection = archiveDefinition;
+    const archiveId = archiveSectionId;
+    const nonArchiveSections = sections.filter((section) => !section.isArchive);
+
+    // Handle case when no regular sections exist
+    if (nonArchiveSections.length === 0) {
+      return buildFallbackSections(archiveSection, archiveId);
     }
 
-    const orderedSectionIds =
-      selectedCategory === "all"
-        ? sections.map((section) => section.id)
-        : sections
-            .filter((section) => section.id === selectedCategory)
-            .map((section) => section.id);
+    // Get sections to display based on selected category
+    const orderedSectionIds = selectedCategory === "all"
+      ? sections.map((section) => section.id)
+      : sections
+          .filter((section) => section.id === selectedCategory)
+          .map((section) => section.id);
 
+    // Build section groups with ordered dishes
     return orderedSectionIds
       .map((sectionId) => {
         const dishesInSection = statusFilteredDishes.filter(
-          (dish) => dish.menuSectionId === sectionId,
+          (dish) => dish.menuSectionId === sectionId
         );
 
         if (dishesInSection.length === 0) {
           return null;
         }
 
-        const order = sectionOrders[sectionId] ?? [];
-        const orderedDishes: SavedDish[] = [];
-        const seen = new Set<string>();
-
-        order.forEach((dishId) => {
-          const dish = dishMap.get(dishId);
-          if (dish && dish.menuSectionId === sectionId && !seen.has(dish.id)) {
-            // Only include dishes that pass the status filter
-            const isInFilteredDishes = statusFilteredDishes.some(d => d.id === dish.id);
-            if (isInFilteredDishes) {
-              orderedDishes.push(dish);
-              seen.add(dish.id);
-            }
-          }
-        });
-
-        dishesInSection.forEach((dish) => {
-          if (!seen.has(dish.id)) {
-            orderedDishes.push(dish);
-            seen.add(dish.id);
-          }
-        });
+        const orderedDishes = orderDishesInSection(sectionId, dishesInSection);
 
         return {
           sectionId,
@@ -565,17 +611,17 @@ export const RecipeBook = ({
         };
       })
       .filter((value): value is { sectionId: string; sectionLabel: string; dishes: SavedDish[] } =>
-        value !== null,
+        value !== null
       );
   }, [
     sections,
     archiveDefinition,
     archiveSectionId,
     selectedCategory,
-    sectionOrders,
     statusFilteredDishes,
     sectionLabelMap,
-    dishMap,
+    orderDishesInSection,
+    buildFallbackSections,
   ]);
 
   const visibleDishes = useMemo(
@@ -669,7 +715,7 @@ export const RecipeBook = ({
     setSectionManageError(null);
     if (open) {
       setEditingSections(
-        ensureArchiveSection(sections).map((section, index) => ({
+        ensureSpecialSections(sections).map((section, index) => ({
           ...section,
           position: section.position ?? index,
         })),
@@ -767,7 +813,7 @@ export const RecipeBook = ({
       return;
     }
 
-    const normalizedSections = ensureArchiveSection(
+    const normalizedSections = ensureSpecialSections(
       editingSections.map((section) => ({
         ...section,
         label: section.label.trim() || section.id,
@@ -804,7 +850,7 @@ export const RecipeBook = ({
 
       const { sections: persistedSections } = await saveMenuSections(restaurantId, storedPayload);
 
-      setSections(ensureArchiveSection(persistedSections.map(mapStoredToSection)));
+      setSections(ensureSpecialSections(persistedSections.map(mapStoredToSection)));
       handleManageSectionsOpenChange(false);
     } catch (error) {
       console.error("Failed to update menu sections", error);
@@ -842,6 +888,7 @@ export const RecipeBook = ({
         )}
         {editingSections.map((section, index) => {
           const isArchive = section.isArchive;
+          const isSpecialSection = isArchive;
 
           return (
             <div key={section.id} className="flex flex-wrap items-center gap-2">
@@ -851,8 +898,8 @@ export const RecipeBook = ({
                 onChange={(event) => handleSectionLabelChange(index, event.target.value)}
                 aria-label={`Rename section ${section.label || section.id}`}
                 className="flex-1 min-w-[180px]"
-                disabled={isArchive}
-                title={isArchive ? "The Archive section name is reserved" : undefined}
+                disabled={isSpecialSection}
+                title={isSpecialSection ? "This section name is reserved" : undefined}
               />
               <div className="flex items-center gap-1">
                 <Button
@@ -880,9 +927,9 @@ export const RecipeBook = ({
                   variant="destructive"
                   size="icon"
                   onClick={() => setSectionPendingDeletionIndex(index)}
-                  disabled={isArchive}
+                  disabled={isSpecialSection}
                   aria-label={`Delete section ${section.label || section.id}`}
-                  title={isArchive ? "The Archive section cannot be deleted" : undefined}
+                  title={isSpecialSection ? "This section cannot be deleted" : undefined}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -1073,8 +1120,19 @@ export const RecipeBook = ({
     <>
       <div data-tour="recipe-book" className="space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <h2 className="text-2xl font-bold text-foreground">Recipe Book</h2>
-          <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-start">
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-bold text-foreground">Recipe Book</h2>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => {
+                setIsCreatingNewRecipe(true);
+              }}
+            >
+              Add New Recipe
+            </Button>
+          </div>
+          <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-start md:w-auto">
             <div className="flex items-center gap-2">
               <Switch id="show-ingredients" checked={showIngredients} onCheckedChange={setShowIngredients} />
               <Label htmlFor="show-ingredients" className="text-sm font-medium text-foreground">
@@ -1349,7 +1407,7 @@ export const RecipeBook = ({
                         ),
                         onClick: (event: MouseEvent<HTMLButtonElement>) => {
                           event.stopPropagation();
-                          onEdit(dish.id);
+                          setEditingSheetDishId(dish.id);
                         },
                         ariaLabel: `Review ${dish.name}`,
                         disabled: false,
@@ -1491,7 +1549,7 @@ export const RecipeBook = ({
                             size="icon"
                             onClick={(event) => {
                               event.stopPropagation();
-                              onEdit(dish.id);
+                              setEditingSheetDishId(dish.id);
                             }}
                             aria-label={`Edit ${dish.name}`}
                           >
@@ -1735,6 +1793,41 @@ export const RecipeBook = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <RecipeEditSheet
+        open={editingSheetDishId !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingSheetDishId(null);
+          }
+        }}
+        dish={editingSheetDishId ? dishes.find(d => d.id === editingSheetDishId) ?? null : null}
+        formatPrice={formatPrice}
+        restaurantId={restaurantId}
+        onSave={onEditRecipeInSheet}
+      />
+
+      <RecipeEditSheet
+        open={isCreatingNewRecipe}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsCreatingNewRecipe(false);
+          }
+        }}
+        dish={null}
+        formatPrice={formatPrice}
+        restaurantId={restaurantId}
+        onSave={async () => {}}
+        isCreateMode={true}
+        onCreate={async (updates) => {
+          if (onCreateRecipeInSheet) {
+            await onCreateRecipeInSheet(updates);
+            setIsCreatingNewRecipe(false);
+          } else {
+            toast.error("Recipe creation is not available");
+          }
+        }}
+      />
     </>
   );
 };

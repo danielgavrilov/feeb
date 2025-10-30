@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -17,10 +17,11 @@ import {
 import { ALLERGEN_CATEGORIES } from "@/data/recipes";
 import { allergenFilterMap } from "@/data/allergen-filters";
 import type { AllergenFilterDefinition } from "@/data/allergen-filters";
-import { Check, Trash2, Plus, ChevronsUpDown, ChevronRight } from "lucide-react";
+import { Check, Trash2, Plus, ChevronsUpDown, ChevronRight, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { parsePriceInput } from "@/lib/price-format";
 import type { AllergenConfidence } from "@/lib/api";
+import { getRestaurantBasePreps } from "@/lib/api";
 
 
 const ANIMAL_PRODUCT_ALLERGENS = new Set([
@@ -74,6 +75,9 @@ export interface IngredientState {
     alternative: string;
     surcharge?: string | null;
   };
+  basePrepId?: number;
+  isBasePrep?: boolean;
+  basePrepIngredients?: IngredientState[];
 }
 
 interface IngredientsListProps {
@@ -89,6 +93,7 @@ interface IngredientsListProps {
     unit: string,
     allergens: IngredientState["allergens"],
   ) => void;
+  onAddBasePrep?: (basePrepId: number, quantity: string, unit: string) => void;
   onUpdateIngredientAllergen: (
     index: number,
     allergens: Array<{
@@ -108,6 +113,7 @@ interface IngredientsListProps {
   ) => void;
   onIngredientNameBlur: (index: number) => void;
   formatPrice: (value: string | number | null | undefined) => string;
+  restaurantId?: number | null;
 }
 
 export const IngredientsList = ({
@@ -118,10 +124,12 @@ export const IngredientsList = ({
   onConfirmIngredient,
   onDeleteIngredient,
   onAddIngredient,
-  onUpdateIngredientAllergens,
+  onAddBasePrep,
+  onUpdateIngredientAllergen,
   onUpdateIngredientSubstitution,
   onIngredientNameBlur,
   formatPrice,
+  restaurantId,
 }: IngredientsListProps) => {
   const [newName, setNewName] = useState("");
   const [newQuantity, setNewQuantity] = useState(DEFAULT_NEW_INGREDIENT_QUANTITY);
@@ -131,9 +139,29 @@ export const IngredientsList = ({
   const [activeSubstitutionIndex, setActiveSubstitutionIndex] = useState<number | null>(null);
   const [substitutionDraft, setSubstitutionDraft] = useState({ alternative: "", surcharge: "" });
   const [expandedAllergenCategory, setExpandedAllergenCategory] = useState<string | null>(null);
+  const [showBasePrepDialog, setShowBasePrepDialog] = useState(false);
+  const [basePreps, setBasePreps] = useState<Array<{ id: number; name: string; description?: string }>>([]);
+  const [selectedBasePrep, setSelectedBasePrep] = useState<number | null>(null);
+  const [basePrepQuantity, setBasePrepQuantity] = useState("1");
+  const [basePrepUnit, setBasePrepUnit] = useState("batch");
+  const [expandedBasePreps, setExpandedBasePreps] = useState<Set<number>>(new Set());
 
   const sortedAllergenCategories = getSortedAllergenCategories();
 
+  // Fetch base preps when restaurant changes
+  useEffect(() => {
+    if (restaurantId) {
+      getRestaurantBasePreps(restaurantId)
+        .then((preps) => {
+          setBasePreps(preps.map(prep => ({ id: prep.id, name: prep.name, description: prep.description })));
+        })
+        .catch((error) => {
+          console.error("Failed to fetch base preps", error);
+        });
+    } else {
+      setBasePreps([]);
+    }
+  }, [restaurantId]);
 
   const matchesAllergenSelection = (
     allergen: { code?: string; name?: string },
@@ -272,6 +300,28 @@ export const IngredientsList = ({
     }
   };
 
+  const handleAddBasePrep = () => {
+    if (selectedBasePrep && onAddBasePrep) {
+      onAddBasePrep(selectedBasePrep, basePrepQuantity, basePrepUnit);
+      setShowBasePrepDialog(false);
+      setSelectedBasePrep(null);
+      setBasePrepQuantity("1");
+      setBasePrepUnit("batch");
+    }
+  };
+
+  const toggleBasePrepExpanded = (index: number) => {
+    setExpandedBasePreps((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  };
+
   const toggleNewAllergen = (allergenId: string, fallbackLabel?: string) => {
     const definition = allergenFilterMap.get(allergenId);
     const entryCode = definition?.id ?? allergenId;
@@ -370,7 +420,7 @@ export const IngredientsList = ({
                   },
                 ];
 
-            onUpdateIngredientAllergens(index, updatedAllergens);
+            onUpdateIngredientAllergen(index, updatedAllergens);
             if (updatedAllergens.length === 0 && ingredient.substitution) {
               onUpdateIngredientSubstitution(index, undefined);
             }
@@ -379,6 +429,86 @@ export const IngredientsList = ({
           const openSubstitutionDialogForIngredient = () => {
             initializeSubstitutionDraft(index, substitution);
           };
+
+          // Special rendering for base prep ingredients
+          if (ingredient.isBasePrep) {
+            const isExpanded = expandedBasePreps.has(index);
+            return (
+              <div
+                key={index}
+                className="p-4 rounded-lg border-2 border-blue-300 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-700"
+              >
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => toggleBasePrepExpanded(index)}
+                          className="p-0 h-auto hover:bg-transparent"
+                        >
+                          {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+                        </Button>
+                        <h4 className="font-semibold text-blue-900 dark:text-blue-100">{ingredient.name}</h4>
+                        <Badge variant="outline" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100">
+                          Base Prep
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2 ml-7">
+                        <Input
+                          type="number"
+                          value={ingredient.quantity}
+                          onChange={(e) => onUpdateIngredient(index, e.target.value)}
+                          className="h-9 w-24 text-sm bg-white dark:bg-slate-800"
+                          aria-label="Quantity"
+                        />
+                        <Select
+                          value={ingredient.unit || undefined}
+                          onValueChange={(value) => onUpdateIngredientUnit(index, value)}
+                        >
+                          <SelectTrigger className="h-9 w-28 text-sm bg-white dark:bg-slate-800">
+                            <SelectValue placeholder="Unit" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="batch">batch</SelectItem>
+                            <SelectItem value="portion">portion</SelectItem>
+                            <SelectItem value="g">g</SelectItem>
+                            <SelectItem value="kg">kg</SelectItem>
+                            <SelectItem value="ml">ml</SelectItem>
+                            <SelectItem value="l">l</SelectItem>
+                            <SelectItem value="cup">cup</SelectItem>
+                            <SelectItem value="tsp">tsp</SelectItem>
+                            <SelectItem value="tbsp">tbsp</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {isExpanded && ingredient.basePrepIngredients && ingredient.basePrepIngredients.length > 0 && (
+                        <div className="mt-4 ml-7 space-y-2 border-l-2 border-blue-200 pl-4 dark:border-blue-800">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                            Contains:
+                          </p>
+                          {ingredient.basePrepIngredients.map((subIng, subIdx) => (
+                            <div key={subIdx} className="text-sm text-foreground">
+                              {subIng.quantity} {subIng.unit} {subIng.name}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      onClick={() => onDeleteIngredient(index)}
+                      variant="outline"
+                      size="icon"
+                      className="border-2 hover:bg-destructive hover:text-destructive-foreground"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          }
 
           return (
             <Dialog
@@ -485,7 +615,7 @@ export const IngredientsList = ({
                                       .map((allergen, allergenIndex) => {
                                         const definition = allergenFilterMap.get(allergen.code || '');
                                       const certaintyLabel = (
-                                        allergen.certainty || (ingredient.confirmed ? "confirmed" : "predicted")
+                                        allergen.certainty || "possible"
                                       ).toLowerCase();
                                       const displayLabel = `${certaintyLabel.charAt(0).toUpperCase()}${certaintyLabel.slice(1)}`;
                                       const statusClassName =
@@ -501,13 +631,13 @@ export const IngredientsList = ({
                                       return (
                                         <span
                                           key={`${allergen.code ?? "unknown"}-${allergen.name ?? allergenIndex}`}
-                                          className="inline-flex items-center gap-2 rounded-full border border-secondary/40 bg-secondary/15 px-3 py-1 text-xs"
+                                          className="inline-flex items-start gap-1.5 rounded-full border border-secondary/40 bg-secondary/15 px-2.5 py-1 text-xs max-w-full"
                                         >
-                                          {Icon && <Icon className="h-4 w-4 text-secondary" />}
-                                          <span className="text-sm font-semibold text-secondary">
+                                          {Icon && <Icon className="h-3.5 w-3.5 text-secondary flex-shrink-0 self-center" />}
+                                          <span className="text-xs font-semibold text-secondary break-words min-w-0 flex-1">
                                             {allergenDisplayName}
                                           </span>
-                                          <span className={`text-[10px] uppercase tracking-wide ${statusClassName}`}>
+                                          <span className={`text-[10px] uppercase tracking-wide ${statusClassName} flex-shrink-0 self-center`}>
                                             {displayLabel}
                                           </span>
                                         </span>
@@ -811,7 +941,20 @@ export const IngredientsList = ({
       </div>
 
       <div className="border-t-2 border-border border-dashed pt-4">
-        <Label className="mb-3 block text-lg font-semibold text-foreground">Add New Ingredient</Label>
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          <Label className="text-lg font-semibold text-foreground">Add New Ingredient</Label>
+          {onAddBasePrep && basePreps.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowBasePrepDialog(true)}
+              className="text-blue-600 border-blue-300 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-700 dark:hover:bg-blue-950/30"
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              Add Base Prep
+            </Button>
+          )}
+        </div>
         <div className="rounded-lg border-2 border-border/70 border-dashed bg-muted/40 p-4">
           <div className="grid gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)_auto] md:items-start">
             <div className="space-y-4">
@@ -897,10 +1040,10 @@ export const IngredientsList = ({
                                   return (
                                     <span
                                       key={`${allergen.code ?? "unknown"}-${allergen.name ?? allergenIndex}`}
-                                      className="inline-flex items-center gap-2 rounded-full border border-secondary/40 bg-secondary/15 px-3 py-1 text-xs"
+                                      className="inline-flex items-start gap-1.5 rounded-full border border-secondary/40 bg-secondary/15 px-2.5 py-1 text-xs max-w-full"
                                     >
-                                      {Icon && <Icon className="h-4 w-4 text-secondary" />}
-                                      <span className="text-sm font-semibold text-secondary">
+                                      {Icon && <Icon className="h-3.5 w-3.5 text-secondary flex-shrink-0 self-center" />}
+                                      <span className="text-xs font-semibold text-secondary break-words min-w-0 flex-1">
                                         {allergenDisplayName}
                                       </span>
                                     </span>
@@ -1075,6 +1218,80 @@ export const IngredientsList = ({
           </div>
         </div>
       </div>
+
+      {/* Base Prep Selection Dialog */}
+      <Dialog open={showBasePrepDialog} onOpenChange={setShowBasePrepDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Base Prep to Recipe</DialogTitle>
+            <DialogDescription>
+              Select a base prep and specify how much to use in this recipe.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="base-prep-select">Base Prep</Label>
+              <Select
+                value={selectedBasePrep?.toString() || ""}
+                onValueChange={(value) => setSelectedBasePrep(Number(value))}
+              >
+                <SelectTrigger id="base-prep-select">
+                  <SelectValue placeholder="Select a base prep..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {basePreps.map((prep) => (
+                    <SelectItem key={prep.id} value={prep.id.toString()}>
+                      {prep.name}
+                      {prep.description && (
+                        <span className="text-muted-foreground ml-2">
+                          - {prep.description}
+                        </span>
+                      )}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex gap-3">
+              <div className="flex-1 space-y-2">
+                <Label htmlFor="base-prep-quantity">Quantity</Label>
+                <Input
+                  id="base-prep-quantity"
+                  type="number"
+                  value={basePrepQuantity}
+                  onChange={(e) => setBasePrepQuantity(e.target.value)}
+                  placeholder="1"
+                />
+              </div>
+              <div className="flex-1 space-y-2">
+                <Label htmlFor="base-prep-unit">Unit</Label>
+                <Select value={basePrepUnit} onValueChange={setBasePrepUnit}>
+                  <SelectTrigger id="base-prep-unit">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="batch">batch</SelectItem>
+                    <SelectItem value="portion">portion</SelectItem>
+                    <SelectItem value="g">g</SelectItem>
+                    <SelectItem value="kg">kg</SelectItem>
+                    <SelectItem value="ml">ml</SelectItem>
+                    <SelectItem value="l">l</SelectItem>
+                    <SelectItem value="cup">cup</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowBasePrepDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddBasePrep} disabled={!selectedBasePrep}>
+              Add Base Prep
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

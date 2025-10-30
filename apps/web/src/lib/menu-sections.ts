@@ -6,12 +6,14 @@ import {
 } from "@/lib/api";
 
 export const ARCHIVE_SECTION_LABEL = "Archive";
+export const BASE_PREP_SECTION_LABEL = "Base Prep";
 
 export type StoredMenuSection = {
   id: number;
   label: string;
   position?: number | null;
   isArchive: boolean;
+  isBasePrep?: boolean;
   isTemporary?: boolean;
 };
 
@@ -35,6 +37,7 @@ const toStoredSection = (section: MenuSection): StoredMenuSection => ({
   label: section.name,
   position: section.position ?? null,
   isArchive: section.is_archive,
+  isBasePrep: section.is_base_prep,
 });
 
 const dispatchUpdate = (detail: MenuSectionsEventDetail) => {
@@ -73,7 +76,7 @@ export const loadSavedMenuSections = (restaurantId: number): { menuId: number | 
       return { menuId: null, sections: [] };
     }
 
-    const sections = parsed.sections
+      const sections = parsed.sections
       .filter((section): section is StoredMenuSection => typeof section?.id === "number" && typeof section?.label === "string")
       .map((section) => ({
         id: section.id,
@@ -83,6 +86,10 @@ export const loadSavedMenuSections = (restaurantId: number): { menuId: number | 
           typeof section.isArchive === "boolean"
             ? section.isArchive
             : section.label.trim().toLowerCase() === ARCHIVE_SECTION_LABEL.toLowerCase(),
+        isBasePrep:
+          typeof section.isBasePrep === "boolean"
+            ? section.isBasePrep
+            : section.label.trim().toLowerCase() === BASE_PREP_SECTION_LABEL.toLowerCase(),
       }));
 
     return {
@@ -131,5 +138,27 @@ export const allocateTemporarySection = (label: string, position?: number | null
   label,
   position: position ?? null,
   isArchive: false,
+  isBasePrep: false,
   isTemporary: true,
 });
+
+export const isBasePrepSection = (section: StoredMenuSection): boolean => {
+  return section.isBasePrep === true || section.label.trim().toLowerCase() === BASE_PREP_SECTION_LABEL.toLowerCase();
+};
+
+export const ensureBasePrepSection = (sections: StoredMenuSection[]): StoredMenuSection[] => {
+  if (sections.some(isBasePrepSection)) {
+    return sections;
+  }
+
+  const temporaryBasePrep = allocateTemporarySection(BASE_PREP_SECTION_LABEL);
+  temporaryBasePrep.isBasePrep = true;
+  
+  // Insert Base Prep section before Archive section if it exists
+  const archiveIndex = sections.findIndex(s => s.isArchive);
+  if (archiveIndex !== -1) {
+    return [...sections.slice(0, archiveIndex), temporaryBasePrep, ...sections.slice(archiveIndex)];
+  }
+  
+  return [...sections, temporaryBasePrep];
+};
