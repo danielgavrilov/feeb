@@ -37,7 +37,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Trash2, Edit, AlertTriangle, ArrowDown, ArrowUp } from "lucide-react";
+import { Trash2, Edit, AlertTriangle, ArrowDown, ArrowUp, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   allocateTemporarySection,
@@ -1122,15 +1122,6 @@ export const RecipeBook = ({
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
             <h2 className="text-2xl font-bold text-foreground">Recipe Book</h2>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => {
-                setIsCreatingNewRecipe(true);
-              }}
-            >
-              Add New Recipe
-            </Button>
           </div>
           <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-start md:w-auto">
             <div className="flex items-center gap-2">
@@ -1172,6 +1163,15 @@ export const RecipeBook = ({
                 ))}
               </SelectContent>
             </Select>
+            <Button
+              variant="default"
+              onClick={() => {
+                setIsCreatingNewRecipe(true);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Recipe
+            </Button>
           </div>
         </div>
 
@@ -1771,8 +1771,8 @@ export const RecipeBook = ({
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
                 {liveSelectedCount === 1
-                  ? "If you mark this live item for review, it will be removed from your guest-facing menu until you have updated the ingredients. If you do not want this to happen, you can also choose to edit the dish directly in the Ingredients tab."
-                  : "If you mark these live items for review, they will be removed from your guest-facing menu until you have updated the ingredients. If you do not want this to happen, you can also choose to edit the dishes directly in the Ingredients tab."}
+                  ? "If you mark this live item for review, it will be removed from your guest-facing menu until you have updated the ingredients. If you do not want this to happen, you can also choose to edit the dish directly in the side pane."
+                  : "If you mark these live items for review, they will be removed from your guest-facing menu until you have updated the ingredients. If you do not want this to happen, you can also choose to edit the dishes directly in the side pane."}
               </AlertDescription>
             </Alert>
           )}

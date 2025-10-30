@@ -26,20 +26,20 @@ export const createAppTour = (callbacks: TourCallbacks, t: (key: string) => stri
       },
     },
     {
-      element: '[data-tour="tab-add"]',
+      element: '[data-tour="tab-recipes"]',
       popover: {
         title: t("tour.step3.title"),
         description: t("tour.step3.description"),
         side: "bottom",
         align: "start",
         onNextClick: () => {
-          callbacks.onTabChange("add");
+          callbacks.onTabChange("recipes");
           driverInstance.moveNext();
         },
       },
     },
     {
-      element: '[data-tour="add-content"]',
+      element: '[data-tour="recipe-book"]',
       popover: {
         title: t("tour.step3.title"),
         description: t("tour.step3.description"),

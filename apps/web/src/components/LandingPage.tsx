@@ -93,7 +93,7 @@ export const LandingPage = ({
       {
         key: "confirm",
         label: t("landing.progressSteps.confirm"),
-        link: "/?tab=add",
+        link: "/?tab=recipes",
         completed: restaurant.ingredientsConfirmed,
         isCurrent: restaurant.menuUploaded && !restaurant.ingredientsConfirmed,
       },

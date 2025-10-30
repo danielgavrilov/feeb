@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { BasePrep, BasePrepUpdate } from "@/lib/api";
+import { createIngredient as createIngredientAPI, addBasePrepIngredient, createBasePrep as createBasePrepAPI } from "@/lib/api";
 import { BasePrepEditSheet, BasePrepFormData } from "@/components/BasePrepEditSheet";
 import { getDishAllergenDefinitions } from "@/components/RecipeBook";
 import type { SavedDish } from "@/components/RecipeBook";
@@ -30,6 +31,8 @@ interface BasePrepsViewProps {
   loading?: boolean;
   restaurantId?: number | null;
   formatPrice: (value: string | number | null | undefined) => string;
+  onChanged?: () => void | Promise<void>;
+  usageCountByBasePrepId?: Record<number, number>;
 }
 
 export const BasePrepsView = ({
@@ -40,18 +43,22 @@ export const BasePrepsView = ({
   loading = false,
   restaurantId,
   formatPrice,
+  onChanged,
+  usageCountByBasePrepId,
 }: BasePrepsViewProps) => {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [editingBasePrepId, setEditingBasePrepId] = useState<number | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [showIngredients, setShowIngredients] = useState(false);
   const [copySource, setCopySource] = useState<BasePrep | null>(null);
+  const [showActiveOnly, setShowActiveOnly] = useState(false);
 
   const handleDelete = async (id: number) => {
     try {
       setDeletingId(id);
       await onDelete(id);
       toast.success("Base prep deleted successfully");
+      if (onChanged) await onChanged();
     } catch (error) {
       console.error("Failed to delete base prep", error);
       toast.error("Failed to delete base prep");
@@ -66,9 +73,52 @@ export const BasePrepsView = ({
   };
 
   const handleCreateFromCopy = async (data: BasePrepFormData) => {
-    await onCreate(data);
-    setCopySource(null);
-    toast.success("Base prep copied successfully");
+    // Create the new base prep first, then add ingredients one by one
+    const { ingredients = [], ...createData } = data;
+    try {
+      // Create the base prep directly so we have the new id
+      const created = await createBasePrepAPI(createData);
+      const newBasePrepId = created.id;
+
+      for (const ing of ingredients) {
+        let ingredientId = ing.ingredient_id ?? null;
+        // If no ingredient_id, create a user ingredient first
+        if (!ingredientId) {
+          const ingredientCode = `user:${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          const createdIngredient = await createIngredientAPI({
+            code: ingredientCode,
+            name: ing.ingredient_name,
+            source: "user",
+          });
+          ingredientId = createdIngredient.id;
+        }
+
+        await addBasePrepIngredient(newBasePrepId, {
+          ingredient_id: ingredientId,
+          ingredient_name: ing.ingredient_name,
+          quantity: ing.quantity ?? undefined,
+          unit: ing.unit ?? undefined,
+          confirmed: ing.confirmed ?? false,
+          allergens: (ing.allergens ?? []).map((a) => ({
+            code: a.code,
+            name: a.name,
+            certainty: a.certainty,
+            canonical_code: a.canonical_code ?? null,
+            canonical_name: a.canonical_name ?? null,
+            family_code: a.family_code ?? null,
+            family_name: a.family_name ?? null,
+            marker_type: a.marker_type ?? null,
+          })),
+        });
+      }
+
+      setCopySource(null);
+      toast.success("Base prep copied successfully");
+      if (onChanged) await onChanged();
+    } catch (error) {
+      console.error("Failed to copy base prep", error);
+      toast.error("Failed to copy base prep. Please try again.");
+    }
   };
 
   return (
@@ -94,7 +144,7 @@ export const BasePrepsView = ({
             <div>
               <h2 className="text-2xl font-bold text-foreground">Base Preps</h2>
               <p className="text-sm text-muted-foreground mt-1">
-                Manage reusable preparations and ingredients
+                Manage home-made preparations and sauces.
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -102,6 +152,12 @@ export const BasePrepsView = ({
                 <Switch id="show-ingredients" checked={showIngredients} onCheckedChange={setShowIngredients} />
                 <Label htmlFor="show-ingredients" className="text-sm font-medium text-foreground">
                   Show ingredients
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch id="show-active-only" checked={showActiveOnly} onCheckedChange={setShowActiveOnly} />
+                <Label htmlFor="show-active-only" className="text-sm font-medium text-foreground">
+                  Show active only
                 </Label>
               </div>
               <Button onClick={() => setIsCreating(true)}>
@@ -112,7 +168,10 @@ export const BasePrepsView = ({
           </div>
 
           <div className="grid gap-4">
-            {basePreps.map((basePrep) => {
+            {(showActiveOnly
+              ? basePreps.filter((bp) => (usageCountByBasePrepId?.[bp.id] ?? 0) > 0)
+              : basePreps
+            ).map((basePrep) => {
               // Convert base prep to SavedDish format for allergen calculation
               const basePrepAsDish: SavedDish = {
                 id: basePrep.id.toString(),
@@ -140,9 +199,16 @@ export const BasePrepsView = ({
             <div className="flex justify-between items-start">
               <div className="flex-1">
                 <div className="flex flex-col gap-2">
-                  <h3 className="text-lg font-semibold text-foreground break-words">
-                    {basePrep.name}
-                  </h3>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-lg font-semibold text-foreground break-words">
+                      {basePrep.name}
+                    </h3>
+                    {typeof usageCountByBasePrepId?.[basePrep.id] === "number" && (
+                      <span className="text-xs rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
+                        Used in {usageCountByBasePrepId[basePrep.id]} {usageCountByBasePrepId[basePrep.id] === 1 ? "dish" : "dishes"}
+                      </span>
+                    )}
+                  </div>
                   {basePrep.description && (
                     <p className="text-sm text-muted-foreground">
                       {basePrep.description}
@@ -281,7 +347,9 @@ export const BasePrepsView = ({
         onCreate={async (data) => {
           await onCreate(data);
           setIsCreating(false);
+          if (onChanged) await onChanged();
         }}
+        onChanged={onChanged}
         formatPrice={formatPrice}
       />
 
@@ -294,12 +362,13 @@ export const BasePrepsView = ({
         }}
         basePrep={copySource ? {
           ...copySource,
-          name: `${copySource.name} (2)`,
+          name: `Copy of ${copySource.name}`,
         } : null}
         restaurantId={restaurantId}
         onSave={async () => {}}
         isCreateMode={true}
         onCreate={handleCreateFromCopy}
+        onChanged={onChanged}
         formatPrice={formatPrice}
       />
 
@@ -315,7 +384,9 @@ export const BasePrepsView = ({
         onSave={async (basePrepId, updates) => {
           await onEdit(basePrepId, updates);
           setEditingBasePrepId(null);
+          if (onChanged) await onChanged();
         }}
+        onChanged={onChanged}
         formatPrice={formatPrice}
       />
     </>

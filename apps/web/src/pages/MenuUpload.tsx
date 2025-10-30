@@ -211,7 +211,7 @@ const MenuUploadPage = () => {
 
   const handleSelectMethod = (method: MenuUploadSourceType | "manual") => {
     if (method === "manual") {
-      navigate("/?tab=add", { replace: false });
+      navigate("/?tab=recipes", { replace: false });
       return;
     }
     setSelectedMethod(method);
@@ -497,7 +497,7 @@ const MenuUploadPage = () => {
       </div>
       <div className="flex flex-wrap gap-3">
         <Button onClick={handleReset}>Try again</Button>
-        <Button variant="outline" onClick={() => navigate("/?tab=add")}>Add dishes manually</Button>
+        <Button variant="outline" onClick={() => navigate("/?tab=recipes")}>Add dishes manually</Button>
       </div>
     </Card>
   );

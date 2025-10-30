@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -145,6 +145,9 @@ export const IngredientsList = ({
   const [basePrepQuantity, setBasePrepQuantity] = useState("1");
   const [basePrepUnit, setBasePrepUnit] = useState("batch");
   const [expandedBasePreps, setExpandedBasePreps] = useState<Set<number>>(new Set());
+  
+  // Refs for allergen scrollable containers - map of ingredient index to scrollable div
+  const allergenScrollRefs = useRef<Map<number, HTMLDivElement | null>>(new Map()).current;
 
   const sortedAllergenCategories = getSortedAllergenCategories();
 
@@ -438,64 +441,100 @@ export const IngredientsList = ({
                 key={index}
                 className="p-4 rounded-lg border-2 border-blue-300 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-700"
               >
-                <div className="flex flex-col gap-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => toggleBasePrepExpanded(index)}
-                          className="p-0 h-auto hover:bg-transparent"
-                        >
-                          {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
-                        </Button>
-                        <h4 className="font-semibold text-blue-900 dark:text-blue-100">{ingredient.name}</h4>
-                        <Badge variant="outline" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100">
-                          Base Prep
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-2 ml-7">
-                        <Input
-                          type="number"
-                          value={ingredient.quantity}
-                          onChange={(e) => onUpdateIngredient(index, e.target.value)}
-                          className="h-9 w-24 text-sm bg-white dark:bg-slate-800"
-                          aria-label="Quantity"
-                        />
-                        <Select
-                          value={ingredient.unit || undefined}
-                          onValueChange={(value) => onUpdateIngredientUnit(index, value)}
-                        >
-                          <SelectTrigger className="h-9 w-28 text-sm bg-white dark:bg-slate-800">
-                            <SelectValue placeholder="Unit" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="batch">batch</SelectItem>
-                            <SelectItem value="portion">portion</SelectItem>
-                            <SelectItem value="g">g</SelectItem>
-                            <SelectItem value="kg">kg</SelectItem>
-                            <SelectItem value="ml">ml</SelectItem>
-                            <SelectItem value="l">l</SelectItem>
-                            <SelectItem value="cup">cup</SelectItem>
-                            <SelectItem value="tsp">tsp</SelectItem>
-                            <SelectItem value="tbsp">tbsp</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {isExpanded && ingredient.basePrepIngredients && ingredient.basePrepIngredients.length > 0 && (
-                        <div className="mt-4 ml-7 space-y-2 border-l-2 border-blue-200 pl-4 dark:border-blue-800">
-                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                            Contains:
-                          </p>
-                          {ingredient.basePrepIngredients.map((subIng, subIdx) => (
-                            <div key={subIdx} className="text-sm text-foreground">
-                              {subIng.quantity} {subIng.unit} {subIng.name}
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                <div className="grid gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)_auto] md:items-start">
+                  {/* Left column: title and quantity/unit */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleBasePrepExpanded(index)}
+                        className="p-0 h-auto hover:bg-transparent"
+                      >
+                        {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+                      </Button>
+                      <h4 className="font-semibold text-blue-900 dark:text-blue-100">{ingredient.name}</h4>
+                      <Badge variant="outline" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100">
+                        Base Prep
+                      </Badge>
                     </div>
+                    <div className="flex items-center gap-2 ml-7">
+                      <Input
+                        type="number"
+                        value={ingredient.quantity}
+                        onChange={(e) => onUpdateIngredient(index, e.target.value)}
+                        className="h-9 w-24 text-sm bg-white dark:bg-slate-800"
+                        aria-label="Quantity"
+                      />
+                      <Select
+                        value={ingredient.unit || undefined}
+                        onValueChange={(value) => onUpdateIngredientUnit(index, value)}
+                      >
+                        <SelectTrigger className="h-9 w-28 text-sm bg-white dark:bg-slate-800">
+                          <SelectValue placeholder="Unit" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="batch">batch</SelectItem>
+                          <SelectItem value="portion">portion</SelectItem>
+                          <SelectItem value="g">g</SelectItem>
+                          <SelectItem value="kg">kg</SelectItem>
+                          <SelectItem value="ml">ml</SelectItem>
+                          <SelectItem value="l">l</SelectItem>
+                          <SelectItem value="cup">cup</SelectItem>
+                          <SelectItem value="tsp">tsp</SelectItem>
+                          <SelectItem value="tbsp">tbsp</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {isExpanded && ingredient.basePrepIngredients && ingredient.basePrepIngredients.length > 0 && (
+                      <div className="mt-2 ml-7 space-y-2 border-l-2 border-blue-200 pl-4 dark:border-blue-800">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Contains:
+                        </p>
+                        {ingredient.basePrepIngredients.map((subIng, subIdx) => (
+                          <div key={subIdx} className="text-sm text-foreground">
+                            {subIng.quantity} {subIng.unit} {subIng.name}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Middle column: compact allergen icons */}
+                  <div className="ml-7 md:ml-0 flex flex-wrap items-start gap-1.5 md:justify-start">
+                    {(() => {
+                      const bpAllergens = ingredient.allergens ?? [];
+                      const bpVisible = bpAllergens.filter((a) => {
+                        const def = allergenFilterMap.get(a.code || "");
+                        const defId = def?.id?.toLowerCase();
+                        if (defId && HIDDEN_DIET_BADGES.has(defId)) return false;
+                        const code = a.code?.toLowerCase();
+                        const name = a.name?.toLowerCase();
+                        return (code ? !HIDDEN_DIET_BADGES.has(code) : true) && (name ? !HIDDEN_DIET_BADGES.has(name) : true);
+                      });
+                      return bpVisible
+                        .sort((a, b) => {
+                          const ad = allergenFilterMap.get(a.code || "");
+                          const bd = allergenFilterMap.get(b.code || "");
+                          const al = (ad?.name ?? a.name ?? a.code ?? "").toLowerCase();
+                          const bl = (bd?.name ?? b.name ?? b.code ?? "").toLowerCase();
+                          return al.localeCompare(bl);
+                        })
+                        .map((a, i) => {
+                          const def = allergenFilterMap.get(a.code || "");
+                          const Icon = def?.Icon;
+                          if (!Icon) return null;
+                          return (
+                            <span key={`${a.code ?? "unknown"}-${i}`} className="inline-flex rounded-md border border-blue-200 bg-blue-100/70 p-1.5 dark:border-blue-800 dark:bg-blue-900/40">
+                              <Icon className="h-4 w-4 text-blue-700 dark:text-blue-200" />
+                            </span>
+                          );
+                        });
+                    })()}
+                  </div>
+
+                  {/* Right column: delete button */}
+                  <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end md:flex-col md:items-end md:gap-3">
                     <Button
                       onClick={() => onDeleteIngredient(index)}
                       variant="outline"
@@ -654,11 +693,27 @@ export const IngredientsList = ({
                           </div>
                         </button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-72" align="end">
+                      <PopoverContent 
+                        className="w-72" 
+                        align="end"
+                        onOpenAutoFocus={(e) => {
+                          // Prevent default focus and allow mouse wheel scrolling
+                          e.preventDefault();
+                        }}
+                      >
                         <div className="space-y-3">
                           <div>
                             <p className="text-sm font-semibold text-foreground">Select allergens</p>
-                            <div className="mt-2 max-h-56 space-y-2 overflow-y-auto pr-1">
+                            <div 
+                              ref={(el) => {
+                                allergenScrollRefs.set(index, el);
+                              }}
+                              className="mt-2 max-h-56 space-y-2 overflow-y-auto pr-1"
+                              onWheel={(e) => {
+                                // Ensure the scrollable div receives wheel events
+                                e.stopPropagation();
+                              }}
+                            >
                               {sortedAllergenCategories.map((category) => {
                                 const definition = allergenFilterMap.get(category.id);
                                 const label = definition?.name ?? category.label ?? category.id;
@@ -1059,11 +1114,28 @@ export const IngredientsList = ({
                     </div>
                   </button>
                 </PopoverTrigger>
-                <PopoverContent className="w-72" align="end">
+                <PopoverContent 
+                  className="w-72" 
+                  align="end"
+                  onOpenAutoFocus={(e) => {
+                    // Prevent default focus and allow mouse wheel scrolling
+                    e.preventDefault();
+                  }}
+                >
                   <div className="space-y-3">
                     <div>
                       <p className="text-sm font-semibold text-foreground">Select allergens</p>
-                      <div className="mt-2 max-h-56 space-y-2 overflow-y-auto pr-1">
+                      <div 
+                        ref={(el) => {
+                          // Store ref for "new ingredient" allergen popover (index -1 or no index)
+                          allergenScrollRefs.set(-1, el);
+                        }}
+                        className="mt-2 max-h-56 space-y-2 overflow-y-auto pr-1"
+                        onWheel={(e) => {
+                          // Ensure the scrollable div receives wheel events
+                          e.stopPropagation();
+                        }}
+                      >
                         {sortedAllergenCategories.map((category) => {
                           const definition = allergenFilterMap.get(category.id);
                           const label = definition?.name ?? category.label ?? category.id;

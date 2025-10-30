@@ -68,7 +68,7 @@ export const useNextStep = (
         description: t("nextStep.reviewRecipes.description"),
         actionLabel: t("nextStep.reviewRecipes.actionLabel"),
         actionLink:
-          unconfirmedRecipes && unconfirmedRecipes > 0 ? "/recipes?status=needs_review" : "/?tab=add",
+          unconfirmedRecipes && unconfirmedRecipes > 0 ? "/recipes?status=needs_review" : "/?tab=recipes",
       };
     } else if (liveDishCount === 0) {
       nextStep = {
