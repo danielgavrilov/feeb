@@ -13,6 +13,8 @@ import {
   MENU_SECTIONS_EVENT,
   refreshMenuSections,
   saveMenuSections,
+  isBasePrepSection,
+  ensureBasePrepSection,
   type MenuSectionsEventDetail,
   type StoredMenuSection,
 } from "@/lib/menu-sections";
@@ -114,11 +116,12 @@ export const DishNameInput = ({
         return;
       }
 
-      setMenuSections(
+      const sectionsWithBasePrep = ensureBasePrepSection(
         customEvent.detail.sections.length > 0
           ? customEvent.detail.sections
-          : [...FALLBACK_MENU_SECTIONS],
+          : [...FALLBACK_MENU_SECTIONS]
       );
+      setMenuSections(sectionsWithBasePrep);
     };
 
     window.addEventListener(MENU_SECTIONS_EVENT, handleSectionsUpdated);
@@ -138,7 +141,9 @@ export const DishNameInput = ({
     return entries;
   }, [menuSections]);
 
-  const sectionOptions = menuSections.length > 0 ? menuSections : FALLBACK_MENU_SECTIONS;
+  // Filter out Base Prep section - recipes should not be assigned to it
+  const sectionOptions = (menuSections.length > 0 ? menuSections : FALLBACK_MENU_SECTIONS)
+    .filter(section => !isBasePrepSection(section));
 
   const handleAddSection = async () => {
     const trimmedLabel = newSectionLabel.trim();
@@ -157,7 +162,8 @@ export const DishNameInput = ({
     try {
       const temp = allocateTemporarySection(trimmedLabel);
       const { sections } = await saveMenuSections(restaurantId, [...sectionOptions, temp]);
-      setMenuSections(sections.length > 0 ? sections : [...FALLBACK_MENU_SECTIONS]);
+      const sectionsWithBasePrep = ensureBasePrepSection(sections.length > 0 ? sections : [...FALLBACK_MENU_SECTIONS]);
+      setMenuSections(sectionsWithBasePrep);
       const created = sections.find((section) => section.label === trimmedLabel) ?? sections[sections.length - 1];
       if (created) {
         onMenuSectionChange(created.id.toString());
@@ -294,69 +300,119 @@ export const DishNameInput = ({
           <AlertDescription>{sectionsError}</AlertDescription>
         </Alert>
       )}
-      <div className="space-y-3">
-        <Label htmlFor="dish-name" className="text-lg font-semibold text-foreground sm:text-xl">
-          Dish Name
-        </Label>
-        <div className="relative">
-          <Input
-            ref={inputRef}
-            id="dish-name"
-            value={value}
-            onChange={(e) => {
-              onChange(e.target.value);
-            }}
-            onFocus={handleInputFocus}
-            onBlur={handleInputBlur}
-            placeholder="Enter dish name..."
-            className="h-14 border-2 pr-14 text-xl font-medium sm:h-16 sm:text-2xl"
-            autoComplete="off"
-          />
-          {hasSelectedDish && onClearSelectedDish && (
-            <button
-              type="button"
-              onClick={() => {
-                setIsInputFocused(false);
-                setIsPopoverHovered(false);
-                onClearSelectedDish();
-                inputRef.current?.focus();
+      <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
+        <div className="space-y-2">
+          <Label htmlFor="dish-name" className="text-lg font-semibold text-foreground sm:text-xl">
+            Dish Name *
+          </Label>
+          <div className="relative">
+            <Input
+              ref={inputRef}
+              id="dish-name"
+              value={value}
+              onChange={(e) => {
+                onChange(e.target.value);
               }}
-              className="absolute inset-y-0 right-4 flex items-center text-muted-foreground transition-colors hover:text-foreground"
-              aria-label="Clear selected dish"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          )}
-          
-          {/* Suggestions dropdown - conditionally rendered */}
-          {shouldShowSuggestions && !hasSelectedDish && suggestionOptions.length > 0 && (
-            <div
-              className="absolute top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-md border border-border bg-popover py-2 shadow-md z-50"
-              onMouseEnter={handlePopoverMouseEnter}
-              onMouseLeave={handlePopoverMouseLeave}
-            >
-              {filteredSuggestions.length === 0 ? (
-                <p className="px-3 py-2 text-sm text-muted-foreground">No matching dishes found.</p>
-              ) : (
-                filteredSuggestions.map((option) => (
-                  <button
-                    key={`${option.id}-${option.name}`}
-                    type="button"
-                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-muted focus:bg-muted"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => handleOptionSelect(option)}
-                  >
-                    <span className="font-medium text-foreground">{option.name}</span>
-                    <Badge
-                      variant={option.status === "confirmed" || option.status === "live" ? "secondary" : "destructive"}
-                      className="pointer-events-none"
+              onFocus={handleInputFocus}
+              onBlur={handleInputBlur}
+              placeholder="Enter dish name..."
+              className="h-14 border-2 pr-14 text-xl font-medium sm:h-16 sm:text-2xl"
+              autoComplete="off"
+            />
+            {hasSelectedDish && onClearSelectedDish && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsInputFocused(false);
+                  setIsPopoverHovered(false);
+                  onClearSelectedDish();
+                  inputRef.current?.focus();
+                }}
+                className="absolute inset-y-0 right-4 flex items-center text-muted-foreground transition-colors hover:text-foreground"
+                aria-label="Clear selected dish"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            )}
+            
+            {/* Suggestions dropdown - conditionally rendered */}
+            {shouldShowSuggestions && !hasSelectedDish && suggestionOptions.length > 0 && (
+              <div
+                className="absolute top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-md border border-border bg-popover py-2 shadow-md z-50"
+                onMouseEnter={handlePopoverMouseEnter}
+                onMouseLeave={handlePopoverMouseLeave}
+              >
+                {filteredSuggestions.length === 0 ? (
+                  <p className="px-3 py-2 text-sm text-muted-foreground">No matching dishes found.</p>
+                ) : (
+                  filteredSuggestions.map((option) => (
+                    <button
+                      key={`${option.id}-${option.name}`}
+                      type="button"
+                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-muted focus:bg-muted"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => handleOptionSelect(option)}
                     >
-                      {option.status === "needs_review" ? "Review" : "Ingredients confirmed"}
-                    </Badge>
-                  </button>
-                ))
-              )}
-            </div>
+                      <span className="font-medium text-foreground">{option.name}</span>
+                      <Badge
+                        variant={option.status === "confirmed" || option.status === "live" ? "secondary" : "destructive"}
+                        className="pointer-events-none"
+                      >
+                        {option.status === "needs_review" ? "Review" : "Ingredients confirmed"}
+                      </Badge>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        
+        <div className="space-y-2">
+          <Label htmlFor="menu-category-required" className="text-lg font-semibold text-foreground sm:text-xl">
+            Menu Section *
+          </Label>
+          <Select value={menuSectionId} onValueChange={onMenuSectionChange}>
+            <SelectTrigger id="menu-category-required" className="h-14 sm:h-16">
+              <SelectValue placeholder="Select section" />
+            </SelectTrigger>
+            <SelectContent>
+              {sectionOptions.map((section) => (
+                <SelectItem key={section.id} value={section.id.toString()}>
+                  {section.label}
+                </SelectItem>
+              ))}
+              <div className="border-t border-border/60 px-3 py-2">
+                <p className="mb-2 text-xs font-medium text-muted-foreground">Add section</p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={newSectionLabel}
+                    onChange={(event) => setNewSectionLabel(event.target.value)}
+                    placeholder="e.g. Brunch"
+                    className="h-9"
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        handleAddSection();
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleAddSection}
+                    disabled={!canAddSection}
+                    onPointerDown={(event) => event.stopPropagation()}
+                  >
+                    Add
+                  </Button>
+                </div>
+              </div>
+            </SelectContent>
+          </Select>
+          {sectionsError && (
+            <p className="text-xs text-destructive mt-1">{sectionsError}</p>
           )}
         </div>
       </div>
@@ -386,54 +442,6 @@ export const DishNameInput = ({
       {showOptional && (
         <div className="space-y-3 border-t border-border/50 pt-2 pb-4">
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="menu-category" className="text-sm text-muted-foreground">
-                Menu Category
-              </Label>
-              <Select value={menuSectionId} onValueChange={onMenuSectionChange}>
-                <SelectTrigger id="menu-category" className="h-12">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {sectionOptions.map((section) => (
-                    <SelectItem key={section.id} value={section.id.toString()}>
-                      {section.label}
-                    </SelectItem>
-                  ))}
-                  <div className="border-t border-border/60 px-3 py-2">
-                    <p className="mb-2 text-xs font-medium text-muted-foreground">Add section</p>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        value={newSectionLabel}
-                        onChange={(event) => setNewSectionLabel(event.target.value)}
-                        placeholder="e.g. Brunch"
-                        className="h-9"
-                        onPointerDown={(event) => event.stopPropagation()}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            handleAddSection();
-                          }
-                        }}
-                      />
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={handleAddSection}
-                        disabled={!canAddSection}
-                        onPointerDown={(event) => event.stopPropagation()}
-                      >
-                        Add
-                      </Button>
-                    </div>
-                  </div>
-                </SelectContent>
-              </Select>
-              {sectionsError && (
-                <p className="text-xs text-destructive mt-1">{sectionsError}</p>
-              )}
-            </div>
-
             <div className="space-y-2">
               <Label htmlFor="serving-size" className="text-sm text-muted-foreground">
                 Serving Size

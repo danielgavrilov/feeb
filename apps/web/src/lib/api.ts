@@ -40,6 +40,8 @@ export interface MenuSection {
   menu_id: number;
   name: string;
   position?: number | null;
+  is_archive?: boolean;
+  is_base_prep?: boolean;
   created_at: string;
 }
 
@@ -98,6 +100,32 @@ export interface RecipeIngredient {
 
 export type RecipeStatus = "needs_review" | "confirmed" | "live";
 
+export interface RecipeBasePrep {
+  base_prep_id: number;
+  base_prep_name: string;
+  quantity?: number;
+  unit?: string;
+  notes?: string;
+  ingredients: Array<{
+    ingredient_id: number;
+    ingredient_name: string;
+    quantity?: number;
+    unit?: string;
+    notes?: string;
+    allergens: Array<{
+      code: string;
+      name: string;
+      certainty?: string;
+      canonical_code?: string | null;
+      canonical_name?: string | null;
+      family_code?: string | null;
+      family_name?: string | null;
+      marker_type?: string | null;
+    }>;
+    confirmed: boolean;
+  }>;
+}
+
 export interface Recipe {
   id: number;
   restaurant_id: number;
@@ -114,6 +142,7 @@ export interface Recipe {
   created_at: string;
   sections: RecipeSectionLink[];
   ingredients: RecipeIngredient[];
+  base_preps?: RecipeBasePrep[];
 }
 
 export interface CreateRecipeIngredient {
@@ -123,6 +152,16 @@ export interface CreateRecipeIngredient {
   unit?: string;
   notes?: string;
   confirmed?: boolean;
+  allergens?: Array<{
+    code: string;
+    name: string;
+    certainty?: string;
+    canonical_code?: string | null;
+    canonical_name?: string | null;
+    family_code?: string | null;
+    family_name?: string | null;
+    marker_type?: string | null;
+  }>;
   substitution?: {
     alternative: string;
     surcharge?: string | null;
@@ -220,6 +259,40 @@ export interface CreateMenuUploadParams {
   userId?: number;
   url?: string;
   file?: File;
+}
+
+export interface BasePrep {
+  id: number;
+  restaurant_id: number;
+  menu_section_id?: number | null;
+  name: string;
+  description?: string;
+  instructions?: string;
+  yield_quantity?: number | null;
+  yield_unit?: string | null;
+  created_at: string;
+  ingredients: RecipeIngredient[];
+}
+
+export interface BasePrepCreate {
+  restaurant_id: number;
+  name: string;
+  description?: string;
+  instructions?: string;
+  yield_quantity?: number;
+  yield_unit?: string;
+}
+
+export interface BasePrepUpdate {
+  name?: string;
+  description?: string;
+  instructions?: string;
+}
+
+export interface RecipeBasePrepLink {
+  base_prep_id: number;
+  quantity?: number;
+  unit?: string;
 }
 
 // ============================================================================
@@ -486,5 +559,114 @@ export async function getMenuUpload(uploadId: number): Promise<MenuUpload> {
 
 export async function listMenuUploads(restaurantId: number): Promise<MenuUpload[]> {
   return fetchAPI(`/menu-uploads/restaurant/${restaurantId}`);
+}
+
+// ============================================================================
+// Base Prep API
+// ============================================================================
+
+export async function getRestaurantBasePreps(restaurantId: number): Promise<BasePrep[]> {
+  return fetchAPI(`/restaurants/${restaurantId}/base-preps`);
+}
+
+export async function getBasePrep(id: number): Promise<BasePrep> {
+  return fetchAPI(`/base-preps/${id}`);
+}
+
+export async function createBasePrep(data: BasePrepCreate): Promise<BasePrep> {
+  // Backend expects: POST /restaurants/{restaurant_id}/base-preps
+  return fetchAPI(`/restaurants/${data.restaurant_id}/base-preps`, {
+    method: 'POST',
+    body: JSON.stringify({
+      restaurant_id: data.restaurant_id,
+      name: data.name,
+      description: data.description,
+      instructions: data.instructions,
+      yield_quantity: data.yield_quantity,
+      yield_unit: data.yield_unit,
+    }),
+  });
+}
+
+export async function updateBasePrep(id: number, data: BasePrepUpdate): Promise<BasePrep> {
+  // Backend uses PATCH /base-preps/{id}
+  return fetchAPI(`/base-preps/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteBasePrep(id: number): Promise<void> {
+  return fetchAPI(`/base-preps/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function addBasePrepIngredient(
+  basePrepId: number,
+  data: { 
+    ingredient_id: number;
+    ingredient_name?: string;
+    quantity?: number; 
+    unit?: string; 
+    notes?: string;
+    allergens?: Array<{
+      code: string;
+      name: string;
+      certainty?: string;
+      canonical_code?: string | null;
+      canonical_name?: string | null;
+      family_code?: string | null;
+      family_name?: string | null;
+      marker_type?: string | null;
+    }>;
+    confirmed?: boolean;
+  }
+): Promise<void> {
+  return fetchAPI(`/base-preps/${basePrepId}/ingredients/${data.ingredient_id}`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateBasePrepIngredient(
+  basePrepId: number,
+  ingredientId: number,
+  data: UpdateRecipeIngredientRequest
+): Promise<void> {
+  // Backend POST endpoint handles both add and update
+  return fetchAPI(`/base-preps/${basePrepId}/ingredients/${ingredientId}`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteBasePrepIngredient(
+  basePrepId: number,
+  ingredientId: number
+): Promise<void> {
+  return fetchAPI(`/base-preps/${basePrepId}/ingredients/${ingredientId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function linkRecipeToBasePrep(
+  recipeId: number,
+  basePrepId: number,
+  data: { quantity?: number; unit?: string }
+): Promise<void> {
+  return fetchAPI(`/recipes/${recipeId}/base-preps/${basePrepId}`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function unlinkRecipeFromBasePrep(
+  recipeId: number,
+  basePrepId: number
+): Promise<void> {
+  return fetchAPI(`/recipes/${recipeId}/base-preps/${basePrepId}`, {
+    method: 'DELETE',
+  });
 }
 

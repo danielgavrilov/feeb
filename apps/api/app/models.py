@@ -319,6 +319,7 @@ class BasePrep(Base):
     
     id = mapped_column(Integer, primary_key=True, autoincrement=True)
     restaurant_id = mapped_column(Integer, ForeignKey("restaurant.id"), nullable=False)
+    menu_section_id = mapped_column(Integer, ForeignKey("menu_section.id", ondelete="SET NULL"), nullable=True)
     name = mapped_column(Text, nullable=False)
     description = mapped_column(Text, nullable=True)
     instructions = mapped_column(Text, nullable=True)
@@ -328,6 +329,7 @@ class BasePrep(Base):
     
     # Relationships
     restaurant: Mapped["Restaurant"] = relationship("Restaurant", back_populates="base_preps")
+    menu_section: Mapped[Optional["MenuSection"]] = relationship("MenuSection")
     ingredients: Mapped[List["BasePrepIngredient"]] = relationship(
         "BasePrepIngredient", back_populates="base_prep", cascade="all, delete-orphan"
     )
@@ -677,6 +679,7 @@ class RecipeWithIngredients(BaseModel):
     created_at: datetime
     sections: List[RecipeSectionLinkResponse] = []
     ingredients: List[RecipeIngredientResponse] = []
+    base_preps: List["RecipeBasePrepResponse"] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -733,6 +736,7 @@ class BasePrepResponse(BaseModel):
     """Base prep basic information."""
     id: int
     restaurant_id: int
+    menu_section_id: Optional[int] = None
     name: str
     description: Optional[str] = None
     instructions: Optional[str] = None
@@ -747,6 +751,7 @@ class BasePrepWithIngredients(BaseModel):
     """Base prep with full ingredient details and allergens."""
     id: int
     restaurant_id: int
+    menu_section_id: Optional[int] = None
     name: str
     description: Optional[str] = None
     instructions: Optional[str] = None

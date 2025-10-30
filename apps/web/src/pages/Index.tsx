@@ -6,11 +6,13 @@ import { ComplianceOverview } from "@/components/ComplianceOverview";
 import { RecipeBook, SavedDish, RecipeBulkAction } from "@/components/RecipeBook";
 import { MenuView } from "@/components/MenuView";
 import { Settings } from "@/components/Settings";
+import { BasePrepsView } from "@/components/BasePrepsView";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useRestaurant } from "@/hooks/useRestaurant";
 import { useRecipes } from "@/hooks/useRecipes";
+import { useBasePreps } from "@/hooks/useBasePreps";
 import { useAppTour } from "@/hooks/useAppTour";
 import {
   Recipe,
@@ -51,9 +53,19 @@ const Index = () => {
     createRecipe: createRecipeAPI,
     updateRecipe: updateRecipeAPI,
     deleteRecipe: deleteRecipeAPI,
+    refreshRecipes,
   } = useRecipes(restaurant?.id || null);
 
-  const validTabs = ["landing", "add", "recipes", "menu", "settings"] as const;
+  const {
+    basePreps,
+    loading: basePrepsLoading,
+    createBasePrep: createBasePrepAPI,
+    updateBasePrep: updateBasePrepAPI,
+    deleteBasePrep: deleteBasePrepAPI,
+    refreshBasePreps,
+  } = useBasePreps(restaurant?.id || null);
+
+  const validTabs = ["landing", "add", "recipes", "base-preps", "menu", "settings"] as const;
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTabParam = searchParams.get("tab");
   const initialTab = validTabs.includes(initialTabParam as typeof validTabs[number])
@@ -93,14 +105,26 @@ const Index = () => {
 
   const deriveMenuSectionKey = useCallback(
     (recipe: Recipe): string => {
+      // Use the first section from recipe.sections
       const primarySection = recipe.sections[0];
-      if (!primarySection) {
-        return "";
+      if (primarySection) {
+        return primarySection.section_id.toString();
       }
 
-      return primarySection.section_id.toString();
+      // Fallback: place unassigned recipes into Archive if available, so they remain visible
+      if (restaurant?.id) {
+        const cached = loadSavedMenuSections(restaurant.id);
+        const archive = cached.sections.find(
+          (section) => section.isArchive || section.label.trim().toLowerCase() === ARCHIVE_SECTION_LABEL.toLowerCase(),
+        );
+        if (archive) {
+          return archive.id.toString();
+        }
+      }
+
+      return "";
     },
-    [],
+    [restaurant?.id],
   );
 
   const resolveSectionId = useCallback(
@@ -690,6 +714,7 @@ const Index = () => {
       let updatedRecipesList: Recipe[] = recipes;
       let savedRecipe: Recipe;
       const resolvedSectionId = resolveSectionId(menuSectionId);
+      
       if (editingDishId) {
         savedRecipe = await updateRecipeAPI(editingDishId, {
           name: dishName,
@@ -898,6 +923,99 @@ const Index = () => {
     populateFormFromRecipe(recipe);
   };
 
+  const handleEditRecipeInSheet = async (dishId: string, updates: import("@/components/RecipeEditSheet").RecipeUpdatePayload) => {
+    const recipeId = Number(dishId);
+    if (Number.isNaN(recipeId)) {
+      toast.error("Invalid recipe ID");
+      return;
+    }
+
+    try {
+      await updateRecipeAPI(recipeId, updates);
+      toast.success("Recipe updated successfully");
+    } catch (error) {
+      console.error("Failed to update recipe", error);
+      toast.error("Failed to update recipe. Please try again.");
+      throw error;
+    }
+  };
+
+  const handleCreateRecipeInSheet = async (updates: import("@/components/RecipeEditSheet").RecipeUpdatePayload) => {
+    if (!restaurant?.id) {
+      toast.error("Please select a restaurant first");
+      return;
+    }
+
+    try {
+      // Create as regular recipe
+      // 1) Create the recipe WITHOUT ingredients first
+      const created = await createRecipeAPI({
+        restaurant_id: restaurant.id,
+        name: updates.name || "",
+        description: updates.description,
+        instructions: updates.instructions,
+        serving_size: updates.serving_size,
+        price: updates.price,
+        image: updates.image,
+        status: "confirmed",
+        menu_section_ids: updates.menu_section_ids || [],
+        ingredients: [],
+      });
+
+      // 2) If the user provided ingredient rows, create the ingredients and link them
+      if (updates.ingredients && updates.ingredients.length > 0) {
+        for (const ing of updates.ingredients) {
+          // Create a unique code for this user-added ingredient
+          const ingredientCode = `user:${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+          const createdIngredient = await createIngredientAPI({
+            code: ingredientCode,
+            name: ing.ingredient_name,
+            source: "user",
+          });
+
+          await addRecipeIngredientAPI(created.id, {
+            ingredient_id: createdIngredient.id,
+            ingredient_name: ing.ingredient_name,
+            quantity: ing.quantity ?? undefined,
+            unit: ing.unit ?? undefined,
+            confirmed: Boolean(ing.confirmed),
+            allergens: (ing.allergens ?? []).map((a) => ({
+              code: a.code,
+              name: a.name,
+              certainty: a.certainty,
+              canonical_code: a.canonical_code ?? null,
+              canonical_name: a.canonical_name ?? null,
+              family_code: a.family_code ?? null,
+              family_name: a.family_name ?? null,
+              marker_type: a.marker_type ?? null,
+            })),
+            substitution: ing.substitution,
+          });
+        }
+      }
+
+      // 3) Link base preps if provided
+      if (updates.base_preps && updates.base_preps.length > 0) {
+        const { linkRecipeToBasePrep } = await import("@/lib/api");
+        for (const basePrep of updates.base_preps) {
+          await linkRecipeToBasePrep(created.id, basePrep.base_prep_id, {
+            quantity: basePrep.quantity ?? undefined,
+            unit: basePrep.unit ?? undefined,
+          });
+        }
+      }
+
+      toast.success("Recipe created successfully");
+      // Refresh recipes to include the new recipe
+      await refreshRecipes();
+    } catch (error) {
+      console.error("Failed to create recipe", error);
+      toast.error("Failed to create recipe. Please try again.");
+      throw error;
+    }
+  };
+
   useEffect(() => {
     const tabParam = searchParams.get("tab");
     const nextTab = validTabs.includes(tabParam as typeof validTabs[number])
@@ -1036,6 +1154,9 @@ const Index = () => {
               <TabsTrigger value="recipes" data-tour="tab-recipes" className={tabTriggerClass}>
                 {t("navigation.recipes")}
               </TabsTrigger>
+              <TabsTrigger value="base-preps" className={tabTriggerClass}>
+                Base Preps
+              </TabsTrigger>
               <TabsTrigger value="menu" data-tour="tab-menu" className={tabTriggerClass}>
                 {t("navigation.menu")}
               </TabsTrigger>
@@ -1110,7 +1231,7 @@ const Index = () => {
                   onConfirmIngredient={handleConfirmIngredient}
                   onDeleteIngredient={handleDeleteIngredient}
                   onAddIngredient={handleAddIngredient}
-                  onUpdateIngredientAllergens={handleUpdateIngredientAllergens}
+                  onUpdateIngredientAllergen={handleUpdateIngredientAllergens}
                   onUpdateIngredientSubstitution={handleUpdateIngredientSubstitution}
                   onIngredientNameBlur={handleIngredientNameBlur}
                   formatPrice={formatPrice}
@@ -1156,11 +1277,35 @@ const Index = () => {
                 dishes={savedDishes}
                 onDelete={handleDeleteDish}
                 onEdit={handleEditDish}
+                onEditRecipeInSheet={handleEditRecipeInSheet}
+                onCreateRecipeInSheet={handleCreateRecipeInSheet}
                 onBulkAction={handleBulkRecipeAction}
                 onToggleMenuStatus={handleToggleMenuStatus}
                 onMoveDishesToArchive={handleMoveDishesToArchive}
                 formatPrice={formatPrice}
                 restaurantId={restaurant?.id ?? null}
+              />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="base-preps">
+            <div className="rounded-xl bg-card p-4 shadow-lg sm:p-6 lg:p-8">
+              <BasePrepsView
+                basePreps={basePreps}
+                loading={basePrepsLoading}
+                restaurantId={restaurant?.id ?? null}
+                formatPrice={formatPrice}
+                onEdit={async (basePrepId, updates) => {
+                  await updateBasePrepAPI(basePrepId, updates);
+                  toast.success("Base prep updated successfully");
+                }}
+                onDelete={async (basePrepId) => {
+                  await deleteBasePrepAPI(basePrepId);
+                }}
+                onCreate={async (data) => {
+                  await createBasePrepAPI(data);
+                  toast.success("Base prep created successfully");
+                }}
               />
             </div>
           </TabsContent>

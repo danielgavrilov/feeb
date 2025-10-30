@@ -415,3 +415,99 @@ async def test_delete_recipe_ingredient_removes_link(client, test_session):
     assert recipe_after is not None
     assert recipe_after["ingredients"] == []
 
+
+@pytest.mark.asyncio
+async def test_create_recipe_with_base_prep_placeholder_id(client, test_session):
+    """POST /recipes with negative Base Prep section ID creates base prep."""
+    
+    # Setup restaurant and Base Prep section
+    user_id = await dal.upsert_app_user(
+        test_session,
+        supabase_uid="test-user-base-prep",
+        email="user-base-prep@example.com",
+        name="Test User Base Prep",
+    )
+    restaurant_id = await dal.create_restaurant(
+        test_session,
+        name="Test Restaurant Base Prep",
+        user_id=user_id,
+    )
+    
+    # Ensure Base Prep section exists
+    base_prep_section = await dal.get_or_create_menu_section_by_name(
+        test_session,
+        restaurant_id=restaurant_id,
+        name="Base Prep",
+    )
+    await test_session.commit()
+    
+    # Create an ingredient for the recipe
+    ingredient_id = await dal.insert_ingredient(
+        test_session,
+        code="en:flour",
+        name="Flour",
+    )
+    await test_session.commit()
+    
+    # POST recipe with negative Base Prep section ID (placeholder)
+    response = await client.post(
+        "/recipes",
+        json={
+            "restaurant_id": restaurant_id,
+            "name": "Pizza Dough Base",
+            "description": "Basic pizza dough base prep",
+            "instructions": "Mix flour and water",
+            "menu_section_ids": [-123],  # Negative placeholder ID
+            "ingredients": [
+                {
+                    "ingredient_id": ingredient_id,
+                    "ingredient_name": "Flour",
+                    "quantity": 500.0,
+                    "unit": "g",
+                    "confirmed": True,
+                    "allergens": [],
+                }
+            ],
+        },
+    )
+    
+    assert response.status_code == 200
+    payload = response.json()
+    
+    # Verify it was created as base prep (status should indicate base prep)
+    # The response should have sections with Base Prep section
+    assert "sections" in payload
+    assert len(payload["sections"]) > 0
+    section_names = [s["section_name"] for s in payload["sections"]]
+    assert "Base Prep" in section_names
+    
+    # Verify base prep was created in base_prep table, not recipe table
+    from app.models import BasePrep, Recipe
+    from sqlalchemy import select
+    
+    base_prep_id = payload["id"]
+    
+    # Check it exists in base_prep table
+    result = await test_session.execute(
+        select(BasePrep).where(BasePrep.id == base_prep_id)
+    )
+    base_prep = result.scalar_one_or_none()
+    assert base_prep is not None
+    assert base_prep.name == "Pizza Dough Base"
+    
+    # Check it does NOT exist in recipe table
+    result = await test_session.execute(
+        select(Recipe).where(Recipe.id == base_prep_id)
+    )
+    recipe = result.scalar_one_or_none()
+    assert recipe is None
+    
+    # Verify it's linked to the actual Base Prep section (not Archive)
+    menu, menu_sections = await dal.get_restaurant_menu_sections(test_session, restaurant_id)
+    base_prep_section_actual = next(
+        (s for s in menu_sections if s.name.strip().lower() == "base prep"),
+        None
+    )
+    assert base_prep_section_actual is not None
+    assert base_prep_section_actual.id == base_prep_section.id
+

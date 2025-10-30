@@ -36,8 +36,9 @@ export function useRecipes(restaurantId: number | null) {
 
     try {
       setLoading(true);
-      const data = await getRestaurantRecipes(restaurantId);
-      setRecipes(data.map(normalizeRecipe));
+      // Load only recipes (base preps are handled separately now)
+      const recipesData = await getRestaurantRecipes(restaurantId);
+      setRecipes(recipesData.map(normalizeRecipe));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load recipes');

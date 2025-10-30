@@ -1392,32 +1392,36 @@ async def get_recipe_with_details(
             "substitution": substitution_data,
         })
     
-    # Process base prep ingredients (expand them into the ingredients list)
+    # Process base preps (keep them separate, don't expand)
+    base_preps = []
     for rbp in recipe.recipe_base_preps:
         base_prep = rbp.base_prep
         if not base_prep:
             continue
         
-        # Each base prep ingredient is added to the recipe's ingredient list
+        # Build the base prep's ingredient list
+        base_prep_ingredients = []
         for bpi in base_prep.ingredients:
             allergens = _process_ingredient_allergens(bpi.ingredient.allergens, bpi.allergens)
             
-            # Build notes that indicate this comes from a base prep
-            base_prep_note = f"From base prep: {base_prep.name}"
-            combined_notes = f"{bpi.notes}. {base_prep_note}" if bpi.notes else base_prep_note
-            if rbp.notes:
-                combined_notes = f"{combined_notes}. {rbp.notes}"
-            
-            ingredients.append({
+            base_prep_ingredients.append({
                 "ingredient_id": bpi.ingredient_id,
                 "ingredient_name": bpi.ingredient.name,
                 "quantity": float(bpi.quantity) if bpi.quantity else None,
                 "unit": bpi.unit,
-                "notes": combined_notes,
+                "notes": bpi.notes,
                 "allergens": allergens,
                 "confirmed": bpi.confirmed,
-                "substitution": None,  # Base prep ingredients don't have substitutions in recipes
             })
+        
+        base_preps.append({
+            "base_prep_id": base_prep.id,
+            "base_prep_name": base_prep.name,
+            "quantity": float(rbp.quantity) if rbp.quantity else None,
+            "unit": rbp.unit,
+            "notes": rbp.notes,
+            "ingredients": base_prep_ingredients,
+        })
     
     section_links = sorted(
         recipe.section_links,
@@ -1458,13 +1462,55 @@ async def get_recipe_with_details(
         "prominence_score": recipe.prominence_score,
         "status": recipe.status,
         "sections": sections,
-        "ingredients": ingredients
+        "ingredients": ingredients,
+        "base_preps": base_preps
     }
 
 
 # ============================================================================
 # Base Prep System DAL Functions
 # ============================================================================
+
+async def get_or_create_base_prep_section(
+    session: AsyncSession,
+    restaurant_id: int
+) -> int:
+    """
+    Find or create the "Base Prep" section for a restaurant.
+    
+    Args:
+        session: Database session
+        restaurant_id: Restaurant ID
+    
+    Returns:
+        Menu section ID for Base Prep section
+    """
+    from .models import MenuSection
+    
+    BASE_PREP_SECTION_LABEL = "Base Prep"
+    
+    # Get the restaurant's primary menu
+    menu, sections = await get_restaurant_menu_sections(session, restaurant_id)
+    
+    # Look for existing Base Prep section
+    base_prep_section = next(
+        (s for s in sections if s.name.strip().lower() == BASE_PREP_SECTION_LABEL.lower()),
+        None
+    )
+    
+    if base_prep_section:
+        return base_prep_section.id
+    
+    # Create Base Prep section if it doesn't exist
+    new_section = MenuSection(
+        menu_id=menu.id,
+        name=BASE_PREP_SECTION_LABEL,
+        position=len(sections),  # Add at the end
+    )
+    session.add(new_section)
+    await session.flush()
+    return new_section.id
+
 
 async def create_base_prep(
     session: AsyncSession,
@@ -1492,8 +1538,12 @@ async def create_base_prep(
     """
     from .models import BasePrep
     
+    # Automatically assign to Base Prep section
+    menu_section_id = await get_or_create_base_prep_section(session, restaurant_id)
+    
     base_prep = BasePrep(
         restaurant_id=restaurant_id,
+        menu_section_id=menu_section_id,
         name=name,
         description=description,
         instructions=instructions,
@@ -1856,6 +1906,7 @@ async def get_base_prep_with_details(
     return {
         "id": base_prep.id,
         "restaurant_id": base_prep.restaurant_id,
+        "menu_section_id": base_prep.menu_section_id,
         "name": base_prep.name,
         "description": base_prep.description,
         "instructions": base_prep.instructions,
@@ -1864,139 +1915,4 @@ async def get_base_prep_with_details(
         "created_at": base_prep.created_at,
         "ingredients": ingredients
     }
-
-
-async def migrate_recipe_to_base_prep(
-    session: AsyncSession,
-    recipe_id: int
-) -> int:
-    """
-    Migrate a recipe to a base prep.
-    Copies all data from recipe to base_prep table and deletes the recipe.
-    
-    Args:
-        session: Database session
-        recipe_id: Recipe ID to migrate
-    
-    Returns:
-        New base prep ID
-    """
-    from .models import Recipe, RecipeIngredient, BasePrep, BasePrepIngredient
-    
-    # Get recipe with ingredients
-    result = await session.execute(
-        select(Recipe)
-        .where(Recipe.id == recipe_id)
-        .options(selectinload(Recipe.ingredients))
-    )
-    recipe = result.scalar_one_or_none()
-    
-    if not recipe:
-        raise ValueError(f"Recipe {recipe_id} not found")
-    
-    # Create base prep with recipe data
-    base_prep = BasePrep(
-        restaurant_id=recipe.restaurant_id,
-        name=recipe.name,
-        description=recipe.description,
-        instructions=recipe.instructions,
-        yield_quantity=None,  # Can be set later by user
-        yield_unit=None,
-    )
-    session.add(base_prep)
-    await session.flush()
-    
-    # Copy ingredients
-    for ri in recipe.ingredients:
-        bpi = BasePrepIngredient(
-            base_prep_id=base_prep.id,
-            ingredient_id=ri.ingredient_id,
-            quantity=ri.quantity,
-            unit=ri.unit,
-            notes=ri.notes,
-            allergens=ri.allergens,
-            confirmed=ri.confirmed,
-        )
-        session.add(bpi)
-    
-    # Delete the recipe (cascading will handle recipe_ingredient)
-    await session.delete(recipe)
-    await session.flush()
-    
-    return base_prep.id
-
-
-async def migrate_base_prep_to_recipe(
-    session: AsyncSession,
-    base_prep_id: int,
-    menu_section_id: int
-) -> int:
-    """
-    Migrate a base prep to a recipe.
-    Copies all data from base_prep to recipe table and deletes the base prep.
-    
-    Args:
-        session: Database session
-        base_prep_id: Base prep ID to migrate
-        menu_section_id: Menu section to place the new recipe in
-    
-    Returns:
-        New recipe ID
-    """
-    from .models import BasePrep, BasePrepIngredient, Recipe, RecipeIngredient, MenuSectionRecipe
-    
-    # Get base prep with ingredients
-    result = await session.execute(
-        select(BasePrep)
-        .where(BasePrep.id == base_prep_id)
-        .options(selectinload(BasePrep.ingredients))
-    )
-    base_prep = result.scalar_one_or_none()
-    
-    if not base_prep:
-        raise ValueError(f"Base prep {base_prep_id} not found")
-    
-    # Create recipe with base prep data
-    recipe = Recipe(
-        restaurant_id=base_prep.restaurant_id,
-        name=base_prep.name,
-        description=base_prep.description,
-        instructions=base_prep.instructions,
-        serving_size=None,
-        price=None,
-        image=None,
-        options=None,
-        special_notes=None,
-        prominence_score=None,
-        status="needs_review",  # Default status for converted recipe
-    )
-    session.add(recipe)
-    await session.flush()
-    
-    # Copy ingredients
-    for bpi in base_prep.ingredients:
-        ri = RecipeIngredient(
-            recipe_id=recipe.id,
-            ingredient_id=bpi.ingredient_id,
-            quantity=bpi.quantity,
-            unit=bpi.unit,
-            notes=bpi.notes,
-            allergens=bpi.allergens,
-            confirmed=bpi.confirmed,
-        )
-        session.add(ri)
-    
-    # Link to menu section
-    menu_link = MenuSectionRecipe(
-        section_id=menu_section_id,
-        recipe_id=recipe.id,
-        position=None,
-    )
-    session.add(menu_link)
-    
-    # Delete the base prep (cascading will handle base_prep_ingredient)
-    await session.delete(base_prep)
-    await session.flush()
-    
-    return recipe.id
 
