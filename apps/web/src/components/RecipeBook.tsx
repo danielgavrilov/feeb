@@ -38,6 +38,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Trash2, Edit, AlertTriangle, ArrowDown, ArrowUp, Plus } from "lucide-react";
+import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   allocateTemporarySection,
@@ -1109,10 +1110,51 @@ export const RecipeBook = ({
 
   if (dishes.length === 0) {
     return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground text-lg">No dishes added yet.</p>
-        <p className="text-muted-foreground mt-2">Start by adding your first dish!</p>
-      </div>
+      <>
+        <div className="text-center py-12 space-y-4">
+          <p className="text-muted-foreground text-lg">No recipes yet.</p>
+          <p className="text-muted-foreground">This is where you can plan, change and manage your menu.</p>
+          <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              onClick={() => setIsCreatingNewRecipe(true)}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create your first recipe
+            </Button>
+            <span className="text-muted-foreground">or</span>
+            <Button variant="default" asChild>
+              <Link to="/upload" className="inline-flex items-center">
+                <Plus className="h-4 w-4 mr-2" />
+                Upload an entire menu
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        {/* Create Recipe side pane (available even when list is empty) */}
+        <RecipeEditSheet
+          open={isCreatingNewRecipe}
+          onOpenChange={(open) => {
+            if (!open) {
+              setIsCreatingNewRecipe(false);
+            }
+          }}
+          dish={null}
+          formatPrice={formatPrice}
+          restaurantId={restaurantId}
+          onSave={async () => {}}
+          isCreateMode={true}
+          onCreate={async (updates) => {
+            if (onCreateRecipeInSheet) {
+              await onCreateRecipeInSheet(updates);
+              setIsCreatingNewRecipe(false);
+            } else {
+              toast.error("Recipe creation is not available");
+            }
+          }}
+        />
+      </>
     );
   }
 
