@@ -38,6 +38,7 @@ interface BasePrepEditSheetProps {
   onSave: (basePrepId: number, updates: BasePrepUpdate) => Promise<void>;
   isCreateMode?: boolean;
   onCreate?: (data: BasePrepFormData) => Promise<void>;
+  onChanged?: () => void | Promise<void>;
   formatPrice: (value: string | number | null | undefined) => string;
 }
 
@@ -49,6 +50,7 @@ export const BasePrepEditSheet = ({
   onSave,
   isCreateMode = false,
   onCreate,
+  onChanged,
   formatPrice,
 }: BasePrepEditSheetProps) => {
   const isMobile = useIsMobile();
@@ -89,15 +91,38 @@ export const BasePrepEditSheet = ({
       setShowInstructions(Boolean(basePrep.instructions));
       setIsDirty(false);
     } else if (isCreateMode && open) {
-      // Reset form for create mode
-      setName("");
-      setDescription("");
-      setInstructions("");
-      setYieldQuantity("");
-      setYieldUnit("");
-      setIngredients([]);
-      setShowInstructions(false);
-      setIsDirty(false);
+      // Create mode: if a basePrep is provided (e.g., copy), prefill from it
+      if (basePrep) {
+        setName(basePrep.name);
+        setDescription(basePrep.description || "");
+        setInstructions(basePrep.instructions || "");
+        setYieldQuantity(basePrep.yield_quantity?.toString() || "");
+        setYieldUnit(basePrep.yield_unit || "");
+        setIngredients(
+          basePrep.ingredients.map((ing) => ({
+            name: ing.ingredient_name,
+            quantity: ing.quantity?.toString() || "",
+            unit: ing.unit || "",
+            confirmed: ing.confirmed ?? false,
+            ingredientId: ing.ingredient_id ?? null,
+            allergens: ing.allergens,
+            dietaryInfo: [],
+            substitution: ing.substitution,
+          }))
+        );
+        setShowInstructions(Boolean(basePrep.instructions));
+        setIsDirty(false);
+      } else {
+        // Fresh create
+        setName("");
+        setDescription("");
+        setInstructions("");
+        setYieldQuantity("");
+        setYieldUnit("");
+        setIngredients([]);
+        setShowInstructions(false);
+        setIsDirty(false);
+      }
     }
   }, [basePrep, open, isCreateMode]);
 
@@ -184,6 +209,7 @@ export const BasePrepEditSheet = ({
           })),
         };
         await onCreate(createData);
+        if (onChanged) await onChanged();
       } else if (basePrep) {
         // Edit mode
         const updates: BasePrepUpdate = {
@@ -192,6 +218,7 @@ export const BasePrepEditSheet = ({
           instructions: instructions.trim() || undefined,
         };
         await onSave(basePrep.id, updates);
+        if (onChanged) await onChanged();
       }
 
       setIsDirty(false);
@@ -227,7 +254,7 @@ export const BasePrepEditSheet = ({
     };
 
     // Immediately create and link the ingredient if editing existing base prep
-    if (basePrep) {
+    if (!isCreateMode && basePrep) {
       try {
         // Create a unique code for this user-added ingredient
         const ingredientCode = `user:${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -261,6 +288,8 @@ export const BasePrepEditSheet = ({
         // Add to local state with the ingredient ID
         newIngredient.ingredientId = createdIngredient.id;
         setIngredients((current) => [...current, newIngredient]);
+
+        if (onChanged) await onChanged();
 
         toast.success("Ingredient added successfully");
       } catch (error) {
@@ -320,10 +349,11 @@ export const BasePrepEditSheet = ({
   const handleDeleteIngredient = async (index: number) => {
     const ingredient = ingredients[index];
 
-    // If the ingredient has an ID, delete it from the database
-    if (basePrep && ingredient?.ingredientId) {
+    // If editing existing base prep: delete from the database
+    if (!isCreateMode && basePrep && ingredient?.ingredientId) {
       try {
         await deleteBasePrepIngredient(basePrep.id, ingredient.ingredientId);
+        if (onChanged) await onChanged();
       } catch (error) {
         console.error("Failed to delete ingredient from base prep", error);
         toast.error("Failed to delete ingredient. Please try again.");
@@ -346,8 +376,8 @@ export const BasePrepEditSheet = ({
       current.map((ing, i) => (i === index ? { ...ing, allergens } : ing))
     );
 
-    // If the ingredient has an ID, persist to database
-    if (basePrep && ingredient.ingredientId) {
+    // If editing existing base prep, persist to database
+    if (!isCreateMode && basePrep && ingredient.ingredientId) {
       try {
         const payload: UpdateRecipeIngredientRequest = {
           ingredient_id: ingredient.ingredientId,
@@ -367,6 +397,7 @@ export const BasePrepEditSheet = ({
           })),
         };
         await updateBasePrepIngredient(basePrep.id, ingredient.ingredientId, payload);
+        if (onChanged) await onChanged();
       } catch (error) {
         console.error("Failed to update ingredient allergens", error);
         toast.error("Failed to update allergens. Please try again.");
@@ -388,8 +419,8 @@ export const BasePrepEditSheet = ({
       )
     );
 
-    // If the ingredient has an ID, persist to database
-    if (basePrep && ingredient.ingredientId) {
+    // If editing existing base prep, persist to database
+    if (!isCreateMode && basePrep && ingredient.ingredientId) {
       try {
         const payload: UpdateRecipeIngredientRequest = {
           ingredient_id: ingredient.ingredientId,
@@ -413,6 +444,7 @@ export const BasePrepEditSheet = ({
           } : null,
         };
         await updateBasePrepIngredient(basePrep.id, ingredient.ingredientId, payload);
+        if (onChanged) await onChanged();
       } catch (error) {
         console.error("Failed to update ingredient substitution", error);
         toast.error("Failed to update substitution. Please try again.");

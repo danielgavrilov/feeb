@@ -65,7 +65,7 @@ const Index = () => {
     refreshBasePreps,
   } = useBasePreps(restaurant?.id || null);
 
-  const validTabs = ["landing", "add", "recipes", "base-preps", "menu", "settings"] as const;
+  const validTabs = ["landing", "recipes", "base-preps", "menu", "settings"] as const;
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTabParam = searchParams.get("tab");
   const initialTab = validTabs.includes(initialTabParam as typeof validTabs[number])
@@ -87,13 +87,20 @@ const Index = () => {
   const [priceFormat, setPriceFormat] = useState<PriceDisplayFormat>(DEFAULT_PRICE_FORMAT);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const prepInputRef = useRef<HTMLTextAreaElement | null>(null);
-  const manualAddTabSelectionRef = useRef(false);
+  
 
   // Initialize app tour
   const { startTour } = useAppTour({
     onTabChange: (tab: string) => {
-      setActiveTab(tab);
-      setSearchParams({ tab });
+      const next = validTabs.includes(tab as (typeof validTabs)[number])
+        ? (tab as (typeof validTabs)[number])
+        : "landing";
+      setActiveTab(next);
+      if (next === "landing") {
+        setSearchParams({});
+      } else {
+        setSearchParams({ tab: next });
+      }
     },
   });
 
@@ -170,6 +177,16 @@ const Index = () => {
   // Convert API recipes to SavedDish format for existing components
   const savedDishes: SavedDish[] = mapRecipesToSavedDishes(recipes, deriveMenuSectionKey);
 
+  // Compute how many dishes use each base prep
+  const usageCountByBasePrepId: Record<number, number> = {};
+  for (const recipe of recipes) {
+    const links = recipe.base_preps ?? [];
+    for (const link of links) {
+      const id = link.base_prep_id;
+      usageCountByBasePrepId[id] = (usageCountByBasePrepId[id] ?? 0) + 1;
+    }
+  }
+
   const totalRecipes = recipes.length;
   const unconfirmedRecipeCount = recipes.filter(recipe => recipe.status === "needs_review").length;
   const liveDishCount = savedDishes.filter(dish => dish.status === "live").length;
@@ -219,7 +236,7 @@ const Index = () => {
     setPrepMethod(recipe.instructions || "");
     setShowPrepMethod(Boolean(recipe.instructions));
     setDishImage(recipe.image || "");
-    handleTabChange("add");
+    handleTabChange("recipes");
   };
 
   const handleRecipeMatch = (recipeId: string) => {
@@ -1037,12 +1054,7 @@ const Index = () => {
 
   const handleTabChange = (
     value: (typeof validTabs)[number],
-    options?: { resetAddForm?: boolean },
   ) => {
-    if (value === "add" && options?.resetAddForm) {
-      handleStartNew();
-    }
-
     setActiveTab(value);
     const params = new URLSearchParams(searchParams);
     if (value === "landing") {
@@ -1057,9 +1069,7 @@ const Index = () => {
     const nextTab = validTabs.includes(value as (typeof validTabs)[number])
       ? (value as (typeof validTabs)[number])
       : "landing";
-    const shouldResetAddForm = nextTab === "add" && manualAddTabSelectionRef.current;
-    handleTabChange(nextTab, { resetAddForm: shouldResetAddForm });
-    manualAddTabSelectionRef.current = false;
+    handleTabChange(nextTab);
   };
 
   const handleReviewLastUnconfirmed = () => {
@@ -1141,16 +1151,7 @@ const Index = () => {
               <TabsTrigger value="landing" data-tour="tab-landing" className={tabTriggerClass}>
                 {t("navigation.landing")}
               </TabsTrigger>
-              <TabsTrigger
-                value="add"
-                data-tour="tab-add"
-                className={tabTriggerClass}
-                onClick={() => {
-                  manualAddTabSelectionRef.current = true;
-                }}
-              >
-                {t("navigation.add")}
-              </TabsTrigger>
+              
               <TabsTrigger value="recipes" data-tour="tab-recipes" className={tabTriggerClass}>
                 {t("navigation.recipes")}
               </TabsTrigger>
@@ -1179,97 +1180,7 @@ const Index = () => {
             />
           </TabsContent>
 
-          <TabsContent value="add" data-tour="add-content">
-            <div className="space-y-8 rounded-xl bg-card p-4 shadow-lg sm:p-6 lg:p-8">
-              <div className="space-y-8">
-                {reviewNoticeMessage && (
-                  <button
-                    type="button"
-                    onClick={handleReviewLastUnconfirmed}
-                    className={
-                      "w-full rounded-lg border border-border/60 bg-muted/40 px-4 py-3 text-left transition-colors " +
-                      "hover:bg-muted/60 focus:outline-none focus:ring-2 focus:ring-brand-primary/40"
-                    }
-                  >
-                    <span className="block text-sm font-semibold text-foreground">
-                      {reviewNoticeMessage}
-                    </span>
-                    <span className="mt-1 block text-xs text-muted-foreground">
-                      {t("index.reviewHelper")}
-                    </span>
-                  </button>
-                )}
-
-                <DishNameInput
-                  value={dishName}
-                  onChange={setDishName}
-                  onRecipeMatch={handleRecipeMatch}
-                  menuSectionId={menuSectionId}
-                  onMenuSectionChange={setMenuSectionId}
-                  description={description}
-                  onDescriptionChange={setDescription}
-                  servingSize={servingSize}
-                  onServingSizeChange={setServingSize}
-                  price={price}
-                  onPriceChange={setPrice}
-                  formatPrice={formatPrice}
-                  existingDishes={savedDishes.map((dish) => ({
-                    id: dish.id,
-                    name: dish.name,
-                    status: dish.status,
-                  }))}
-                  selectedDishId={editingDishId ? editingDishId.toString() : null}
-                  onClearSelectedDish={handleClearDishSelection}
-                  restaurantId={restaurant?.id}
-                />
-
-                <IngredientsList
-                  ingredients={ingredients}
-                  onUpdateIngredientName={handleUpdateIngredientName}
-                  onUpdateIngredient={handleUpdateIngredient}
-                  onUpdateIngredientUnit={handleUpdateIngredientUnit}
-                  onConfirmIngredient={handleConfirmIngredient}
-                  onDeleteIngredient={handleDeleteIngredient}
-                  onAddIngredient={handleAddIngredient}
-                  onUpdateIngredientAllergen={handleUpdateIngredientAllergens}
-                  onUpdateIngredientSubstitution={handleUpdateIngredientSubstitution}
-                  onIngredientNameBlur={handleIngredientNameBlur}
-                  formatPrice={formatPrice}
-                />
-
-                {showPrepMethod && (
-                  <PrepMethodInput ref={prepInputRef} value={prepMethod} onChange={setPrepMethod} />
-                )}
-              </div>
-
-              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                <Button
-                  onClick={handleAddPhoto}
-                  variant="outline"
-                  className="h-12 w-full px-4 text-base font-semibold sm:h-14 sm:w-auto sm:px-6 sm:text-lg"
-                  size="lg"
-                >
-                  Add Photo
-                </Button>
-                <Button
-                  onClick={handleAddPreparation}
-                  variant="outline"
-                  className="h-12 w-full px-4 text-base font-semibold sm:h-14 sm:w-auto sm:px-6 sm:text-lg"
-                  size="lg"
-                >
-                  {showPrepMethod ? "Hide Preparation" : "Add Preparation"}
-                </Button>
-                <Button
-                  onClick={handleSaveDish}
-                  disabled={!canSave()}
-                  className="h-12 w-full px-4 text-base font-semibold sm:h-14 sm:w-auto sm:px-6 sm:text-lg sm:ml-auto"
-                  size="lg"
-                >
-                  Save
-                </Button>
-              </div>
-            </div>
-          </TabsContent>
+          
 
           <TabsContent value="recipes">
             <div className="rounded-xl bg-card p-4 shadow-lg sm:p-6 lg:p-8">
@@ -1295,15 +1206,22 @@ const Index = () => {
                 loading={basePrepsLoading}
                 restaurantId={restaurant?.id ?? null}
                 formatPrice={formatPrice}
+                usageCountByBasePrepId={usageCountByBasePrepId}
+                onChanged={async () => {
+                  await Promise.all([refreshBasePreps(), refreshRecipes()]);
+                }}
                 onEdit={async (basePrepId, updates) => {
                   await updateBasePrepAPI(basePrepId, updates);
+                  await Promise.all([refreshBasePreps(), refreshRecipes()]);
                   toast.success("Base prep updated successfully");
                 }}
                 onDelete={async (basePrepId) => {
                   await deleteBasePrepAPI(basePrepId);
+                  await Promise.all([refreshBasePreps(), refreshRecipes()]);
                 }}
                 onCreate={async (data) => {
                   await createBasePrepAPI(data);
+                  await Promise.all([refreshBasePreps(), refreshRecipes()]);
                   toast.success("Base prep created successfully");
                 }}
               />
