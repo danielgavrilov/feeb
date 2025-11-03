@@ -306,7 +306,7 @@ export const RecipeEditSheet = ({
     if (dish) {
       try {
         // Create a unique code for this user-added ingredient
-        const ingredientCode = `user:${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const ingredientCode = `user:${crypto.randomUUID()}`;
         
         // Create the ingredient in the database
         const createdIngredient = await createIngredientAPI({
