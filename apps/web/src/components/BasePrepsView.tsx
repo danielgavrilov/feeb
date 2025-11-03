@@ -27,7 +27,6 @@ interface BasePrepsViewProps {
   basePreps: BasePrep[];
   onEdit: (basePrepId: number, updates: BasePrepUpdate) => Promise<void>;
   onDelete: (basePrepId: number) => Promise<void>;
-  onCreate: (data: BasePrepFormData) => Promise<void>;
   loading?: boolean;
   restaurantId?: number | null;
   formatPrice: (value: string | number | null | undefined) => string;
@@ -41,7 +40,6 @@ export const BasePrepsView = ({
   basePreps,
   onEdit,
   onDelete,
-  onCreate,
   loading = false,
   restaurantId,
   formatPrice,
@@ -95,7 +93,7 @@ export const BasePrepsView = ({
         let ingredientId = ing.ingredient_id ?? null;
         // If no ingredient_id, create a user ingredient first
         if (!ingredientId) {
-          const ingredientCode = `user:${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          const ingredientCode = `user:${crypto.randomUUID()}`;
           const createdIngredient = await createIngredientAPI({
             code: ingredientCode,
             name: ing.ingredient_name,
@@ -356,10 +354,50 @@ export const BasePrepsView = ({
         onSave={async () => {}}
         isCreateMode={true}
         onCreate={async (data) => {
-          await onCreate(data);
-          setIsCreating(false);
-          if (onChanged) await onChanged();
-          if (onCreateComplete) onCreateComplete();
+          const { ingredients = [], ...createData } = data;
+          try {
+            const created = await createBasePrepAPI(createData);
+            const newBasePrepId = created.id;
+
+            for (const ing of ingredients) {
+              let ingredientId = ing.ingredient_id ?? null;
+              if (!ingredientId) {
+                const ingredientCode = `user:${crypto.randomUUID()}`;
+                const createdIngredient = await createIngredientAPI({
+                  code: ingredientCode,
+                  name: ing.ingredient_name,
+                  source: "user",
+                });
+                ingredientId = createdIngredient.id;
+              }
+
+              await addBasePrepIngredient(newBasePrepId, {
+                ingredient_id: ingredientId,
+                ingredient_name: ing.ingredient_name,
+                quantity: ing.quantity ?? undefined,
+                unit: ing.unit ?? undefined,
+                confirmed: ing.confirmed ?? false,
+                allergens: (ing.allergens ?? []).map((a) => ({
+                  code: a.code,
+                  name: a.name,
+                  certainty: a.certainty,
+                  canonical_code: a.canonical_code ?? null,
+                  canonical_name: a.canonical_name ?? null,
+                  family_code: a.family_code ?? null,
+                  family_name: a.family_name ?? null,
+                  marker_type: a.marker_type ?? null,
+                })),
+              });
+            }
+
+            setIsCreating(false);
+            toast.success("Base prep created successfully");
+            if (onChanged) await onChanged();
+            if (onCreateComplete) onCreateComplete();
+          } catch (error) {
+            console.error("Failed to create base prep", error);
+            toast.error("Failed to create base prep. Please try again.");
+          }
         }}
         onChanged={onChanged}
         formatPrice={formatPrice}

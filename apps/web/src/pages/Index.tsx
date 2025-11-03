@@ -621,7 +621,7 @@ const Index = () => {
     if (editingDishId) {
       try {
         // Create a unique code for this user-added ingredient
-        const ingredientCode = `user:${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const ingredientCode = `user:${crypto.randomUUID()}`;
         
         // Create the ingredient in the database
         const createdIngredient = await createIngredientAPI({
@@ -872,7 +872,7 @@ const Index = () => {
         for (const { ingredient, overrides } of ingredientsToPersist) {
           try {
             // Create the ingredient in the database
-            const ingredientCode = `user:${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            const ingredientCode = `user:${crypto.randomUUID()}`;
             const createdIngredient = await createIngredientAPI({
               code: ingredientCode,
               name: overrides.name || ingredient.name,
@@ -1089,7 +1089,7 @@ const Index = () => {
       if (updates.ingredients && updates.ingredients.length > 0) {
         for (const ing of updates.ingredients) {
           // Create a unique code for this user-added ingredient
-          const ingredientCode = `user:${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          const ingredientCode = `user:${crypto.randomUUID()}`;
 
           const createdIngredient = await createIngredientAPI({
             code: ingredientCode,
@@ -1386,11 +1386,6 @@ const Index = () => {
                 onDelete={async (basePrepId) => {
                   await deleteBasePrepAPI(basePrepId);
                   await Promise.all([refreshBasePreps(), refreshRecipes()]);
-                }}
-                onCreate={async (data) => {
-                  await createBasePrepAPI(data);
-                  await Promise.all([refreshBasePreps(), refreshRecipes()]);
-                  toast.success("Base prep created successfully");
                 }}
               />
             </div>
