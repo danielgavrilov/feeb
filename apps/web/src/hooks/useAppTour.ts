@@ -10,9 +10,14 @@ export const useAppTour = (callbacks: TourCallbacks) => {
   const driverRef = useRef<Driver | null>(null);
   const hasInitialized = useRef(false);
 
-  const startTour = useCallback(() => {
+  const startTour = useCallback(async () => {
     if (driverRef.current) {
       driverRef.current.destroy();
+    }
+
+    // Call onTourStart callback if provided and wait for it
+    if (callbacks.onTourStart) {
+      await callbacks.onTourStart();
     }
 
     const driverInstance = createAppTour(callbacks, t);

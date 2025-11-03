@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,8 @@ interface BasePrepsViewProps {
   formatPrice: (value: string | number | null | undefined) => string;
   onChanged?: () => void | Promise<void>;
   usageCountByBasePrepId?: Record<number, number>;
+  shouldOpenCreate?: boolean;
+  onCreateComplete?: () => void;
 }
 
 export const BasePrepsView = ({
@@ -45,6 +47,8 @@ export const BasePrepsView = ({
   formatPrice,
   onChanged,
   usageCountByBasePrepId,
+  shouldOpenCreate = false,
+  onCreateComplete,
 }: BasePrepsViewProps) => {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [editingBasePrepId, setEditingBasePrepId] = useState<number | null>(null);
@@ -52,6 +56,13 @@ export const BasePrepsView = ({
   const [showIngredients, setShowIngredients] = useState(false);
   const [copySource, setCopySource] = useState<BasePrep | null>(null);
   const [showActiveOnly, setShowActiveOnly] = useState(false);
+
+  // Open create sheet when triggered externally
+  useEffect(() => {
+    if (shouldOpenCreate) {
+      setIsCreating(true);
+    }
+  }, [shouldOpenCreate]);
 
   const handleDelete = async (id: number) => {
     try {
@@ -348,6 +359,7 @@ export const BasePrepsView = ({
           await onCreate(data);
           setIsCreating(false);
           if (onChanged) await onChanged();
+          if (onCreateComplete) onCreateComplete();
         }}
         onChanged={onChanged}
         formatPrice={formatPrice}

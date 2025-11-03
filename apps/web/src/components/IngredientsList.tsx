@@ -94,6 +94,7 @@ interface IngredientsListProps {
     allergens: IngredientState["allergens"],
   ) => void;
   onAddBasePrep?: (basePrepId: number, quantity: string, unit: string) => void;
+  onCreateNewBasePrep?: () => void;
   onUpdateIngredientAllergen: (
     index: number,
     allergens: Array<{
@@ -125,6 +126,7 @@ export const IngredientsList = ({
   onDeleteIngredient,
   onAddIngredient,
   onAddBasePrep,
+  onCreateNewBasePrep,
   onUpdateIngredientAllergen,
   onUpdateIngredientSubstitution,
   onIngredientNameBlur,
@@ -567,6 +569,7 @@ export const IngredientsList = ({
                     ? "bg-confirmed border-confirmed"
                     : "bg-inferred border-inferred border-dashed"
                 }`}
+                {...(!ingredient.confirmed && index === 0 ? { "data-tour": "unconfirmed-ingredient" } : {})}
               >
                 <div className="grid gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)_auto] md:items-start">
                   <div className="space-y-4">
@@ -998,12 +1001,13 @@ export const IngredientsList = ({
       <div className="border-t-2 border-border border-dashed pt-4">
         <div className="mb-3 flex flex-wrap items-center gap-3">
           <Label className="text-lg font-semibold text-foreground">Add New Ingredient</Label>
-          {onAddBasePrep && basePreps.length > 0 && (
+          {onAddBasePrep && (
             <Button
               variant="outline"
               size="sm"
               onClick={() => setShowBasePrepDialog(true)}
               className="text-blue-600 border-blue-300 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-700 dark:hover:bg-blue-950/30"
+              data-tour="add-base-prep-button"
             >
               <Plus className="w-4 h-4 mr-1" />
               Add Base Prep
@@ -1353,6 +1357,17 @@ export const IngredientsList = ({
                 </Select>
               </div>
             </div>
+            {onCreateNewBasePrep && (
+              <div className="pt-2 border-t">
+                <Button
+                  variant="link"
+                  onClick={onCreateNewBasePrep}
+                  className="text-sm text-muted-foreground hover:text-primary p-0 h-auto"
+                >
+                  Don't see what you need? Create new base prep →
+                </Button>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setShowBasePrepDialog(false)}>

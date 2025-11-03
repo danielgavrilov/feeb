@@ -16,11 +16,13 @@ import { useBasePreps } from "@/hooks/useBasePreps";
 import { useAppTour } from "@/hooks/useAppTour";
 import {
   Recipe,
+  createRecipe as createRecipeAPI,
   createIngredient as createIngredientAPI,
   addRecipeIngredient as addRecipeIngredientAPI,
   updateRecipeIngredient as updateRecipeIngredientAPI,
   deleteRecipeIngredient as deleteRecipeIngredientAPI,
   UpdateRecipeIngredientRequest,
+  Ingredient,
 } from "@/lib/api";
 import { LandingPage } from "@/components/LandingPage";
 import { LanguageSelector } from "@/components/LanguageSelector";
@@ -86,10 +88,15 @@ const Index = () => {
   const [currency, setCurrency] = useState<CurrencyOption>(DEFAULT_CURRENCY);
   const [priceFormat, setPriceFormat] = useState<PriceDisplayFormat>(DEFAULT_PRICE_FORMAT);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [returnToRecipeId, setReturnToRecipeId] = useState<number | null>(null);
+  const [shouldOpenBasePrepCreate, setShouldOpenBasePrepCreate] = useState(false);
   const prepInputRef = useRef<HTMLTextAreaElement | null>(null);
   
+  // Track demo recipe ID for tour
+  const demoRecipeIdRef = useRef<number | null>(null);
+  const hasCheckedDemoRecipes = useRef(false);
 
-  // Initialize app tour
+  // Initialize app tour with demo recipe injection
   const { startTour } = useAppTour({
     onTabChange: (tab: string) => {
       const next = validTabs.includes(tab as (typeof validTabs)[number])
@@ -100,6 +107,105 @@ const Index = () => {
         setSearchParams({});
       } else {
         setSearchParams({ tab: next });
+      }
+    },
+    onConfirmDemoRecipe: async () => {
+      // Update the demo recipe status to 'confirmed'
+      if (demoRecipeIdRef.current) {
+        try {
+          await updateRecipeAPI(demoRecipeIdRef.current, { status: "confirmed" });
+          await refreshRecipes();
+        } catch (error) {
+          console.error("Failed to confirm demo recipe:", error);
+        }
+      }
+    },
+    onTourStart: async () => {
+      // Create a demo "Fries" recipe for the tour
+      if (restaurant?.id && !demoRecipeIdRef.current) {
+        try {
+          const demoRecipe = await createRecipeAPI({
+            restaurant_id: restaurant.id,
+            name: "Fries",
+            description: "Crispy golden french fries",
+            status: "needs_review",
+            price: "$6.99",
+          });
+          demoRecipeIdRef.current = demoRecipe.id;
+          
+          // Helper function to create or get ingredient
+          const getOrCreateIngredient = async (name: string): Promise<number> => {
+            try {
+              const ingredient = await createIngredientAPI({
+                code: `demo:${name.toLowerCase().replace(/\s+/g, '-')}`,
+                name,
+                source: "demo",
+              });
+              return ingredient.id;
+            } catch (error) {
+              // If creation fails, we'll skip this ingredient
+              console.error(`Failed to create ingredient ${name}:`, error);
+              throw error;
+            }
+          };
+          
+          // Add some demo ingredients to make it realistic
+          try {
+            const potatoId = await getOrCreateIngredient("Potatoes");
+            await addRecipeIngredientAPI(demoRecipe.id, {
+              ingredient_id: potatoId,
+              ingredient_name: "Potatoes",
+              quantity: 2,
+              unit: "large",
+              confirmed: false,
+            });
+          } catch (error) {
+            console.error("Failed to add Potatoes:", error);
+          }
+          
+          try {
+            const oilId = await getOrCreateIngredient("Vegetable oil");
+            await addRecipeIngredientAPI(demoRecipe.id, {
+              ingredient_id: oilId,
+              ingredient_name: "Vegetable oil",
+              quantity: 0.5,
+              unit: "cup",
+              confirmed: false,
+            });
+          } catch (error) {
+            console.error("Failed to add Vegetable oil:", error);
+          }
+
+          try {
+            const saltId = await getOrCreateIngredient("Salt");
+            await addRecipeIngredientAPI(demoRecipe.id, {
+              ingredient_id: saltId,
+              ingredient_name: "Salt",
+              quantity: 1,
+              unit: "tsp",
+              confirmed: false,
+            });
+          } catch (error) {
+            console.error("Failed to add Salt:", error);
+          }
+          
+          // Refresh recipes to show the new one
+          await refreshRecipes();
+        } catch (error) {
+          console.error("Failed to create demo recipe:", error);
+        }
+      }
+    },
+    onTourEnd: async () => {
+      // Clean up the demo recipe
+      if (demoRecipeIdRef.current) {
+        try {
+          await deleteRecipeAPI(demoRecipeIdRef.current);
+          demoRecipeIdRef.current = null;
+          await refreshRecipes();
+        } catch (error) {
+          console.error("Failed to delete demo recipe:", error);
+        }
       }
     },
   });
@@ -1033,6 +1139,37 @@ const Index = () => {
     }
   };
 
+  const handleRequestCreateBasePrepFromRecipe = useCallback(async (recipeId: number) => {
+    // Store the recipe ID to return to after base prep creation
+    setReturnToRecipeId(recipeId);
+    // Switch to base preps tab
+    setActiveTab("base-preps");
+    setSearchParams({ tab: "base-preps" });
+    // Trigger the base prep create sheet to open
+    setShouldOpenBasePrepCreate(true);
+  }, [setSearchParams]);
+
+  const handleBasePrepCreateComplete = useCallback(async () => {
+    // Close the base prep create sheet
+    setShouldOpenBasePrepCreate(false);
+    // Refresh base preps to get the new one
+    await refreshBasePreps();
+    
+    // If we have a return recipe ID, go back to recipes tab and reopen that recipe
+    if (returnToRecipeId) {
+      setActiveTab("recipes");
+      setSearchParams({ tab: "recipes" });
+      // Small delay to ensure tab switch completes
+      setTimeout(() => {
+        const recipe = recipes.find((r) => r.id === returnToRecipeId);
+        if (recipe) {
+          handleEditDish(returnToRecipeId.toString());
+        }
+        setReturnToRecipeId(null);
+      }, 100);
+    }
+  }, [returnToRecipeId, refreshBasePreps, recipes, setSearchParams]);
+
   useEffect(() => {
     const tabParam = searchParams.get("tab");
     const nextTab = validTabs.includes(tabParam as typeof validTabs[number])
@@ -1051,6 +1188,34 @@ const Index = () => {
       setShowOnboarding(false);
     }
   }, [restaurantLoading, restaurants]);
+
+  // Clean up demo recipes ONLY if tour was completed and page was refreshed
+  useEffect(() => {
+    if (hasCheckedDemoRecipes.current || !recipes || recipes.length === 0) {
+      return;
+    }
+    hasCheckedDemoRecipes.current = true;
+
+    // Only clean up if tour was already completed before (stored in localStorage)
+    const tourCompleted = localStorage.getItem("feeb_tour_completed");
+    if (tourCompleted) {
+      // Tour was completed, so clean up any leftover demo recipes
+      const demoRecipes = recipes.filter(recipe => 
+        recipe.name === "Fries" && 
+        recipe.ingredients.some(ing => ing.ingredient_name === "Potatoes" || ing.ingredient_name === "Salt")
+      );
+      
+      if (demoRecipes.length > 0) {
+        Promise.all(demoRecipes.map(recipe => deleteRecipeAPI(recipe.id)))
+          .then(() => {
+            console.log("Cleaned up demo recipes from previous tour session");
+          })
+          .catch(error => {
+            console.error("Failed to clean up demo recipes:", error);
+          });
+      }
+    }
+  }, [recipes, deleteRecipeAPI]);
 
   const handleTabChange = (
     value: (typeof validTabs)[number],
@@ -1155,7 +1320,7 @@ const Index = () => {
               <TabsTrigger value="recipes" data-tour="tab-recipes" className={tabTriggerClass}>
                 {t("navigation.recipes")}
               </TabsTrigger>
-              <TabsTrigger value="base-preps" className={tabTriggerClass}>
+              <TabsTrigger value="base-preps" data-tour="tab-base-preps" className={tabTriggerClass}>
                 Base Preps
               </TabsTrigger>
               <TabsTrigger value="menu" data-tour="tab-menu" className={tabTriggerClass}>
@@ -1190,6 +1355,7 @@ const Index = () => {
                 onEdit={handleEditDish}
                 onEditRecipeInSheet={handleEditRecipeInSheet}
                 onCreateRecipeInSheet={handleCreateRecipeInSheet}
+                onRequestCreateBasePrep={handleRequestCreateBasePrepFromRecipe}
                 onBulkAction={handleBulkRecipeAction}
                 onToggleMenuStatus={handleToggleMenuStatus}
                 onMoveDishesToArchive={handleMoveDishesToArchive}
@@ -1207,6 +1373,8 @@ const Index = () => {
                 restaurantId={restaurant?.id ?? null}
                 formatPrice={formatPrice}
                 usageCountByBasePrepId={usageCountByBasePrepId}
+                shouldOpenCreate={shouldOpenBasePrepCreate}
+                onCreateComplete={handleBasePrepCreateComplete}
                 onChanged={async () => {
                   await Promise.all([refreshBasePreps(), refreshRecipes()]);
                 }}

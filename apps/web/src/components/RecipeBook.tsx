@@ -278,6 +278,7 @@ interface RecipeBookProps {
   onMoveDishesToArchive: (dishIds: string[]) => Promise<void> | void;
   formatPrice: (value: string | number | null | undefined) => string;
   restaurantId?: number | null;
+  onRequestCreateBasePrep?: (recipeId: number) => Promise<void>;
 }
 
 export const RecipeBook = ({
@@ -286,6 +287,7 @@ export const RecipeBook = ({
   onEdit,
   onEditRecipeInSheet,
   onCreateRecipeInSheet,
+  onRequestCreateBasePrep,
   onBulkAction,
   onToggleMenuStatus,
   onMoveDishesToArchive,
@@ -1583,6 +1585,8 @@ export const RecipeBook = ({
                             onClick={statusButtonProps.onClick}
                             disabled={statusButtonProps.disabled}
                             className={statusButtonProps.className}
+                            {...(dish.name === "Fries" && statusKey === "needs_review" ? { "data-tour": "review-button-fries" } : {})}
+                            {...(dish.name === "Fries" && statusKey === "confirmed" ? { "data-tour": "add-to-menu-button-fries" } : {})}
                           >
                             {statusButtonProps.label}
                           </button>
@@ -1847,6 +1851,15 @@ export const RecipeBook = ({
         formatPrice={formatPrice}
         restaurantId={restaurantId}
         onSave={onEditRecipeInSheet}
+        onRequestCreateBasePrep={onRequestCreateBasePrep ? async () => {
+          if (editingSheetDishId) {
+            const recipeId = parseInt(editingSheetDishId);
+            if (!isNaN(recipeId)) {
+              await onRequestCreateBasePrep(recipeId);
+              setEditingSheetDishId(null);
+            }
+          }
+        } : undefined}
       />
 
       <RecipeEditSheet

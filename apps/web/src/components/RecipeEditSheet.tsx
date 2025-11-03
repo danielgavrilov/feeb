@@ -57,6 +57,7 @@ interface RecipeEditSheetProps {
   onSave: (dishId: string, updates: RecipeUpdatePayload) => Promise<void>;
   isCreateMode?: boolean;
   onCreate?: (data: RecipeUpdatePayload) => Promise<void>;
+  onRequestCreateBasePrep?: () => Promise<void>;
 }
 
 export const RecipeEditSheet = ({
@@ -68,6 +69,7 @@ export const RecipeEditSheet = ({
   onSave,
   isCreateMode = false,
   onCreate,
+  onRequestCreateBasePrep,
 }: RecipeEditSheetProps) => {
   const isMobile = useIsMobile();
   const prepInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -401,6 +403,28 @@ export const RecipeEditSheet = ({
     }
   };
 
+  const handleRequestCreateBasePrep = async () => {
+    if (!dish) {
+      toast.error("Please save this recipe first");
+      return;
+    }
+    
+    // Auto-save current changes if valid
+    if (isDirty) {
+      const valid = dishName.trim() && menuSectionId;
+      if (!valid) {
+        toast.error("Please complete recipe name and section before creating base prep");
+        return;
+      }
+      await handleSave();
+    }
+    
+    // Close this sheet and trigger parent flow
+    if (onRequestCreateBasePrep) {
+      await onRequestCreateBasePrep();
+    }
+  };
+
   const handleUpdateIngredientName = (index: number, name: string) => {
     setIngredients((current) =>
       current.map((ingredient, i) => (i === index ? { ...ingredient, name } : ingredient))
@@ -625,6 +649,7 @@ export const RecipeEditSheet = ({
               ? "h-[90vh] rounded-t-[1.75rem]"
               : "sm:w-[750px] sm:max-w-[75vw]"
           )}
+          closeButtonDataTour={dish?.name === "Fries" ? "close-review-sheet" : undefined}
           onInteractOutside={(e) => {
             // Prevent closing when clicking outside if there are unsaved changes
             if (isDirty) {
@@ -681,6 +706,7 @@ export const RecipeEditSheet = ({
               onDeleteIngredient={handleDeleteIngredient}
               onAddIngredient={handleAddIngredient}
               onAddBasePrep={handleAddBasePrep}
+              onCreateNewBasePrep={handleRequestCreateBasePrep}
               onUpdateIngredientAllergen={handleUpdateIngredientAllergens}
               onUpdateIngredientSubstitution={handleUpdateIngredientSubstitution}
               onIngredientNameBlur={handleIngredientNameBlur}

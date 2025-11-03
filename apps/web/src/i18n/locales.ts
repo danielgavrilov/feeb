@@ -144,30 +144,34 @@ const baseTranslations: Record<LanguageCode, TranslationDictionary> = {
         description: "Upload your menu and we pre-fill most of the ingredients and allergens using AI.",
       },
       step3: {
-        title: "Review ingredients",
-        description: "However, AI can make mistakes, and we do not know your exact recipes. Review your ingredient lists here.",
+        title: "Manage your recipes",
+        description: "Confirm the ingredients suggested by our AI here, or add your own.",
       },
       step4: {
-        title: "Review ingredients",
-        description: "This is where you can double-check the pre-filled ingredients. and quantities by confirming each recipe on your menu. This is the most time-consuming step, but it is necessary to ensure you inform your customers correctly.",
+        title: "Review",
+        description: "AI makes mistakes, so check that we got the ingredients and allergens right.",
       },
       step5: {
-        title: "Recipe Book",
-        description: "All of your recipes are listed here.",
+        title: "👀 Check ingredients and allergens! 👀",
+        description: "You can also include measurements for your kitchen team to reference.",
       },
       step6: {
-        title: "Recipe Book",
-        description: "You can change the sections names, the order of the dishes on the menu and you can put dishes 'Live' so that they appear on your actual menu.",
+        title: "Base prep",
+        description: "If you have homemade components like pasta or sauces that you use in multiple recipes, you can save time by creating them in the Base Prep tab.",
       },
       step7: {
+        title: "Set live",
+        description: "Once you've confirmed the ingredients in a recipe, you can add it to your real menu.",
+      },
+      step8: {
         title: "Your live menu",
         description: "This is how customers will see your menu.",
       },
-      step8: {
+      step9: {
         title: "User-friendly filters",
         description: "Using the drop-down will make it easier for customers to order, and reduce the number of questions and special requests for your staff.",
       },
-      step9: {
+      step10: {
         title: "Need help?",
         description: "Click this button anytime to replay this tour and see the main features again.",
       },
@@ -374,30 +378,34 @@ const baseTranslations: Record<LanguageCode, TranslationDictionary> = {
         description: "Upload je menu en wij vullen de meeste ingrediënten en allergenen vooraf in met AI.",
       },
       step3: {
-        title: "Bekijk ingrediënten",
-        description: "AI kan echter fouten maken, en wij kennen je exacte recepten niet. Bekijk hier je ingrediëntenlijsten.",
+        title: "Beheer je recepten",
+        description: "Bevestig de ingrediënten die onze AI voorstelt hier, of voeg je eigen toe.",
       },
       step4: {
-        title: "Bekijk ingrediënten",
-        description: "Dit is waar je de vooraf ingevulde ingrediënten en hoeveelheden kunt dubbelchecken door elk recept op je menu te bevestigen. Dit is de meest tijdrovende stap, maar het is noodzakelijk om ervoor te zorgen dat je je klanten correct informeert.",
+        title: "Beoordeel",
+        description: "AI maakt fouten, dus controleer of we de ingrediënten en allergenen goed hebben.",
       },
       step5: {
-        title: "Receptenboek",
-        description: "Al je recepten staan hier vermeld.",
+        title: "👀 4-ogen principe 👀",
+        description: "Bevestig alle ingrediënten en allergenen",
       },
       step6: {
-        title: "Receptenboek",
-        description: "Je kunt de sectienamen, de volgorde van de gerechten op het menu wijzigen en gerechten 'Live' zetten zodat ze op je daadwerkelijke menu verschijnen.",
+        title: "Basispreparatie",
+        description: "Als je je eigen pasta of sauzen maakt die je in meerdere recepten gebruikt, kun je tijd besparen door ze in het tabblad Basispreparatie aan te maken.",
       },
       step7: {
+        title: "Zet live",
+        description: "Zodra je de ingrediënten in een recept hebt bevestigd, kun je het toevoegen aan je echte menu.",
+      },
+      step8: {
         title: "Je live menu",
         description: "Zo zien klanten je menu.",
       },
-      step8: {
+      step9: {
         title: "Gebruiksvriendelijke filters",
         description: "Het gebruik van het drop-down menu maakt het gemakkelijker voor klanten om te bestellen, en vermindert het aantal vragen en speciale verzoeken voor je personeel.",
       },
-      step9: {
+      step10: {
         title: "Hulp nodig?",
         description: "Klik op deze knop om deze tour opnieuw af te spelen en de belangrijkste functies weer te zien.",
       },
